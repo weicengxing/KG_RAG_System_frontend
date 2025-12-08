@@ -4,7 +4,7 @@ import { useUserStore } from '../stores/user'
 
 // 创建 axios 实例
 const request = axios.create({
-  baseURL: 'https://michelina-unenrichable-dacia.ngrok-free.dev', // 替换为你的后端 API 地址
+  baseURL: 'http://localhost:8000', // 替换为你的后端 API 地址
   timeout: 30000
 })
 
@@ -13,11 +13,8 @@ request.interceptors.request.use(
   (config) => {
     // 从 localStorage 获取 token（避免 Pinia 在模块初始化时未就绪）
     const token = localStorage.getItem('token')
-    if (token && token.trim()) {
-      config.headers.Authorization = `Bearer ${token.trim()}`
-      console.log('🔑 [Request] 添加 Authorization header, URL:', config.url)
-    } else {
-      console.warn('⚠️ [Request] Token 不存在，请求可能失败, URL:', config.url)
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
     }
     // 跳过 ngrok 浏览器警告拦截页
     config.headers['ngrok-skip-browser-warning'] = 'true'

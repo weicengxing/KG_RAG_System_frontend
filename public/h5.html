@@ -268,11 +268,11 @@
     <script>
         // 后端API地址
         // 与二维码 URL 同源的后端地址
-        const API_BASE = `${location.origin}`;
+        const API_BASE = "https://michelina-unenrichable-dacia.ngrok-free.dev"; 
 
         // 从URL获取二维码ID
         const urlParams = new URLSearchParams(window.location.search);
-        const qrId = urlParams.get('qrId');
+        const qrId = urlParams.get('qr_id');
 
         // DOM元素
         const loginView = document.getElementById('loginView');

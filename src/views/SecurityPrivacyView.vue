@@ -772,6 +772,8 @@ const handleChangePassword = async () => {
       current_password: passwordForm.value.currentPassword,
       new_password: passwordForm.value.newPassword
     })
+    // 密码更新后立即刷新安全评级
+    //await fetchSecurityRating()
     ElMessage.success('密码修改成功，请重新登录')
     setTimeout(() => { userStore.logout(); router.push('/login') }, 1500)
   } catch (error) {

@@ -52,18 +52,11 @@ export const useMusicStore = defineStore('music', () => {
   }
 
   const setCurrentBlobUrl = (url) => {
-    // 清理之前的 blob URL
-    if (currentBlobUrl.value) {
-      URL.revokeObjectURL(currentBlobUrl.value)
-    }
     currentBlobUrl.value = url
   }
 
   const clearBlobUrl = () => {
-    if (currentBlobUrl.value) {
-      URL.revokeObjectURL(currentBlobUrl.value)
-      currentBlobUrl.value = null
-    }
+    currentBlobUrl.value = ''
   }
 
   const setPlayMode = (mode) => {

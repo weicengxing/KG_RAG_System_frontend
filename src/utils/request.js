@@ -4,7 +4,7 @@ import { useUserStore } from '../stores/user'
 
 // 创建 axios 实例
 const request = axios.create({
-  baseURL: 'https://michelina-unenrichable-dacia.ngrok-free.dev', // 替换为你的后端 API 地址
+  baseURL: 'https://unopressible-unretroactive-cristin.ngrok-free.dev', // 替换为你的后端 API 地址
   timeout: 30000
 })
 

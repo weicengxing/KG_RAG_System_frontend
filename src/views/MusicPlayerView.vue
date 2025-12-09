@@ -477,7 +477,7 @@ const fetchSongsStream = () => {
 
     const token = localStorage.getItem('token')
     const eventSource = new EventSource(
-      `https://michelina-unenrichable-dacia.ngrok-free.dev/music/songs/stream?token=${encodeURIComponent(token)}`
+      `https://unopressible-unretroactive-cristin.ngrok-free.dev/music/songs/stream?token=${encodeURIComponent(token)}`
     )
 
     // 临时存储歌曲

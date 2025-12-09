@@ -502,10 +502,17 @@ const togglePlay = () => {
   }
 }
 
+// 切换播放模式
 const cyclePlayMode = () => {
-  musicStore.togglePlayMode()
-  ElMessage.success('模式已切换')
+  const newMode = musicStore.togglePlayMode()
+  const modeNames = {
+    'sequence': '顺序播放',
+    'loop': '循环播放',
+    'random': '随机播放'
+  }
+  ElMessage.success(`已切换为${modeNames[newMode]}`)
 }
+
 
 const handleSongEnded = () => {
   musicStore.setIsPlaying(false)

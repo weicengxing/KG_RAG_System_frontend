@@ -28,14 +28,14 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
-
+import request from '../utils/request'
 const status = ref('离线')
 const message = ref('正在连接...')
 
 const checkBackend = async () => {
   try {
     // 请求后端的根路径
-    const res = await axios.get('http://localhost:8000/')
+    const res = await request.get('/')
     if (res.data.status === 'success') {
       status.value = '在线'
       message.value = res.data.message

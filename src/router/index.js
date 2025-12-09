@@ -8,6 +8,7 @@ import AccountSettingsView from '../views/AccountSettingsView.vue'
 import SecurityPrivacyView from '../views/SecurityPrivacyView.vue'
 import NovelSimpleView from '../views/NovelSimple.vue'
 import MusicPlayerView from '../views/MusicPlayerView.vue'
+import MusicPlayerView_simple from '../views/MusicPlayerView_simple.vue'
 
 const routes = [
   // 无需登录的页面
@@ -22,7 +23,7 @@ const routes = [
     children: [
       { path: 'dashboard', name: 'Dashboard', component: DashboardView },
       { path: 'novel', name: 'NovelSimple', component: NovelSimpleView },
-      { path: 'music', name: 'MusicPlayer', component: MusicPlayerView },
+      { path: 'music', name: 'MusicPlayer', component: MusicPlayerView_simple },
       { path: 'profile', name: 'Profile', component: ProfileView },
       { path: 'account-settings', name: 'AccountSettings', component: AccountSettingsView },
       { path: 'security-privacy', name: 'SecurityPrivacy', component: SecurityPrivacyView },

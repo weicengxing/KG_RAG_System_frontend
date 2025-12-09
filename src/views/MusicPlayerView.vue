@@ -260,7 +260,67 @@ import { Search } from '@element-plus/icons-vue'
 import request from '../utils/request'
 import { useMusicStore } from '../stores/music'
 import bgImage from '/background/default.jpg'
+// --- 1. 改进后的并发连接池调度器 (支持优先级) ---
+class RequestScheduler {
+  constructor(maxConcurrent =20) { 
+    // 浏览器对同一域名的最大并发通常是 6，我们利用满它
+    this.maxConcurrent = maxConcurrent
+    this.currentRunning = 0
+    
+    // 两个队列：高优先级(图片) 和 普通优先级(音频)
+    this.highPriorityQueue = [] 
+    this.normalQueue = []
+  }
 
+  // 添加任务，isHighPriority=true 会被优先执行
+  add(taskFactory, isHighPriority = false) {
+    return new Promise((resolve, reject) => {
+      const task = {
+        taskFactory,
+        resolve,
+        reject
+      }
+      
+      if (isHighPriority) {
+        this.highPriorityQueue.push(task)
+      } else {
+        this.normalQueue.push(task)
+      }
+      
+      this.run()
+    })
+  }
+
+  run() {
+    // 如果达到并发限制，什么都不做
+    if (this.currentRunning >= this.maxConcurrent) {
+      return
+    }
+
+    // 优先取高优先级队列，如果空的才取普通队列
+    const task = this.highPriorityQueue.shift() || this.normalQueue.shift()
+    
+    // 两个队列都空了
+    if (!task) {
+      return
+    }
+
+    this.currentRunning++
+
+    // 执行任务
+    task.taskFactory()
+      .then(task.resolve)
+      .catch(task.reject)
+      .finally(() => {
+        this.currentRunning--
+        // 递归尝试执行下一个，保持并发度
+        this.run()
+      })
+  }
+}
+
+// 实例化一个全局调度器
+const networkPool = new RequestScheduler(20)
 const musicStore = useMusicStore()
 
 const searchQuery = ref('')
@@ -279,9 +339,7 @@ const scrollTimeout = ref(null) // 滚动超时定时器
 // --- 音频预加载与缓存状态 (LRU版) ---
 const MAX_CACHE_SIZE = 50        // 最大缓存歌曲数量
 const audioBlobCache = new Map() // 缓存 Map (Key顺序即LRU顺序：头部最老，尾部最新)
-const downloadQueue = ref([])    // 下载队列
 const queuedSongIds = new Set()  // 排队ID集合 (O(1)去重)
-const isDownloading = ref(false) // 下载状态
 // 流式加载相关状态
 const isLoadingSongs = ref(false) // 是否正在加载歌曲
 const totalSongs = ref(0) // 歌曲总数
@@ -390,82 +448,74 @@ const getCoverBlobUrl = async (filename, songId) => {
   }
 }
 
-// 获取封面（懒加载版本 - 不阻塞）
+// --- 2. 修改：获取封面 (设为高优先级) ---
 const loadCoverAsync = (song) => {
   if (!song.cover_image || song.coverBlobUrl) return
 
-  getCoverBlobUrl(song.cover_image, song.id).then(blobUrl => {
-    // 找到对应歌曲并更新封面
-    const songInStore = musicStore.songs.find(s => s.id === song.id)
-    if (songInStore) {
-      songInStore.coverBlobUrl = blobUrl
+  const requestTask = async () => {
+    // 双重检查
+    if (song.coverBlobUrl) return
+    try {
+      const blobUrl = await getCoverBlobUrl(song.cover_image, song.id)
+      const songInStore = musicStore.songs.find(s => s.id === song.id)
+      if (songInStore) {
+        songInStore.coverBlobUrl = blobUrl
+      }
+    } catch (e) {
+      console.warn('封面加载失败', e)
     }
-  })
-}
-
-// 1. 从队列移除 (保底策略用)
-const removeSongFromQueue = (songId) => {
-  // 从 Set 中移除 (O(1) 极速)
-  queuedSongIds.delete(songId)
-  
-  // 从 Array 中移除
-  const index = downloadQueue.value.findIndex(s => s.id === songId)
-  if (index !== -1) {
-    downloadQueue.value.splice(index, 1)
   }
+
+  // 【关键】第二个参数传 true，标记为高优先级
+  networkPool.add(requestTask, true)
 }
 
-// 3. 添加到队列 (入口函数)
+
+
+// --- 3. 修改：音频预加载 (设为低优先级，且移除之前的串行队列逻辑) ---
+// 彻底移除了 processDownloadQueue 函数，改为直接进池子
+
 const queueSongForPreload = (song) => {
-  // 检查1: 已经下好的，不排队 (Map lookup: O(1))
+  // 1. 检查缓存
   if (audioBlobCache.has(song.id)) return
   
-  // 检查2: 已经在排队的，不排队 (Set lookup: O(1))
-  // 【优化点】这里之前是用 Array.find，现在改用 Set.has，速度提升巨大
+  // 2. 检查是否已在排队或下载中 (防止重复添加)
   if (queuedSongIds.has(song.id)) return
   
-  // 标记为正在排队
+  // 标记为已加入队列
   queuedSongIds.add(song.id)
-  downloadQueue.value.push(song)
-  
-  // 触发处理（非阻塞调用）
-  processDownloadQueue()
-}
 
+  // 定义下载任务
+  const downloadTask = async () => {
+    try {
+      // 再次检查缓存（可能在排队时被点击播放了）
+      if (audioBlobCache.has(song.id)) {
+        queuedSongIds.delete(song.id)
+        return
+      }
 
-// 2. 处理下载队列 (修改：使用 addBlobToCache)
-const processDownloadQueue = async () => {
-  if (isDownloading.value || downloadQueue.value.length === 0) return
-  
-  isDownloading.value = true
-  const song = downloadQueue.value.shift()
-  queuedSongIds.delete(song.id) 
-  
-  try {
-    if (audioBlobCache.has(song.id)) {
-      console.log(`[预加载] 跳过已缓存: ${song.title}`)
-      // 即使跳过下载，也建议更新一下 LRU 活跃度
-      addBlobToCache(song.id, audioBlobCache.get(song.id))
-    } else {
-      console.log(`[预加载] 开始: ${song.title}`)
+      // 开始下载
       const response = await request.get(`/music/play/${song.id}`, {
         responseType: 'blob'
       })
       const blobUrl = URL.createObjectURL(response.data)
       
-      // 使用 LRU 函数存入
+      // 存入 LRU 缓存
       addBlobToCache(song.id, blobUrl)
-    }
-  } catch (error) {
-    console.warn(`[预加载] 失败: ${song.title}`, error)
-  } finally {
-    isDownloading.value = false
-    if (downloadQueue.value.length > 0) {
-      setTimeout(processDownloadQueue, 100) 
+      console.log(`[预加载完成] ${song.title}`)
+      
+    } catch (error) {
+      console.warn(`[预加载失败] ${song.title}`, error)
+    } finally {
+      // 任务结束，移除标记
+      queuedSongIds.delete(song.id)
     }
   }
-}
 
+  // 【关键】第二个参数传 false (默认)，标记为普通优先级
+  // 这样只有当所有图片任务处理完，或者有空闲连接时，才会开始下载音频
+  networkPool.add(downloadTask, false)
+}
 
 
 // 流式获取歌曲列表（SSE）
@@ -477,7 +527,7 @@ const fetchSongsStream = () => {
 
     const token = localStorage.getItem('token')
     const eventSource = new EventSource(
-      `https://unopressible-unretroactive-cristin.ngrok-free.dev/music/songs/stream?token=${encodeURIComponent(token)}`
+      `https://1248b715.r9.cpolar.cn/music/songs/stream?token=${encodeURIComponent(token)}`
     )
 
     // 临时存储歌曲
@@ -539,7 +589,7 @@ const fetchSongsPaginated = async () => {
   try {
     isLoadingSongs.value = true
     const response = await request.get('/music/songs', {
-      params: { limit: 1000, offset: 0 }
+      params: { limit: 50, offset: 0 }
     })
 
     if (response.data && response.data.songs) {
@@ -686,8 +736,6 @@ const selectSong = async (song, autoPlay = true) => {
     musicStore.setCurrentSong(song)
     musicStore.setIsPlaying(false)
     
-    // 【重要】千万不要调用 musicStore.clearBlobUrl() 
-    
     // 重置歌词
     const wasShowingLyrics = showLyrics.value
     lyricsText.value = ''
@@ -700,13 +748,14 @@ const selectSong = async (song, autoPlay = true) => {
     if (audioBlobCache.has(song.id)) {
       console.log(`[播放] 命中缓存: ${song.title}`)
       blobUrl = audioBlobCache.get(song.id)
-      
-      // 【关键】命中缓存也要调用一次 LRU 方法
-      // 这样这首歌就会被移动到 Map 的末尾，标记为“最近使用”，避免被淘汰
+      // 更新 LRU 位置
       addBlobToCache(song.id, blobUrl)
     } else {
       console.log(`[播放] 未命中缓存，立即请求: ${song.title}`)
-      removeSongFromQueue(song.id)
+      
+      // [修改点] 删除了 removeSongFromQueue(song.id)
+      // 即使后台正在预加载这首歌，或者在排队，我们这里直接发起一个新的高优先级请求
+      // 由于浏览器的缓存机制，如果 URL 一样，实际上可能复用 TCP 连接，或者仅仅是多发一次请求，问题不大
       
       const response = await request.get(`/music/play/${song.id}`, {
         responseType: 'blob'
@@ -714,7 +763,7 @@ const selectSong = async (song, autoPlay = true) => {
       
       blobUrl = URL.createObjectURL(response.data)
       
-      // 使用 LRU 函数存入 (如果满了会自动删最旧的)
+      // 存入缓存
       addBlobToCache(song.id, blobUrl)
     }
     // -------------------

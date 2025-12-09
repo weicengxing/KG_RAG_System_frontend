@@ -539,7 +539,7 @@ const fetchSongsPaginated = async () => {
   try {
     isLoadingSongs.value = true
     const response = await request.get('/music/songs', {
-      params: { limit: 50, offset: 0 }
+      params: { limit: 1000, offset: 0 }
     })
 
     if (response.data && response.data.songs) {

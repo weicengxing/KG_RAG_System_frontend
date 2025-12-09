@@ -276,7 +276,11 @@ const lyricsContainer = ref(null) // 歌词容器引用
 const lyricsLineRefs = ref({}) // 歌词行引用
 const isUserScrolling = ref(false) // 用户是否在手动滚动
 const scrollTimeout = ref(null) // 滚动超时定时器
-
+// 预加载缓存与队列
+const audioBlobCache = new Map() // 已完成的缓存: Map<songId, blobUrl>
+const downloadQueue = ref([])    // 待下载队列 (用于实际处理)
+const queuedSongIds = new Set()  // 【新增】排队ID集合 (用于光速去重检查)
+const isDownloading = ref(false) // 是否正在下载
 // 流式加载相关状态
 const isLoadingSongs = ref(false) // 是否正在加载歌曲
 const totalSongs = ref(0) // 歌曲总数
@@ -367,6 +371,76 @@ const loadCoverAsync = (song) => {
   })
 }
 
+// 1. 从队列移除 (保底策略用)
+const removeSongFromQueue = (songId) => {
+  // 从 Set 中移除 (O(1) 极速)
+  queuedSongIds.delete(songId)
+  
+  // 从 Array 中移除
+  const index = downloadQueue.value.findIndex(s => s.id === songId)
+  if (index !== -1) {
+    downloadQueue.value.splice(index, 1)
+  }
+}
+
+// 3. 添加到队列 (入口函数)
+const queueSongForPreload = (song) => {
+  // 检查1: 已经下好的，不排队 (Map lookup: O(1))
+  if (audioBlobCache.has(song.id)) return
+  
+  // 检查2: 已经在排队的，不排队 (Set lookup: O(1))
+  // 【优化点】这里之前是用 Array.find，现在改用 Set.has，速度提升巨大
+  if (queuedSongIds.has(song.id)) return
+  
+  // 标记为正在排队
+  queuedSongIds.add(song.id)
+  downloadQueue.value.push(song)
+  
+  // 触发处理（非阻塞调用）
+  processDownloadQueue()
+}
+
+// 2. 处理下载队列 (异步递归)
+const processDownloadQueue = async () => {
+  // 如果正在忙，或者队列空了，直接把控制权交还给主线程
+  if (isDownloading.value || downloadQueue.value.length === 0) return
+  
+  isDownloading.value = true
+  const song = downloadQueue.value.shift()
+  
+  // 既然出队开始了，就从排队Set里移除（虽然还没下完，但已经不在排队列表中了）
+  // 注意：audioBlobCache还没存，所以这时候如果有重复请求，会走下面的 catch 或重新入队逻辑
+  queuedSongIds.delete(song.id) 
+  
+  try {
+    // 双重检查：防止在排队间隙已经被用户强制点击播放并缓存了
+    if (audioBlobCache.has(song.id)) {
+      console.log(`[预加载] 跳过已缓存: ${song.title}`)
+    } else {
+      console.log(`[预加载] 开始: ${song.title}`)
+      
+      // 【关键】await 会释放主线程，UI 不会卡顿
+      const response = await request.get(`/music/play/${song.id}`, {
+        responseType: 'blob'
+      })
+      
+      const blobUrl = URL.createObjectURL(response.data)
+      audioBlobCache.set(song.id, blobUrl)
+    }
+  } catch (error) {
+    console.warn(`[预加载] 失败: ${song.title}`, error)
+  } finally {
+    isDownloading.value = false
+    
+    // 【关键】setTimeout 再次释放主线程
+    // 即使队列还有任务，也强制让浏览器先去渲染一帧 UI，然后再回来下下一首
+    if (downloadQueue.value.length > 0) {
+      setTimeout(processDownloadQueue, 100) 
+    }
+  }
+}
+
+
 // 流式获取歌曲列表（SSE）
 const fetchSongsStream = () => {
   return new Promise((resolve, reject) => {
@@ -399,6 +473,7 @@ const fetchSongsStream = () => {
 
           // 异步加载封面（不阻塞）
           loadCoverAsync(song)
+          queueSongForPreload(song)
 
           // 如果是第一首歌且没有当前播放的歌曲，自动选中
           if (tempSongs.length === 1 && !musicStore.currentSong) {
@@ -567,7 +642,7 @@ const handleSongEnded = () => {
   }
 }
 
-// 核心：切歌函数
+// 核心：切歌函数（包含缓存命中检查与保底强制请求）
 const selectSong = async (song, autoPlay = true) => {
   if (!musicStore.audioPlayer) {
     ElMessage.error('播放器未就绪')
@@ -580,33 +655,57 @@ const selectSong = async (song, autoPlay = true) => {
       musicStore.audioPlayer.pause()
     }
     
-    // 2. 更新状态
+    // 2. 更新 Store 状态
     musicStore.setCurrentSong(song)
     musicStore.setIsPlaying(false)
     musicStore.clearBlobUrl()
     
-    // 重置歌词（但保留显示状态）
+    // 重置歌词状态
     const wasShowingLyrics = showLyrics.value
     lyricsText.value = ''
     parsedLyrics.value = []
     lyricsError.value = false
     
-    // 3. 请求新音频资源
-    const response = await request.get(`/music/play/${song.id}`, {
-      responseType: 'blob'
-    })
-    const blobUrl = URL.createObjectURL(response.data)
-    musicStore.setCurrentBlobUrl(blobUrl)
+    let blobUrl = ''
+
+    // -----------------------------------------------------------
+    // 核心逻辑：检查缓存 vs 强制下载 (保底策略)
+    // -----------------------------------------------------------
     
-    // 4. 设置音频源
+    if (audioBlobCache.has(song.id)) {
+      //情况 A: 命中缓存
+      console.log(`[播放] 命中预加载缓存，零延迟播放: ${song.title}`)
+      blobUrl = audioBlobCache.get(song.id)
+    } else {
+      // 情况 B: 未命中缓存（可能还在队列里，或者还没轮到）
+      console.log(`[播放] 未命中缓存，触发保底策略，立即请求: ${song.title}`)
+      
+      // 重要：从后台预加载队列中移除这首歌。
+      // 因为我们马上就要强制下载了，没必要让后台队列稍后再下一次浪费带宽。
+      removeSongFromQueue(song.id)
+      
+      // 强制发起请求 (保底)
+      const response = await request.get(`/music/play/${song.id}`, {
+        responseType: 'blob'
+      })
+      
+      blobUrl = URL.createObjectURL(response.data)
+      
+      // 立即存入缓存，以便下次播放或避免重复下载
+      audioBlobCache.set(song.id, blobUrl)
+    }
+    
+    // -----------------------------------------------------------
+    
+    // 3. 更新音频源
+    musicStore.setCurrentBlobUrl(blobUrl)
     musicStore.audioPlayer.src = blobUrl
     musicStore.audioPlayer.volume = musicStore.volume / 100
     
-    // 5. 加载并播放
+    // 4. 加载并播放
     musicStore.audioPlayer.load()
 
     if (autoPlay) {
-      // 使用一次性事件监听，确保只在本次加载完成后尝试播放
       const playAfterLoad = () => {
         musicStore.audioPlayer.play()
           .then(() => musicStore.setIsPlaying(true))
@@ -615,18 +714,18 @@ const selectSong = async (song, autoPlay = true) => {
             musicStore.setIsPlaying(false)
           })
       }
-      // 如果已经就绪则直接播放，否则等待
+      
       if (musicStore.audioPlayer.readyState >= 3) {
         playAfterLoad()
       } else {
         musicStore.audioPlayer.oncanplay = () => {
           playAfterLoad()
-          musicStore.audioPlayer.oncanplay = null // 清理引用
+          musicStore.audioPlayer.oncanplay = null 
         }
       }
     }
     
-    // 如果之前是显示歌词状态，切换歌曲后自动获取新歌的歌词
+    // 如果之前显示歌词，切歌后重新获取
     if (wasShowingLyrics) {
       fetchLyrics()
     }

@@ -291,6 +291,9 @@ const isPlaying = computed(() => musicStore.isPlaying)
 const currentTime = computed(() => musicStore.currentTime)
 const duration = computed(() => musicStore.duration)
 const playMode = computed(() => musicStore.playMode)
+const bgImage = computed(() => {
+  return '/background/default.jpg'
+})
 const volume = computed({
   get: () => musicStore.volume,
   set: (val) => musicStore.setVolume(val)

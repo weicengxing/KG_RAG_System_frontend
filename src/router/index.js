@@ -9,6 +9,7 @@ import SecurityPrivacyView from '../views/SecurityPrivacyView.vue'
 import NovelSimpleView from '../views/NovelSimple.vue'
 import MusicPlayerView from '../views/MusicPlayerView.vue'
 import MusicPlayerView_simple from '../views/MusicPlayerView_simple.vue'
+import NovelUploadView from '../views/NovelUploadView.vue'
 
 const routes = [
   // 无需登录的页面
@@ -27,6 +28,7 @@ const routes = [
       { path: 'profile', name: 'Profile', component: ProfileView },
       { path: 'account-settings', name: 'AccountSettings', component: AccountSettingsView },
       { path: 'security-privacy', name: 'SecurityPrivacy', component: SecurityPrivacyView },
+      { path: 'novel-upload', name: 'NovelUpload', component: NovelUploadView },
     ]
   }
 ]

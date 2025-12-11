@@ -100,6 +100,9 @@
                <button class="btn-ghost" @click="resetForm">
                 <el-icon><Refresh /></el-icon> 重置
               </button>
+              <button class="btn-upload-novel" @click="handleUploadNovel" :disabled="!hasUploadPermission">
+                <el-icon><Upload /></el-icon> 上传小说
+              </button>
               <button class="btn-primary" @click="handleUpdateInfo" :disabled="saving">
                 <el-icon v-if="saving" class="is-loading"><Loading /></el-icon>
                 <span>{{ saving ? '保存中...' : '保存更改' }}</span>
@@ -192,7 +195,7 @@ import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import {
   Camera, User, Message, SwitchButton, Delete,
-  Setting, Lock, Edit, Link, Suitcase, Loading, Refresh, Star
+  Setting, Lock, Edit, Link, Suitcase, Loading, Refresh, Star, Upload
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -212,6 +215,8 @@ const userInfo = ref({
 })
 const isVip = ref(false)
 const vipLoading = ref(false)
+const hasUploadPermission = ref(false) // 上传权限
+const uploadPermissionLoading = ref(false) // 权限检查加载状态
 const formData = ref({
   username: '',
   email: '',
@@ -448,10 +453,48 @@ const handleAvatarChange = async (event) => {
   event.target.value = ''
 }
 
-// ==================== 原有业务逻辑 ====================
+  // ==================== 原有业务逻辑 ====================
 
 // 计算简介字数
 const bioCharCount = computed(() => formData.value.bio.length)
+
+// 检查上传权限
+const checkUploadPermission = async () => {
+  uploadPermissionLoading.value = true
+  try {
+    const res = await request.get('/deal/check-upload-permission')
+    hasUploadPermission.value = res.data.has_permission
+    console.log('上传权限检查结果:', res.data)
+  } catch (error) {
+    console.warn('检查上传权限失败:', error)
+    hasUploadPermission.value = false
+  } finally {
+    uploadPermissionLoading.value = false
+  }
+}
+
+// 处理上传小说按钮点击
+const handleUploadNovel = async () => {
+  if (!hasUploadPermission.value) {
+    ElMessage.warning('此功能仅限VIP用户使用')
+    return
+  }
+  
+  // 检查权限再次确认
+  try {
+    const res = await request.get('/deal/check-upload-permission')
+    if (!res.data.has_permission) {
+      ElMessage.warning('权限验证失败，无法上传小说')
+      return
+    }
+    
+    // 跳转到上传页面
+    router.push('/novel-upload')
+  } catch (error) {
+    console.error('权限检查失败:', error)
+    ElMessage.error('系统繁忙，请稍后再试')
+  }
+}
 
 // 获取VIP状态
 const fetchVipStatus = async () => {
@@ -490,6 +533,8 @@ const fetchUserInfo = async () => {
     loading.value = false
     // 获取VIP状态
     await fetchVipStatus()
+    // 检查上传权限
+    await checkUploadPermission()
   } catch (error) {
     loading.value = false
     ElMessage.error('获取用户信息失败')
@@ -552,6 +597,8 @@ const handleVipChange = async (value) => {
     const username = userInfo.value.username || userStore.username
     await request.post(`/deal/setvip?username=${encodeURIComponent(username)}&is_vip=${value}`)
     ElMessage.success(value ? '已开通VIP会员' : '已取消VIP会员')
+    // VIP状态变化后重新检查上传权限
+    await checkUploadPermission()
   } catch (error) {
     // 恢复原状态
     isVip.value = !value
@@ -717,6 +764,9 @@ onMounted(async () => {
 .btn-primary:disabled { opacity: 0.7; cursor: not-allowed; }
 .btn-ghost { padding: 10px 16px; background: white; color: #6b7280; border: 1px solid #e5e7eb; border-radius: 12px; font-weight: 600; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
 .btn-ghost:hover { background: #f9fafb; color: #374151; border-color: #d1d5db; }
+.btn-upload-novel { padding: 10px 20px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 12px; font-weight: 600; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); transition: all 0.2s; }
+.btn-upload-novel:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(16, 185, 129, 0.4); }
+.btn-upload-novel:disabled { opacity: 0.5; cursor: not-allowed; background: #6b7280; }
 
 /* 响应式 */
 @media (max-width: 1024px) {
@@ -736,9 +786,3 @@ onMounted(async () => {
   .progress-section { text-align: center; width: 100%; }
 }
 </style>
-
-
-
-
-
-

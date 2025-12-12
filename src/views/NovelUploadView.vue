@@ -711,7 +711,7 @@ watch(() => router.currentRoute.value.path, (newPath) => { if (newPath === '/nov
 .content-area-fix { display: block; min-height: 250px; }
 .input-wrapper, .textarea-wrapper { position: relative; width: 100%; }
 .input-prefix { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: #9ca3af; font-size: 18px; }
-.custom-input { width: 100%; height: 48px; padding: 0 16px 0 48px; border: 1px solid #e5e7eb; border-radius: 12px; font-size: 14px; background: #fff; transition: all 0.3s; }
+.custom-input { width: 95%; height: 48px; padding: 0 16px 0 48px; border: 1px solid #e5e7eb; border-radius: 12px; font-size: 14px; background: #fff; transition: all 0.3s; }
 .custom-textarea { width: 100%; padding: 16px; border: 1px solid #e5e7eb; border-radius: 12px; font-size: 14px; background: #fff; resize: vertical; min-height: 300px; line-height: 1.6; font-family: inherit; }
 .char-count { text-align: right; font-size: 12px; color: #9ca3af; margin-top: 6px; }
 .custom-input:focus, .custom-textarea:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1); }

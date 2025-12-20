@@ -288,7 +288,6 @@ const handleResetPassword = async () => {
 .title-box p {
   color: #ddd;
   font-size: 14px;
-  margin-bottom: 30px;
   letter-spacing: 4px;
   text-shadow: 0 0 5px rgba(255, 255, 255, 0.3);
 }

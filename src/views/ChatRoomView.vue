@@ -1,131 +1,298 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import request from '../utils/request'
 
 // ==================== 配置常量 ====================
 
-// 从token中解析用户名
-function extractUsernameFromToken(): string | null {
+// 从token中解析用户信息
+function extractUserInfoFromToken(): { userId: string | null, username: string | null } {
   const token = localStorage.getItem('token')
   if (!token) {
     console.error('No token found in localStorage')
-    return null
+    return { userId: null, username: null }
   }
-  
+
   try {
     // JWT格式：header.payload.signature
     const payload = token.split('.')[1]
     const decoded = JSON.parse(atob(payload))
-    const username = decoded.sub // sub 字段就是用户名
-    console.log('✅ 从token中解析出用户名:', username)
-    return username
+    // 兼容新旧两种 token 格式
+    const userId = decoded.user_id || null
+    const username = decoded.username || decoded.sub
+    console.log('✅ 从token中解析出用户信息:', { userId, username })
+    return { userId, username }
   } catch (e) {
     console.error('Failed to parse token:', e)
-    return null
+    return { userId: null, username: null }
   }
 }
 
-const CURRENT_USER_ID = extractUsernameFromToken()
+const userInfo = extractUserInfoFromToken()
+const CURRENT_USER_ID = userInfo.userId || userInfo.username 
+const CURRENT_USERNAME = userInfo.username
 const WS_URL = CURRENT_USER_ID ? `ws://localhost:8000/api/chat/ws/${CURRENT_USER_ID}` : ''
 
-// ==================== 类型定义 (匹配后端 Python 模型) ====================
+// ==================== 类型定义 ====================
 interface MessageData {
   msg_id: string
   sender_id: string
-  receiver_id: string // 虽然前端主要用 chat_id，但为了兼容后端数据
+  receiver_id: string
   content: string
   ts: number
-  type: string
-  // 前端附加状态
-  status?: 'pending' | 'sent' | 'read' 
+  type: string  // text, image, document, video
+  status?: 'pending' | 'sent' | 'read'
+  filename?: string  // 文件消息时的原始文件名
+  file_size?: number  // 文件大小
+  fileBlobUrl?: string  // 文件的 blob URL (用于图片/视频预览)
+  fileLoading?: boolean  // 文件是否正在加载
+  fileError?: boolean  // 文件加载是否出错
 }
 
 interface Contact {
   id: string
   username: string
   avatar: string
+  avatarBlobUrl?: string 
+  avatarLoading?: boolean 
+  avatarError?: boolean 
   lastMessage: string
-  lastTime: string // 显示用的时间字符串
+  lastTime: string 
   unread: number
-  active: boolean 
+  active: boolean
   status: 'online' | 'offline' | 'busy'
-  // 聊天记录缓存 (实际应存储在 IndexedDB)
-  messages: MessageData[] 
+  messages: MessageData[]
+}
+
+// ==================== Toast 通知系统 ====================
+interface Toast {
+  id: number
+  message: string
+  type: 'success' | 'error' | 'info'
+}
+
+const toasts = ref<Toast[]>([])
+let toastIdCounter = 0
+
+/**
+ * 显示消息提示
+ * @param message 提示内容
+ * @param type 类型：success | error | info
+ */
+function showToast(message: string, type: 'success' | 'error' | 'info' = 'info') {
+  const id = toastIdCounter++
+  toasts.value.push({ id, message, type })
+  // 3秒后自动消失
+  setTimeout(() => {
+    removeToast(id)
+  }, 3000)
+}
+
+function removeToast(id: number) {
+  const index = toasts.value.findIndex(t => t.id === id)
+  if (index !== -1) {
+    toasts.value.splice(index, 1)
+  }
 }
 
 // ==================== 状态管理 ====================
 const socket = ref<WebSocket | null>(null)
 const connectionStatus = ref<'disconnected' | 'connecting' | 'connected'>('disconnected')
 const messageInput = ref('')
-const contacts = ref<Contact[]>([
-  // 模拟初始化联系人列表 (后端 /api/chat/contacts 接口返回的数据应映射到这里)
-  { 
-    id: 'user_2', 
-    username: 'Sarah Chen', 
-    avatar: 'https://i.pravatar.cc/150?u=1', 
-    lastMessage: '那我们今晚见？', 
-    lastTime: '10:42', 
-    unread: 0, 
-    active: true, 
-    status: 'online',
-    messages: [] 
-  },
-  { 
-    id: 'user_3', 
-    username: 'Alex Design', 
-    avatar: 'https://i.pravatar.cc/150?u=2', 
-    lastMessage: '设计稿已经发你邮箱了。', 
-    lastTime: 'Yesterday', 
-    unread: 2, 
-    active: false, 
-    status: 'busy',
-    messages: [] 
-  }
-])
+const contacts = ref<Contact[]>([]) 
 
 const searchQuery = ref('')
-const currentChatId = ref('user_2') // 默认选中的聊天对象ID
-const chatAreaRef = ref<HTMLElement | null>(null) // 用于滚动
+const currentChatId = ref('')
+const chatAreaRef = ref<HTMLElement | null>(null)
 const heartbeatTimer = ref<number | null>(null)
-// ====== 新增：弹窗状态管理 ======
+const isLoadingContacts = ref(false)
+const pendingRequestCount = ref(0)
+const avatarLoadQueue = ref<Set<string>>(new Set())
+
+// 历史消息加载状态
+const isLoadingHistory = ref(false)
+const hasMoreHistory = ref(true)
+const isScrollingToBottom = ref(false)
+
+// ====== 文件上传状态 ======
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const isUploadingFile = ref(false)
+const uploadProgress = ref(0)
+
+
+// ====== 弹窗状态管理 ======
 const showAddFriendModal = ref(false)
 const addFriendInput = ref('')
-const isAddingFriend = ref(false) // 这是一个 Loading 状态
+const isAddingFriend = ref(false) 
 
-// 打开弹窗
+// ====== 好友申请弹窗状态 ======
+const showRequestsModal = ref(false)
+const friendRequests = ref<any[]>([])
+const isLoadingRequests = ref(false)
+
+// ====== 消息右键菜单状态 ======
+const showContextMenu = ref(false)
+const contextMenuX = ref(0)
+const contextMenuY = ref(0)
+const selectedMessage = ref<MessageData | null>(null)
+const longPressTimer = ref<number | null>(null) 
+
+// 打开添加好友弹窗
 function openAddFriendModal() {
   showAddFriendModal.value = true
   addFriendInput.value = ''
-  // 自动聚焦 (nextTick 等待 DOM 渲染)
   nextTick(() => {
     document.getElementById('add-friend-input')?.focus()
   })
 }
 
-// 关闭弹窗
+// 关闭添加好友弹窗
 function closeAddFriendModal() {
   showAddFriendModal.value = false
 }
 
 // ==================== 计算属性 ====================
 
-// 过滤好友列表
 const filteredContacts = computed(() => {
   return contacts.value.filter(c => 
     c.username.toLowerCase().includes(searchQuery.value.toLowerCase())
   )
 })
 
-// 当前选中的联系人对象
 const activeContact = computed(() => {
   return contacts.value.find(c => c.id === currentChatId.value)
 })
 
-// 当前显示的聊天记录
 const currentMessages = computed(() => {
   return activeContact.value?.messages || []
 })
 
 // ==================== 方法实现 ====================
+
+// --- 0. 头像缓存与加载逻辑 ---
+
+const avatarCache = {
+  async get(userId: string, filename: string) {
+    const cached = localStorage.getItem(`avatar_${userId}`)
+    if (!cached) return null
+
+    try {
+      const data = JSON.parse(cached)
+      const isExpired = Date.now() - data.timestamp > 24 * 60 * 60 * 1000
+      const filenameMismatch = filename && data.filename !== filename
+
+      if (isExpired || filenameMismatch) {
+        this.remove(userId)
+        return null
+      }
+
+      if (data.base64) {
+        const blob = await this.base64ToBlob(data.base64, data.mimeType)
+        return URL.createObjectURL(blob)
+      }
+
+      return null
+    } catch (error) {
+      console.error('读取缓存失败:', error)
+      this.remove(userId)
+      return null
+    }
+  },
+
+  async set(userId: string, filename: string, blob: Blob, mimeType: string) {
+    try {
+      const base64 = await this.blobToBase64(blob)
+      localStorage.setItem(`avatar_${userId}`, JSON.stringify({
+        filename,
+        base64,
+        mimeType,
+        timestamp: Date.now()
+      }))
+    } catch (error) {
+      console.error('缓存头像失败:', error)
+    }
+  },
+
+  blobToBase64(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onloadend = () => resolve((reader.result as string).split(',')[1])
+      reader.onerror = reject
+      reader.readAsDataURL(blob)
+    })
+  },
+
+  base64ToBlob(base64: string, mimeType: string) {
+    return fetch(`data:${mimeType};base64,${base64}`)
+      .then(res => res.blob())
+  },
+
+  remove(userId: string) {
+    localStorage.removeItem(`avatar_${userId}`)
+  }
+}
+
+const fetchAvatar = async (contact: Contact) => {
+  if (!contact.avatar) return null
+
+  try {
+    contact.avatarLoading = true
+    contact.avatarError = false
+
+    const response = await request.get(`/auth/avatar/${contact.avatar}`, {
+      responseType: 'blob',
+      timeout: 10000 
+    })
+
+    const contentType = response.headers['content-type']
+    if (!contentType || !contentType.startsWith('image/')) {
+      contact.avatarError = true
+      return null
+    }
+
+    const blob = response.data
+    const blobUrl = URL.createObjectURL(blob)
+    await avatarCache.set(contact.id, contact.avatar, blob, contentType)
+    return blobUrl
+  } catch (error) {
+    contact.avatarError = true
+    avatarCache.remove(contact.id)
+    return null
+  } finally {
+    contact.avatarLoading = false
+  }
+}
+
+const loadAvatar = async (contact: Contact) => {
+  if (!contact.avatar) {
+    contact.avatarBlobUrl = ''
+    contact.avatarError = false
+    return
+  }
+
+  const cachedUrl = await avatarCache.get(contact.id, contact.avatar)
+  if (cachedUrl) {
+    contact.avatarBlobUrl = cachedUrl
+    contact.avatarError = false
+    return
+  }
+
+  const blobUrl = await fetchAvatar(contact)
+  if (blobUrl) {
+    contact.avatarBlobUrl = blobUrl
+  } else {
+    contact.avatarBlobUrl = ''
+  }
+}
+
+const lazyLoadAvatars = () => {
+  setTimeout(() => {
+    contacts.value.forEach((contact, index) => {
+      setTimeout(() => {
+        loadAvatar(contact)
+      }, index * 50) 
+    })
+  }, 100)
+}
 
 // --- 1. WebSocket 连接与管理 ---
 function initWebSocket() {
@@ -143,6 +310,7 @@ function initWebSocket() {
     console.log('✅ WebSocket Connected')
     connectionStatus.value = 'connected'
     startHeartbeat()
+    showToast('已连接到聊天服务器', 'success')
   }
 
   socket.value.onmessage = (event) => {
@@ -158,7 +326,6 @@ function initWebSocket() {
     console.warn('❌ WebSocket Disconnected')
     connectionStatus.value = 'disconnected'
     stopHeartbeat()
-    // 简单的自动重连机制
     setTimeout(() => initWebSocket(), 3000)
   }
 
@@ -174,7 +341,7 @@ function startHeartbeat() {
     if (socket.value && socket.value.readyState === WebSocket.OPEN) {
       socket.value.send(JSON.stringify({ type: 'ping' }))
     }
-  }, 30000) // 30秒一次心跳
+  }, 30000)
 }
 
 function stopHeartbeat() {
@@ -187,54 +354,118 @@ function stopHeartbeat() {
 // --- 2. 消息处理逻辑 ---
 
 function handleIncomingMessage(payload: any) {
-  // 处理心跳回应
   if (payload.type === 'pong') return
 
-  // 处理新消息推送
   if (payload.type === 'new_message') {
     const msgData: MessageData = payload.data
-    
-    // 判断消息属于哪个联系人
-    // 逻辑：如果 sender 是我，那就是发给 activeContact 的（虽然是回显）
-    // 如果 sender 是别人，那就是那个 sender 对应的联系人
-    const targetUserId = msgData.sender_id === CURRENT_USER_ID 
-      ? msgData.receiver_id 
+
+    const targetUserId = msgData.sender_id === CURRENT_USER_ID
+      ? msgData.receiver_id
       : msgData.sender_id
 
     const contact = contacts.value.find(c => c.id === targetUserId)
-    
+
     if (contact) {
-      // **去重逻辑 (关键)**: 
-      // 检查最后一条消息是否是 Pending 状态且内容相同（即使没有 ID 也尽量匹配）
-      // 如果有，说明是乐观更新的回显，将状态改为 'sent'
       const lastMsg = contact.messages[contact.messages.length - 1]
       const isMyMessage = msgData.sender_id === CURRENT_USER_ID
-      
+
       if (isMyMessage && lastMsg && lastMsg.status === 'pending' && lastMsg.content === msgData.content) {
         lastMsg.status = 'sent'
         lastMsg.msg_id = msgData.msg_id
-        lastMsg.ts = msgData.ts // 更新服务端准确时间
+        lastMsg.ts = msgData.ts
       } else {
-        // 是别人的新消息，或者是没做乐观更新的消息 -> 追加
+        // 添加消息到列表
         contact.messages.push({
           ...msgData,
-          status: 'sent' // 别人的消息肯定是 sent
+          status: 'sent',
+          fileBlobUrl: undefined,
+          fileLoading: false,
+          fileError: false
         })
-        
-        // 如果不是当前聊天窗口，增加未读数
+
+        // 如果是文件消息(图片或视频),自动加载
+        if (msgData.type === 'image' || msgData.type === 'video') {
+          const addedMsg = contact.messages[contact.messages.length - 1]
+          nextTick(() => loadMessageFile(addedMsg))
+        }
+
         if (targetUserId !== currentChatId.value) {
           contact.unread++
         }
-        
-        // 自动滚动（如果在看这个人的话）
+
         if (targetUserId === currentChatId.value) {
           scrollToBottom()
         }
       }
-      
-      // 更新列表预览
-      contact.lastMessage = msgData.content
+
+      contact.lastMessage = msgData.type === 'text'
+        ? msgData.content
+        : getFileMessagePreview(msgData.type, msgData.filename || '')
       contact.lastTime = formatTime(msgData.ts)
+    }
+  }
+
+  // 处理消息撤回通知
+  if (payload.type === 'message_recalled') {
+    const { msg_id, chat_id, recaller_id } = payload.data
+
+    // 找到对应的联系人
+    const contact = contacts.value.find(c => {
+      const calculatedChatId = getChatId(CURRENT_USER_ID!, c.id)
+      return calculatedChatId === chat_id
+    })
+
+    if (contact) {
+      // 找到被撤回的消息
+      const msgIndex = contact.messages.findIndex(m => m.msg_id === msg_id)
+      if (msgIndex !== -1) {
+        // 更新消息为撤回状态
+        const isMyRecall = recaller_id === CURRENT_USER_ID
+        contact.messages[msgIndex].type = 'recalled'
+        contact.messages[msgIndex].content = isMyRecall ? '你撤回了一条消息' : `${contact.username}撤回了一条消息`
+
+        // 如果是最后一条消息，更新联系人列表显示
+        if (msgIndex === contact.messages.length - 1) {
+          contact.lastMessage = contact.messages[msgIndex].content
+        }
+      }
+    }
+  }
+
+  if (payload.type === 'new_friend_request') {
+    pendingRequestCount.value++
+    const fromUser = payload.data?.from_user || 'Someone'
+    showToast(`📩 ${fromUser} 请求添加你为好友`, 'info')
+    if (showRequestsModal.value) {
+      loadFriendRequests()
+    }
+  }
+
+  if (payload.type === 'friend_accepted') {
+    const friendData = payload.data
+    if (friendData && friendData.friend_id) {
+      const existingContact = contacts.value.find(c => c.id === friendData.friend_id)
+      if (!existingContact) {
+        const newContact: Contact = {
+          id: friendData.friend_id,
+          username: friendData.username || 'Unknown',
+          avatar: friendData.avatar || '',
+          avatarBlobUrl: '',
+          avatarLoading: false,
+          avatarError: false,
+          lastMessage: 'You are now connected.',
+          lastTime: formatTime(Date.now() / 1000),
+          unread: 0,
+          active: false,
+          status: 'offline',
+          messages: []
+        }
+        contacts.value.unshift(newContact)
+        if (newContact.avatar) {
+          loadAvatar(newContact)
+        }
+        showToast(`✅ ${friendData.username} 已同意你的好友请求`, 'success')
+      }
     }
   }
 }
@@ -244,58 +475,263 @@ function sendMessage() {
   const text = messageInput.value.trim()
   if (!text || !activeContact.value || !socket.value) return
 
-  // 构建消息 payload (匹配后端接收格式)
   const payload = {
     type: "message",
     target_id: activeContact.value.id,
-    content: text
+    content: text,
+    msg_type: "text"
   }
-  
 
-  // 1. 乐观 UI 更新 (立即显示在屏幕上)
   activeContact.value.messages.push({
     msg_id: `temp-${Date.now()}`,
-    sender_id: CURRENT_USER_ID,
+    sender_id: CURRENT_USER_ID!,
     receiver_id: activeContact.value.id,
     content: text,
     ts: Date.now() / 1000,
     type: 'text',
-    status: 'pending' // 标记为发送中
+    status: 'pending'
   })
 
-  // 更新左侧预览
   activeContact.value.lastMessage = text
   activeContact.value.lastTime = 'Now'
 
-  // 2. 发送 WebSocket
   if (socket.value.readyState === WebSocket.OPEN) {
     socket.value.send(JSON.stringify(payload))
   } else {
-    // 掉线处理
-    console.error('Cannot send, socket closed')
-    // 这里可以将 status 改为 'failed'
+    showToast('发送失败：网络连接断开', 'error')
   }
 
-  // 3. UI 交互处理
   messageInput.value = ''
-  resizeTextarea() // 重置高度
+  resizeTextarea()
   scrollToBottom()
 }
+
+// --- 文件处理逻辑 ---
+
+function triggerFileSelect() {
+  fileInputRef.value?.click()
+}
+
+async function handleFileSelect(event: Event) {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file || !activeContact.value) return
+
+  // 检查文件大小 (50MB)
+  const MAX_SIZE = 50 * 1024 * 1024
+  if (file.size > MAX_SIZE) {
+    showToast('文件过大，最大支持50MB', 'error')
+    return
+  }
+
+  await uploadAndSendFile(file)
+
+  // 清空input,允许重复选择同一个文件
+  target.value = ''
+}
+
+async function uploadAndSendFile(file: File) {
+  if (!activeContact.value || !socket.value) return
+
+  isUploadingFile.value = true
+  uploadProgress.value = 0
+
+  try {
+    // 1. 上传文件到服务器
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const token = localStorage.getItem('token')
+    const response = await request.post('/api/chat/upload_file', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        'Authorization': `Bearer ${token}`
+      },
+      onUploadProgress: (progressEvent) => {
+        if (progressEvent.total) {
+          uploadProgress.value = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+        }
+      }
+    })
+
+    const fileInfo = response.data.data
+
+    // 2. 为图片和视频创建本地预览 blob URL
+    let localBlobUrl: string | undefined = undefined
+    if (fileInfo.file_type === 'image' || fileInfo.file_type === 'video') {
+      localBlobUrl = URL.createObjectURL(file)
+    }
+
+    // 3. 构造文件消息
+    const filePayload = {
+      type: "message",
+      target_id: activeContact.value.id,
+      content: fileInfo.file_path,  // 文件路径
+      msg_type: fileInfo.file_type,  // image, document, video
+      filename: fileInfo.filename,
+      file_size: fileInfo.size
+    }
+
+    // 4. 添加到本地消息列表 (乐观更新)
+    const fileMessage: MessageData = {
+      msg_id: `temp-${Date.now()}`,
+      sender_id: CURRENT_USER_ID!,
+      receiver_id: activeContact.value.id,
+      content: fileInfo.file_path,
+      ts: Date.now() / 1000,
+      type: fileInfo.file_type,
+      filename: fileInfo.filename,
+      file_size: fileInfo.size,
+      status: 'pending',
+      fileBlobUrl: localBlobUrl,  // 使用本地 blob URL
+      fileLoading: false,
+      fileError: false
+    }
+
+    activeContact.value.messages.push(fileMessage)
+
+    // 更新最后消息预览
+    activeContact.value.lastMessage = getFileMessagePreview(fileInfo.file_type, fileInfo.filename)
+    activeContact.value.lastTime = 'Now'
+
+    // 5. 通过 WebSocket 发送
+    if (socket.value.readyState === WebSocket.OPEN) {
+      socket.value.send(JSON.stringify(filePayload))
+      showToast('文件发送成功', 'success')
+    } else {
+      showToast('发送失败：网络连接断开', 'error')
+    }
+
+    scrollToBottom()
+
+  } catch (error: any) {
+    console.error('文件上传失败:', error)
+    showToast('文件上传失败', 'error')
+  } finally {
+    isUploadingFile.value = false
+    uploadProgress.value = 0
+  }
+}
+
+function getFileMessagePreview(fileType: string, filename: string): string {
+  switch (fileType) {
+    case 'image':
+      return '[图片]'
+    case 'video':
+      return '[视频]'
+    case 'document':
+      return `[文件] ${filename}`
+    default:
+      return '[文件]'
+  }
+}
+
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB'
+  return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
+}
+
+// --- 文件加载逻辑 (类似头像加载) ---
+
+async function loadMessageFile(msg: MessageData) {
+  /**
+   * 为图片和视频消息加载 blob URL
+   * 文档类型不需要预加载
+   */
+  if (msg.type !== 'image' && msg.type !== 'video') return
+  if (msg.fileBlobUrl || msg.fileLoading || msg.fileError) return
+
+  msg.fileLoading = true
+  msg.fileError = false
+
+  try {
+    const response = await request.get(`/api/chat/files/${msg.content}`, {
+      responseType: 'blob',
+      timeout: 30000
+    })
+
+    const blob = response.data
+    const blobUrl = URL.createObjectURL(blob)
+    msg.fileBlobUrl = blobUrl
+    msg.fileLoading = false
+  } catch (error) {
+    console.error('文件加载失败:', msg.content, error)
+    msg.fileError = true
+    msg.fileLoading = false
+  }
+}
+
+async function downloadFile(msg: MessageData) {
+  /**
+   * 下载文件到本地 (用于文档类型)
+   */
+  if (!msg.filename) return
+
+  try {
+    showToast('正在下载文件...', 'info')
+
+    const response = await request.get(`/api/chat/files/${msg.content}`, {
+      responseType: 'blob',
+      timeout: 60000
+    })
+
+    const blob = response.data
+    const url = URL.createObjectURL(blob)
+
+    // 创建临时 a 标签触发下载
+    const a = document.createElement('a')
+    a.href = url
+    a.download = msg.filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+
+    // 释放 URL
+    setTimeout(() => URL.revokeObjectURL(url), 100)
+
+    showToast('文件下载成功', 'success')
+  } catch (error) {
+    console.error('文件下载失败:', error)
+    showToast('文件下载失败', 'error')
+  }
+}
+
+function openImagePreview(blobUrl: string) {
+  /**
+   * 在新窗口打开图片
+   */
+  if (blobUrl) {
+    window.open(blobUrl, '_blank')
+  }
+}
+
+
 
 // --- 4. UI 交互辅助 ---
 
 function selectContact(id: string) {
   currentChatId.value = id
   contacts.value.forEach(c => c.active = (c.id === id))
-  
-  // 清除未读
+
   if (activeContact.value) {
     activeContact.value.unread = 0
+
+    // 重置历史消息加载状态
+    hasMoreHistory.value = true
+
+    // 如果该联系人还没有加载过历史消息，则加载
+    if (activeContact.value.messages.length === 0) {
+      loadChatHistory(id)
+    } else {
+      scrollToBottom()
+    }
   }
-  
-  scrollToBottom()
-  // 聚焦输入框 (体验优化)
-  document.getElementById('msg-input')?.focus()
+
+  nextTick(() => {
+    document.getElementById('msg-input')?.focus({ preventScroll: true })
+  })
 }
 
 function scrollToBottom() {
@@ -306,18 +742,15 @@ function scrollToBottom() {
   })
 }
 
-// 文本框自适应高度
 function resizeTextarea(event?: Event) {
   const textarea = event ? (event.target as HTMLTextAreaElement) : document.getElementById('msg-input') as HTMLTextAreaElement
   if (textarea) {
-    textarea.style.height = 'auto' // 先重置
-    // 限制最大高度，避免挡住视线
+    textarea.style.height = 'auto' 
     const newHeight = Math.min(textarea.scrollHeight, 128) 
     textarea.style.height = newHeight + 'px'
   }
 }
 
-// 简单的时间格式化
 function formatTime(timestamp: number) {
   const date = new Date(timestamp * 1000)
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -327,40 +760,341 @@ function isMyMessage(msg: MessageData) {
   return msg.sender_id === CURRENT_USER_ID
 }
 
+// --- 5. 生成 chat_id (与后端逻辑一致) ---
+function getChatId(userId1: string, userId2: string): string {
+  const ids = [userId1, userId2].sort()
+  return `${ids[0]}_${ids[1]}`
+}
+
+// --- 6. 加载历史消息 ---
+async function loadChatHistory(friendId: string, beforeTs?: number) {
+  if (!CURRENT_USER_ID || isLoadingHistory.value) return
+
+  const chatId = getChatId(CURRENT_USER_ID, friendId)
+  isLoadingHistory.value = true
+
+  try {
+    const params: any = {
+      chat_id: chatId,
+      limit: 50
+    }
+
+    if (beforeTs) {
+      params.before_ts = beforeTs
+    }
+
+    const response = await request.get('/api/chat/history', { params })
+    const messages = response.data || []
+
+    const contact = contacts.value.find(c => c.id === friendId)
+    if (!contact) return
+
+    if (messages.length < 50) {
+      hasMoreHistory.value = false
+    }
+
+    // 如果是加载更多（有beforeTs），插入到消息列表前面
+    if (beforeTs && messages.length > 0) {
+      // 保存当前滚动位置
+      const chatArea = chatAreaRef.value
+      const oldScrollHeight = chatArea?.scrollHeight || 0
+
+      // 插入历史消息到前面，并标记状态为 'sent'，初始化文件加载状态
+      const processedMessages = messages.map((msg: MessageData) => ({
+        ...msg,
+        status: 'sent' as const,
+        fileBlobUrl: undefined,
+        fileLoading: false,
+        fileError: false
+      }))
+
+      contact.messages = [
+        ...processedMessages,
+        ...contact.messages
+      ]
+
+      // 为图片和视频消息加载 blob URL
+      nextTick(() => {
+        processedMessages.forEach((msg: MessageData) => {
+          if (msg.type === 'image' || msg.type === 'video') {
+            loadMessageFile(msg)
+          }
+        })
+      })
+
+      // 恢复滚动位置（防止跳动）
+      nextTick(() => {
+        if (chatArea) {
+          const newScrollHeight = chatArea.scrollHeight
+          chatArea.scrollTop = newScrollHeight - oldScrollHeight
+        }
+      })
+    } else if (!beforeTs) {
+      // 首次加载，直接设置消息列表
+      contact.messages = messages.map((msg: MessageData) => ({
+        ...msg,
+        status: 'sent' as const,
+        fileBlobUrl: undefined,
+        fileLoading: false,
+        fileError: false
+      }))
+
+      // 为图片和视频消息加载 blob URL
+      nextTick(() => {
+        contact.messages.forEach((msg: MessageData) => {
+          if (msg.type === 'image' || msg.type === 'video') {
+            loadMessageFile(msg)
+          }
+        })
+      })
+
+      scrollToBottom()
+    }
+  } catch (error) {
+    console.error('加载历史消息失败:', error)
+    showToast('加载历史消息失败', 'error')
+  } finally {
+    isLoadingHistory.value = false
+  }
+}
+
+// --- 7. 滚动监听：加载更多历史消息 ---
+function handleScroll(event: Event) {
+  const chatArea = event.target as HTMLElement
+
+  // 当滚动到顶部时，加载更多历史消息
+  if (chatArea.scrollTop < 100 && !isLoadingHistory.value && hasMoreHistory.value && activeContact.value) {
+    const oldestMessage = activeContact.value.messages[0]
+    if (oldestMessage) {
+      loadChatHistory(activeContact.value.id, oldestMessage.ts)
+    }
+  }
+}
+
+// --- 8. 加载好友列表 ---
+async function loadContacts() {
+  if (!CURRENT_USER_ID) return
+
+  isLoadingContacts.value = true
+  try {
+    const response = await request.get(`/api/chat/contacts?user_id=${CURRENT_USER_ID}`)
+
+    contacts.value = response.data.map((contact: any) => ({
+      ...contact,
+      active: false,
+      messages: [],
+      avatarBlobUrl: '',
+      avatarLoading: false,
+      avatarError: false
+    }))
+    
+    lazyLoadAvatars()
+  } catch (error) {
+    showToast('加载好友列表失败', 'error')
+    console.error('❌ 加载好友列表异常:', error)
+  } finally {
+    isLoadingContacts.value = false
+  }
+}
+
 async function submitAddFriend() {
   const targetName = addFriendInput.value.trim()
   if (!targetName) return
-
   isAddingFriend.value = true
-  
   try {
-    const response = await fetch(`http://localhost:8000/api/chat/add_friend?user_id=${CURRENT_USER_ID}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target_username: targetName })
-    })
-    
-    const res = await response.json()
-    
-    if (response.ok) {
-        // 成功交互
-        closeAddFriendModal()
-        // 可以做一个轻提示 (Toast)，这里先用 alert 替代或自行封装
-        alert("✅ " + res.message) 
-        // 刷新列表
-        await loadContacts()
-    } else {
-        alert("❌ " + (res.detail || "操作失败"))
-    }
-  } catch (e) {
-    console.error(e)
-    alert("网络请求错误")
+    const response = await request.post('/api/social/request_add', { target_username: targetName })
+    closeAddFriendModal()
+    showToast("✅ " + response.data.message, 'success')
+    await loadContacts()
+  } catch (error: any) {
+    showToast("❌ " + (error.response?.data?.detail || "操作失败"), 'error')
   } finally {
     isAddingFriend.value = false
   }
 }
+
+// --- 好友申请管理 ---
+
+function openRequestsModal() {
+  showRequestsModal.value = true
+  loadFriendRequests()
+}
+
+function closeRequestsModal() {
+  showRequestsModal.value = false
+}
+
+async function loadFriendRequests() {
+  isLoadingRequests.value = true
+  try {
+    const response = await request.get('/api/social/requests')
+    friendRequests.value = response.data
+    pendingRequestCount.value = friendRequests.value.length
+  } catch (error) {
+    showToast('加载好友申请列表失败', 'error')
+  } finally {
+    isLoadingRequests.value = false
+  }
+}
+
+async function acceptRequest(requestId: string, fromUserId: string, fromUsername: string, fromAvatar: string) {
+  try {
+    await request.post('/api/social/handle', {
+      request_id: requestId,
+      action: 'accept'
+    })
+
+    friendRequests.value = friendRequests.value.filter(r => r._id !== requestId)
+    pendingRequestCount.value--
+
+    const existingContact = contacts.value.find(c => c.id === fromUserId)
+    if (!existingContact) {
+      const newContact: Contact = {
+        id: fromUserId,
+        username: fromUsername,
+        avatar: fromAvatar,
+        avatarBlobUrl: '',
+        avatarLoading: false,
+        avatarError: false,
+        lastMessage: 'You are now connected.',
+        lastTime: formatTime(Date.now() / 1000),
+        unread: 0,
+        active: false,
+        status: 'offline',
+        messages: []
+      }
+      contacts.value.unshift(newContact)
+      if (newContact.avatar) {
+        loadAvatar(newContact)
+      }
+    }
+
+    showToast(`✅ 已添加 ${fromUsername} 为好友`, 'success')
+  } catch (error: any) {
+    showToast("❌ " + (error.response?.data?.detail || "操作失败"), 'error')
+  }
+}
+
+async function rejectRequest(requestId: string) {
+  try {
+    await request.post('/api/social/handle', {
+      request_id: requestId,
+      action: 'reject'
+    })
+
+    friendRequests.value = friendRequests.value.filter(r => r._id !== requestId)
+    pendingRequestCount.value--
+
+    showToast('已拒绝申请', 'info')
+  } catch (error: any) {
+    showToast("❌ " + (error.response?.data?.detail || "操作失败"), 'error')
+  }
+}
+
+function formatRequestTime(timestamp: number) {
+  const date = new Date(timestamp * 1000)
+  const now = new Date()
+  const diff = now.getTime() - date.getTime()
+  const minutes = Math.floor(diff / 60000)
+  const hours = Math.floor(diff / 3600000)
+  const days = Math.floor(diff / 86400000)
+
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes} 分钟前`
+  if (hours < 24) return `${hours} 小时前`
+  if (days < 7) return `${days} 天前`
+  return date.toLocaleDateString()
+}
+
+// --- 消息右键菜单功能 ---
+
+function showMessageContextMenu(event: MouseEvent, msg: MessageData) {
+  // 只允许撤回自己的消息
+  if (msg.sender_id !== CURRENT_USER_ID) return
+
+  // 检查消息是否在2分钟内（可撤回时间限制）
+  const now = Date.now() / 1000
+  const timeDiff = now - msg.ts
+  if (timeDiff > 120) { // 120秒 = 2分钟
+    showToast('消息发送超过2分钟，无法撤回', 'error')
+    return
+  }
+
+  event.preventDefault()
+  selectedMessage.value = msg
+  contextMenuX.value = event.clientX-100
+  contextMenuY.value = event.clientY
+  showContextMenu.value = true
+}
+
+function hideContextMenu() {
+  showContextMenu.value = false
+  selectedMessage.value = null
+}
+
+function handleLongPressStart(event: TouchEvent, msg: MessageData) {
+  // 只允许撤回自己的消息
+  if (msg.sender_id !== CURRENT_USER_ID) return
+
+  // 检查消息是否在2分钟内
+  const now = Date.now() / 1000
+  const timeDiff = now - msg.ts
+  if (timeDiff > 120) {
+    return
+  }
+
+  longPressTimer.value = window.setTimeout(() => {
+    const touch = event.touches[0]
+    selectedMessage.value = msg
+    contextMenuX.value = touch.clientX
+    contextMenuY.value = touch.clientY
+    showContextMenu.value = true
+  }, 500) // 长按500ms触发
+}
+
+function handleLongPressEnd() {
+  if (longPressTimer.value) {
+    clearTimeout(longPressTimer.value)
+    longPressTimer.value = null
+  }
+}
+
+async function recallMessage() {
+  if (!selectedMessage.value || !activeContact.value) return
+
+  try {
+    const token = localStorage.getItem('token')
+    const response = await request.post('/api/chat/recall', {
+      msg_id: selectedMessage.value.msg_id,
+      chat_id: getChatId(CURRENT_USER_ID!, activeContact.value.id)
+    }, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+
+    if (response.data.success) {
+      // 更新本地消息状态
+      const msgIndex = activeContact.value.messages.findIndex(m => m.msg_id === selectedMessage.value!.msg_id)
+      if (msgIndex !== -1) {
+        activeContact.value.messages[msgIndex].type = 'recalled'
+        activeContact.value.messages[msgIndex].content = '你撤回了一条消息'
+      }
+
+      showToast('消息已撤回', 'success')
+    }
+  } catch (error: any) {
+    console.error('撤回消息失败:', error)
+    showToast(error.response?.data?.detail || '撤回失败', 'error')
+  } finally {
+    hideContextMenu()
+  }
+}
+
 // --- 生命周期 ---
 onMounted(() => {
+  loadContacts() 
+  loadFriendRequests() 
   initWebSocket()
   scrollToBottom()
 })
@@ -368,26 +1102,39 @@ onMounted(() => {
 onUnmounted(() => {
   if (socket.value) socket.value.close()
   stopHeartbeat()
+
+  // 清理头像 blob URLs
+  contacts.value.forEach(contact => {
+    if (contact.avatarBlobUrl && contact.avatarBlobUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(contact.avatarBlobUrl)
+    }
+
+    // 清理消息中的文件 blob URLs
+    contact.messages.forEach(msg => {
+      if (msg.fileBlobUrl && msg.fileBlobUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(msg.fileBlobUrl)
+      }
+    })
+  })
 })
 </script>
 
 <template>
-  <div class="flex h-screen w-screen overflow-hidden bg-[#0f172a] text-slate-200 antialiased font-sans">
+  <div class="flex h-[95dvh] w-screen overflow-hidden bg-[#0f172a] text-slate-200 antialiased font-sans">
     
     <!-- 全局背景光晕装饰 -->
     <div class="fixed top-[-10%] left-[-10%] h-[500px] w-[500px] rounded-full bg-indigo-600/20 blur-[120px] pointer-events-none z-0"></div>
     <div class="fixed bottom-[-10%] right-[-10%] h-[600px] w-[600px] rounded-full bg-blue-600/10 blur-[120px] pointer-events-none z-0"></div>
 
     <!-- 左侧 Sidebar -->
-    <aside class="relative z-10 flex w-80 flex-col border-r border-white/5 bg-slate-900/60 backdrop-blur-xl transition-all duration-300 md:w-96">
+    <aside class="relative z-10 flex w-80 flex-col border-r border-white/5 bg-slate-900/60 backdrop-blur-xl transition-all duration-300 md:w-96 overflow-hidden">
       
-      <!-- 头部 -->
-      <header class="flex flex-col gap-4 p-5 pb-2">
+      <!-- Header -->
+      <header class="sticky top-0 z-30 flex flex-col gap-4 p-5 pb-2 bg-slate-900/95 backdrop-blur-xl shrink-0">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
              <h1 class="text-2xl font-bold tracking-tight text-white">Messages</h1>
-             <!-- 连接状态指示点 -->
-             <div 
+             <div
                class="h-2 w-2 rounded-full transition-colors duration-500"
                :class="{
                  'bg-emerald-500 shadow-[0_0_8px_#10b981]': connectionStatus === 'connected',
@@ -397,15 +1144,30 @@ onUnmounted(() => {
                :title="connectionStatus"
              ></div>
           </div>
-          
-          <button @click="openAddFriendModal" class="group relative flex h-10 w-10 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg transition-all hover:bg-indigo-500 hover:shadow-indigo-500/40 active:scale-95">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-              <circle cx="8.5" cy="7" r="4"></circle>
-              <line x1="20" y1="8" x2="20" y2="14"></line>
-              <line x1="23" y1="11" x2="17" y2="11"></line>
-            </svg>
-          </button>
+
+          <div class="flex items-center gap-2">
+            <!-- 好友申请按钮 -->
+            <button @click="openRequestsModal" class="group relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-700 text-white shadow-lg transition-all hover:bg-slate-600 hover:shadow-slate-500/40 active:scale-95">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+              </svg>
+              <!-- 角标 -->
+              <span v-if="pendingRequestCount > 0" class="absolute -top-1 -right-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-lg">
+                {{ pendingRequestCount }}
+              </span>
+            </button>
+
+            <!-- 添加好友按钮 -->
+            <button @click="openAddFriendModal" class="group relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg transition-all hover:bg-indigo-500 hover:shadow-indigo-500/40 active:scale-95">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="8.5" cy="7" r="4"></circle>
+                <line x1="20" y1="8" x2="20" y2="14"></line>
+                <line x1="23" y1="11" x2="17" y2="11"></line>
+              </svg>
+            </button>
+          </div>
         </div>
 
         <div class="relative group">
@@ -421,15 +1183,15 @@ onUnmounted(() => {
         </div>
       </header>
 
-      <!-- Filter Tabs -->
-      <div class="px-5 py-2 flex gap-4 text-xs font-medium text-slate-400">
+      <!-- Tabs -->
+      <div class="sticky top-[116px] z-30 px-5 py-2 flex gap-4 text-xs font-medium text-slate-400 bg-slate-900/95 backdrop-blur-md shrink-0 border-b border-white/5">
         <button class="text-white hover:text-indigo-400 transition-colors">全部</button>
         <button class="hover:text-indigo-400 transition-colors">群聊</button>
         <button class="hover:text-indigo-400 transition-colors">未读</button>
       </div>
 
       <!-- 好友列表 -->
-      <div class="flex-1 overflow-y-auto px-3 py-2 custom-scrollbar space-y-1">
+      <div class="relative z-10 flex-1 overflow-y-auto px-3 py-2 custom-scrollbar space-y-1">
         <div 
           v-for="contact in filteredContacts" 
           :key="contact.id"
@@ -442,8 +1204,24 @@ onUnmounted(() => {
           ]"
         >
           <div class="relative shrink-0">
-            <img :src="contact.avatar" class="h-12 w-12 rounded-full object-cover shadow-md" alt="Avatar" />
-            <span 
+            <div v-if="contact.avatarLoading" class="h-12 w-12 rounded-full bg-slate-700 animate-pulse"></div>
+
+            <img
+              v-else-if="contact.avatarBlobUrl && !contact.avatarError"
+              :src="contact.avatarBlobUrl"
+              class="h-12 w-12 rounded-full object-cover shadow-md"
+              alt="Avatar"
+              @error="contact.avatarError = true"
+            />
+
+            <div
+              v-else
+              class="h-12 w-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg shadow-md"
+            >
+              {{ (contact.username || 'U')[0].toUpperCase() }}
+            </div>
+
+            <span
               class="absolute bottom-0 right-0 block h-3 w-3 rounded-full ring-2 ring-slate-900"
               :class="{
                 'bg-emerald-500': contact.status === 'online',
@@ -476,7 +1254,7 @@ onUnmounted(() => {
     </aside>
 
     <!-- 右侧 Chat Main -->
-    <main class="relative z-10 flex flex-1 flex-col bg-slate-900/40 backdrop-blur-md">
+    <main class="relative z-10 flex flex-1 flex-col bg-slate-900/40 backdrop-blur-md overflow-hidden">
       
       <!-- Welcome Screen -->
       <div v-if="!activeContact" class="flex h-full flex-col items-center justify-center text-slate-400">
@@ -488,14 +1266,30 @@ onUnmounted(() => {
       </div>
 
       <!-- 活跃聊天界面 -->
-      <div v-else class="flex h-full flex-col">
+      <div v-else class="flex h-full flex-col overflow-hidden">
         <!-- Chat Header -->
-        <header class="flex h-16 shrink-0 items-center border-b border-white/5 px-6 bg-slate-900/30 backdrop-blur-sm">
+        <header class="flex h-16 shrink-0 items-center border-b border-white/5 px-6 bg-slate-900/30 backdrop-blur-sm z-20">
            <div class="flex items-center gap-3">
-             <div 
-               class="h-2 w-2 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)] transition-colors"
-               :class="activeContact.status === 'online' ? 'bg-emerald-500' : 'bg-slate-500'"
-             ></div>
+             <div class="relative shrink-0">
+               <div v-if="activeContact.avatarLoading" class="h-8 w-8 rounded-full bg-slate-700 animate-pulse"></div>
+               <img
+                 v-else-if="activeContact.avatarBlobUrl && !activeContact.avatarError"
+                 :src="activeContact.avatarBlobUrl"
+                 class="h-8 w-8 rounded-full object-cover shadow-md"
+                 alt="Avatar"
+                 @error="activeContact.avatarError = true"
+               />
+               <div
+                 v-else
+                 class="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm shadow-md"
+               >
+                 {{ (activeContact.username || 'U')[0].toUpperCase() }}
+               </div>
+               <span
+                 class="absolute bottom-0 right-0 block h-2 w-2 rounded-full ring-2 ring-slate-900 shadow-[0_0_8px_rgba(16,185,129,0.5)] transition-colors"
+                 :class="activeContact.status === 'online' ? 'bg-emerald-500' : 'bg-slate-500'"
+               ></span>
+             </div>
              <h2 class="font-bold text-slate-100">{{ activeContact.username }}</h2>
            </div>
            <div class="ml-auto flex gap-4 text-slate-400">
@@ -505,46 +1299,176 @@ onUnmounted(() => {
         </header>
 
         <!-- Messages Area -->
-        <div ref="chatAreaRef" class="flex-1 overflow-y-auto px-6 py-4 custom-scrollbar scroll-smooth">
-           <!-- 如果没有消息 -->
+        <div ref="chatAreaRef" @scroll="handleScroll" class="flex-1 overflow-y-auto px-6 py-4 custom-scrollbar scroll-smooth z-10">
+           <!-- 加载历史消息指示器 -->
+           <div v-if="isLoadingHistory" class="flex justify-center py-2 mb-2">
+             <div class="flex items-center gap-2 text-xs text-slate-400">
+               <div class="h-4 w-4 animate-spin rounded-full border-2 border-slate-600 border-t-indigo-500"></div>
+               <span>加载历史消息...</span>
+             </div>
+           </div>
+
+           <!-- 没有更多消息提示 -->
+           <div v-else-if="!hasMoreHistory && currentMessages.length > 0" class="flex justify-center py-2 mb-2">
+             <span class="text-xs text-slate-500">没有更多历史消息</span>
+           </div>
+
            <div v-if="currentMessages.length === 0" class="flex h-full items-center justify-center">
               <span class="text-sm text-slate-500">Say hello to {{ activeContact.username }} 👋</span>
            </div>
 
-           <!-- 日期分隔线占位 -->
-           <!-- <div class="flex justify-center my-4"><span class="bg-slate-800/80 px-3 py-1 rounded-full text-xs text-slate-400">Today</span></div> -->
-           
-           <div 
-             v-for="(msg, index) in currentMessages" 
-             :key="msg.msg_id" 
+           <div
+             v-for="(msg, index) in currentMessages"
+             :key="msg.msg_id"
              class="flex gap-3 mb-4 group"
              :class="{ 'flex-row-reverse': isMyMessage(msg) }"
+             @contextmenu="showMessageContextMenu($event, msg)"
+             @touchstart="handleLongPressStart($event, msg)"
+             @touchend="handleLongPressEnd"
+             @touchcancel="handleLongPressEnd"
            >
-             <!-- 对方头像 -->
-             <img v-if="!isMyMessage(msg)" :src="activeContact.avatar" class="h-8 w-8 rounded-full mt-1 object-cover">
+             <div v-if="!isMyMessage(msg)" class="shrink-0">
+               <div v-if="activeContact.avatarLoading" class="h-8 w-8 rounded-full bg-slate-700 animate-pulse mt-1"></div>
+               <img
+                 v-else-if="activeContact.avatarBlobUrl && !activeContact.avatarError"
+                 :src="activeContact.avatarBlobUrl"
+                 class="h-8 w-8 rounded-full mt-1 object-cover shadow-md"
+                 alt="Avatar"
+                 @error="activeContact.avatarError = true"
+               />
+               <div
+                 v-else
+                 class="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm shadow-md mt-1"
+               >
+                 {{ (activeContact.username || 'U')[0].toUpperCase() }}
+               </div>
+             </div>
              
-             <!-- 消息内容 -->
              <div class="max-w-[70%]">
-               <!-- 气泡 -->
-               <div 
-                 class="px-4 py-2.5 text-sm shadow-md break-words relative"
+               <div
+                 v-if="msg.type !== 'recalled'"
+                 class="px-4 py-2.5 text-sm shadow-md break-words relative overflow-hidden"
                  :class="[
-                    isMyMessage(msg) 
-                      ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-none shadow-indigo-500/20' 
+                    isMyMessage(msg)
+                      ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-none shadow-indigo-500/20'
                       : 'bg-slate-800 text-slate-200 rounded-2xl rounded-tl-none border border-white/5'
                  ]"
                >
+                 <!-- 文本消息 -->
+                 <template v-if="msg.type === 'text'">
+                   {{ msg.content }}
+                 </template>
+
+                 <!-- 图片消息 -->
+                 <template v-else-if="msg.type === 'image'">
+                   <div>
+                     <!-- 加载中状态 -->
+                     <div v-if="msg.fileLoading" class="flex items-center justify-center w-64 h-48 bg-slate-700 rounded-lg">
+                       <div class="text-center">
+                         <div class="h-8 w-8 mx-auto animate-spin rounded-full border-4 border-slate-600 border-t-indigo-400"></div>
+                         <p class="mt-2 text-xs text-slate-400">加载中...</p>
+                       </div>
+                     </div>
+
+                     <!-- 加载失败状态 -->
+                     <div v-else-if="msg.fileError" class="flex items-center justify-center w-64 h-48 bg-slate-700 rounded-lg cursor-pointer" @click="loadMessageFile(msg)">
+                       <div class="text-center">
+                         <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                         <p class="mt-2 text-xs text-slate-400">加载失败，点击重试</p>
+                       </div>
+                     </div>
+
+                     <!-- 图片显示 -->
+                     <div v-else-if="msg.fileBlobUrl" class="cursor-pointer" @click="openImagePreview(msg.fileBlobUrl)">
+                       <img
+                         :src="msg.fileBlobUrl"
+                         :alt="msg.filename"
+                         class="max-w-xs max-h-64 rounded-lg object-cover"
+                       />
+                       <p v-if="msg.filename" class="mt-2 text-xs opacity-75">{{ msg.filename }}</p>
+                     </div>
+
+                     <!-- 未加载状态（不应该出现，但作为后备） -->
+                     <div v-else class="flex items-center justify-center w-64 h-48 bg-slate-700 rounded-lg">
+                       <p class="text-xs text-slate-400">等待加载...</p>
+                     </div>
+                   </div>
+                 </template>
+
+                 <!-- 视频消息 -->
+                 <template v-else-if="msg.type === 'video'">
+                   <div class="space-y-2">
+                     <!-- 加载中状态 -->
+                     <div v-if="msg.fileLoading" class="flex items-center justify-center w-80 h-48 bg-slate-700 rounded-lg">
+                       <div class="text-center">
+                         <div class="h-8 w-8 mx-auto animate-spin rounded-full border-4 border-slate-600 border-t-indigo-400"></div>
+                         <p class="mt-2 text-xs text-slate-400">加载中...</p>
+                       </div>
+                     </div>
+
+                     <!-- 加载失败状态 -->
+                     <div v-else-if="msg.fileError" class="flex items-center justify-center w-80 h-48 bg-slate-700 rounded-lg cursor-pointer" @click="loadMessageFile(msg)">
+                       <div class="text-center">
+                         <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                         <p class="mt-2 text-xs text-slate-400">加载失败，点击重试</p>
+                       </div>
+                     </div>
+
+                     <!-- 视频播放器 -->
+                     <template v-else-if="msg.fileBlobUrl">
+                       <video
+                         :src="msg.fileBlobUrl"
+                         controls
+                         class="max-w-xs max-h-64 rounded-lg"
+                         preload="metadata"
+                       >
+                         您的浏览器不支持视频播放
+                       </video>
+                       <div class="flex items-center gap-2 text-xs opacity-75">
+                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+                         <span>{{ msg.filename }}</span>
+                         <span v-if="msg.file_size">({{ formatFileSize(msg.file_size) }})</span>
+                       </div>
+                     </template>
+                   </div>
+                 </template>
+
+                 <!-- 文档消息 -->
+                 <template v-else-if="msg.type === 'document'">
+                   <div
+                     @click="downloadFile(msg)"
+                     class="flex items-center gap-3 p-3 rounded-lg transition-colors cursor-pointer"
+                     :class="isMyMessage(msg) ? 'bg-indigo-700 hover:bg-indigo-800' : 'bg-slate-700 hover:bg-slate-600'"
+                   >
+                     <div class="flex-shrink-0">
+                       <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                     </div>
+                     <div class="flex-1 min-w-0">
+                       <p class="font-medium truncate">{{ msg.filename }}</p>
+                       <p v-if="msg.file_size" class="text-xs opacity-75 mt-1">{{ formatFileSize(msg.file_size) }}</p>
+                     </div>
+                     <div class="flex-shrink-0">
+                       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                     </div>
+                   </div>
+                 </template>
+               </div>
+
+               <!-- 撤回消息样式 -->
+               <div
+                 v-else
+                 class="px-3 py-2 text-xs text-slate-400 italic bg-slate-800/30 rounded-lg border border-slate-700/50"
+               >
                  {{ msg.content }}
                </div>
-               
-               <!-- 元数据 (时间 & 状态) -->
-               <div 
+
+               <div
+                  v-if="msg.type !== 'recalled'"
                   class="mt-1 flex items-center gap-1 text-[10px] text-slate-500"
                   :class="{ 'flex-row-reverse': isMyMessage(msg) }"
                >
                  <span>{{ formatTime(msg.ts) }}</span>
                  <span v-if="isMyMessage(msg)" class="font-medium" :class="{'text-indigo-400': msg.status === 'read'}">
-                   <!-- 根据状态显示不同文本/图标 -->
                    {{ msg.status === 'pending' ? 'Sending...' : 'Sent' }}
                  </span>
                </div>
@@ -553,14 +1477,29 @@ onUnmounted(() => {
         </div>
 
         <!-- Input Area -->
-        <div class="p-4 pt-2 shrink-0">
-          <div 
-             class="flex items-end gap-2 rounded-2xl bg-slate-800/80 p-2 ring-1 ring-white/10 backdrop-blur transition-all focus-within:ring-indigo-500/50"
-             :class="{'opacity-50 pointer-events-none': connectionStatus !== 'connected'}"
+        <div class="px-6 pt-4 pb-12 shrink-0 relative z-20 bg-gradient-to-t from-slate-900 via-slate-900/90 to-transparent">
+          <!-- 隐藏的文件输入 -->
+          <input
+            ref="fileInputRef"
+            type="file"
+            @change="handleFileSelect"
+            class="hidden"
+            accept="image/*,video/*,.pdf,.doc,.docx,.txt,.md,.xls,.xlsx,.ppt,.pptx"
+          />
+
+          <!-- 上传进度提示 -->
+          <div v-if="isUploadingFile" class="mb-2 flex items-center gap-2 text-xs text-indigo-400">
+            <div class="h-4 w-4 animate-spin rounded-full border-2 border-indigo-600 border-t-indigo-400"></div>
+            <span>上传中... {{ uploadProgress }}%</span>
+          </div>
+
+          <div
+             class="mb-4 flex items-end gap-2 rounded-2xl bg-slate-800/95 p-2 ring-1 ring-white/10 backdrop-blur-2xl shadow-2xl transition-all focus-within:ring-indigo-500/50"
+             :class="{'opacity-50 pointer-events-none': connectionStatus !== 'connected' || isUploadingFile}"
           >
-            <!-- 附件按钮 -->
-            <button class="p-2 text-slate-400 hover:text-indigo-400 transition mb-0.5"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg></button>
-            
+            <button @click="triggerFileSelect" class="p-2 text-slate-400 hover:text-indigo-400 transition mb-0.5" title="发送文件">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+            </button>
             <textarea 
               id="msg-input"
               v-model="messageInput"
@@ -570,7 +1509,6 @@ onUnmounted(() => {
               @keydown.enter.exact.prevent="sendMessage"
               class="max-h-32 min-h-[2.5rem] w-full resize-none bg-transparent py-2.5 text-sm text-slate-200 placeholder-slate-500 outline-none custom-scrollbar"
             ></textarea>
-
             <button 
               @click="sendMessage"
               :disabled="!messageInput.trim()"
@@ -583,8 +1521,9 @@ onUnmounted(() => {
 
       </div>
     </main>
+
+    <!-- Modal (Add Friend) -->
     <Teleport to="body">
-      <!-- 遮罩层动画 -->
       <Transition 
         enter-active-class="transition duration-300 ease-out"
         enter-from-class="opacity-0"
@@ -594,10 +1533,7 @@ onUnmounted(() => {
         leave-to-class="opacity-0"
       >
         <div v-if="showAddFriendModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" @click="closeAddFriendModal">
-          
-          <!-- 内容层动画 (防止点击内容触发背景关闭，使用 @click.stop) -->
           <div @click.stop class="w-full max-w-md p-6" >
-            
             <Transition
                appear
                enter-active-class="transition duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)]"
@@ -608,22 +1544,17 @@ onUnmounted(() => {
                leave-to-class="opacity-0 scale-95"
             >
               <div v-if="showAddFriendModal" class="relative overflow-hidden rounded-3xl bg-slate-900 border border-white/10 shadow-2xl shadow-black/50 ring-1 ring-white/10">
-                
-                <!-- 顶部光晕装饰 -->
                 <div class="absolute -top-10 -right-10 h-32 w-32 rounded-full bg-indigo-500/20 blur-[50px] pointer-events-none"></div>
                 <div class="absolute -bottom-10 -left-10 h-32 w-32 rounded-full bg-blue-500/20 blur-[50px] pointer-events-none"></div>
 
-                <!-- 标题区 -->
                 <div class="relative px-6 pt-6">
                   <h3 class="text-xl font-bold text-white">Add New Friend</h3>
                   <p class="text-sm text-slate-400 mt-1">Enter username to start a new chat.</p>
                 </div>
 
-                <!-- 输入区 -->
                 <div class="relative px-6 py-6">
                   <div class="group relative flex items-center">
                     <svg xmlns="http://www.w3.org/2000/svg" class="absolute left-4 h-5 w-5 text-slate-500 transition-colors group-focus-within:text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                    
                     <input 
                       id="add-friend-input"
                       v-model="addFriendInput"
@@ -635,14 +1566,8 @@ onUnmounted(() => {
                   </div>
                 </div>
 
-                <!-- 底部按钮区 -->
                 <div class="relative flex items-center justify-end gap-3 bg-slate-800/30 px-6 py-4 border-t border-white/5 backdrop-blur-md">
-                  <button 
-                    @click="closeAddFriendModal"
-                    class="rounded-lg px-4 py-2 text-sm font-medium text-slate-400 transition hover:bg-white/5 hover:text-white"
-                  >
-                    Cancel
-                  </button>
+                  <button @click="closeAddFriendModal" class="rounded-lg px-4 py-2 text-sm font-medium text-slate-400 transition hover:bg-white/5 hover:text-white">Cancel</button>
                   <button 
                     @click="submitAddFriend"
                     :disabled="isAddingFriend || !addFriendInput.trim()"
@@ -652,18 +1577,171 @@ onUnmounted(() => {
                     <span v-else>Send Request</span>
                   </button>
                 </div>
-
               </div>
             </Transition>
           </div>
         </div>
       </Transition>
     </Teleport>
+
+    <!-- 好友申请列表弹窗 -->
+    <Teleport to="body">
+      <Transition
+        enter-active-class="transition duration-300 ease-out"
+        enter-from-class="opacity-0"
+        enter-to-class="opacity-100"
+        leave-active-class="transition duration-200 ease-in"
+        leave-from-class="opacity-100"
+        leave-to-class="opacity-0"
+      >
+        <div v-if="showRequestsModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" @click="closeRequestsModal">
+          <div @click.stop class="w-full max-w-md p-6">
+            <Transition
+              appear
+              enter-active-class="transition duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)]"
+              enter-from-class="opacity-0 scale-90 translate-y-4"
+              enter-to-class="opacity-100 scale-100 translate-y-0"
+              leave-active-class="transition duration-200 ease-in"
+              leave-from-class="opacity-100 scale-100"
+              leave-to-class="opacity-0 scale-95"
+            >
+              <div v-if="showRequestsModal" class="relative overflow-hidden rounded-3xl bg-slate-900 border border-white/10 shadow-2xl shadow-black/50 ring-1 ring-white/10 max-h-[80vh] flex flex-col">
+                <div class="absolute -top-10 -right-10 h-32 w-32 rounded-full bg-indigo-500/20 blur-[50px] pointer-events-none"></div>
+                <div class="absolute -bottom-10 -left-10 h-32 w-32 rounded-full bg-blue-500/20 blur-[50px] pointer-events-none"></div>
+
+                <div class="relative px-6 pt-6 pb-4 border-b border-white/5">
+                  <h3 class="text-xl font-bold text-white">好友申请</h3>
+                  <p class="text-sm text-slate-400 mt-1">{{ friendRequests.length }} 条待处理申请</p>
+                </div>
+
+                <div class="relative px-6 py-4 overflow-y-auto custom-scrollbar flex-1">
+                  <div v-if="isLoadingRequests" class="flex items-center justify-center py-8">
+                    <div class="h-8 w-8 animate-spin rounded-full border-4 border-slate-700 border-t-indigo-500"></div>
+                  </div>
+
+                  <div v-else-if="friendRequests.length === 0" class="flex flex-col items-center justify-center py-12">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-slate-600 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    <p class="text-slate-400 text-sm">暂无待处理的申请</p>
+                  </div>
+
+                  <div v-else class="space-y-3">
+                    <div
+                      v-for="request in friendRequests"
+                      :key="request._id"
+                      class="group relative flex items-start gap-4 rounded-2xl bg-slate-800/50 p-4 border border-white/5 hover:bg-slate-800 transition-all"
+                    >
+                      <img :src="request.from_avatar" class="h-12 w-12 rounded-full object-cover shadow-md shrink-0" alt="Avatar" />
+                      <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between mb-1">
+                          <h4 class="font-semibold text-slate-100 truncate">{{ request.from_username }}</h4>
+                          <span class="text-xs text-slate-500 shrink-0 ml-2">{{ formatRequestTime(request.create_time) }}</span>
+                        </div>
+                        <p class="text-sm text-slate-400 mb-3 line-clamp-2">{{ request.request_msg }}</p>
+                        <div class="flex items-center gap-2">
+                          <button
+                            @click="acceptRequest(request._id, request.from_user_id, request.from_username, request.from_avatar)"
+                            class="flex-1 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-indigo-500/30 transition-all hover:bg-indigo-500 hover:scale-105 active:scale-95"
+                          >
+                            同意
+                          </button>
+                          <button
+                            @click="rejectRequest(request._id)"
+                            class="flex-1 rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-slate-300 transition-all hover:bg-slate-600 active:scale-95"
+                          >
+                            拒绝
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="relative flex items-center justify-end gap-3 bg-slate-800/30 px-6 py-4 border-t border-white/5 backdrop-blur-md">
+                  <button @click="closeRequestsModal" class="rounded-lg px-6 py-2 text-sm font-medium text-slate-400 transition hover:bg-white/5 hover:text-white">关闭</button>
+                </div>
+              </div>
+            </Transition>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- 消息右键菜单 -->
+    <Teleport to="body">
+      <Transition
+        enter-active-class="transition duration-200 ease-out"
+        enter-from-class="opacity-0 scale-95"
+        enter-to-class="opacity-100 scale-100"
+        leave-active-class="transition duration-150 ease-in"
+        leave-from-class="opacity-100 scale-100"
+        leave-to-class="opacity-0 scale-95"
+      >
+        <div
+          v-if="showContextMenu"
+          class="fixed z-[200] bg-slate-800 border border-white/10 rounded-lg shadow-2xl overflow-hidden min-w-[150px]"
+          :style="{ left: `${contextMenuX}px`, top: `${contextMenuY}px` }"
+          @click.stop
+        >
+          <button
+            @click="recallMessage"
+            class="w-full px-4 py-3 text-left text-sm text-slate-200 hover:bg-slate-700 transition-colors flex items-center gap-2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="1 4 1 10 7 10"></polyline>
+              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+            </svg>
+            <span>撤回消息</span>
+          </button>
+        </div>
+      </Transition>
+
+      <!-- 点击其他地方关闭菜单 -->
+      <div
+        v-if="showContextMenu"
+        class="fixed inset-0 z-[199]"
+        @click="hideContextMenu"
+      ></div>
+    </Teleport>
+
+    <!-- TOAST NOTIFICATION CONTAINER (位置已调整至 top-24) -->
+    <Teleport to="body">
+      <div class="fixed top-24 left-1/2 z-[100] -translate-x-1/2 flex flex-col gap-3 w-full max-w-sm pointer-events-none px-4">
+        <TransitionGroup 
+          tag="div" 
+          enter-active-class="transition duration-300 ease-out"
+          enter-from-class="opacity-0 -translate-y-4 scale-95"
+          enter-to-class="opacity-100 translate-y-0 scale-100"
+          leave-active-class="transition duration-200 ease-in"
+          leave-from-class="opacity-100 scale-100"
+          leave-to-class="opacity-0 -translate-y-4 scale-95 absolute"
+          move-class="transition duration-300 ease"
+        >
+          <div 
+            v-for="toast in toasts" 
+            :key="toast.id" 
+            class="pointer-events-auto flex w-full items-center gap-3 rounded-xl border p-4 shadow-xl backdrop-blur-md"
+            :class="{
+              'bg-emerald-950/80 border-emerald-500/30 text-emerald-100': toast.type === 'success',
+              'bg-red-950/80 border-red-500/30 text-red-100': toast.type === 'error',
+              'bg-slate-800/80 border-indigo-500/30 text-slate-100': toast.type === 'info',
+            }"
+          >
+            <!-- Success Icon -->
+            <svg v-if="toast.type === 'success'" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            <!-- Error Icon -->
+            <svg v-else-if="toast.type === 'error'" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+            <!-- Info Icon -->
+            <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+            
+            <p class="text-sm font-medium">{{ toast.message }}</p>
+          </div>
+        </TransitionGroup>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <style scoped>
-/* 滚动条美化 */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
   height: 6px;

@@ -237,16 +237,60 @@ const handleResetPassword = async () => {
   color: #fff;
 }
 
+.title-box {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
 .title-box h1 {
   color: #fff;
   margin-bottom: 5px;
   letter-spacing: 2px;
+  font-size: 48px;
+  font-weight: bold;
+  text-shadow: 
+    0 0 10px rgba(192, 192, 192, 0.8),
+    0 0 20px rgba(192, 192, 192, 0.6),
+    0 0 30px rgba(192, 192, 192, 0.4),
+    0 0 40px rgba(192, 192, 192, 0.2),
+    0 0 50px rgba(232, 232, 232, 0.4),
+    0 0 60px rgba(255, 255, 255, 0.2),
+    inset 0 0 20px rgba(192, 192, 192, 0.3);
+  filter: drop-shadow(0 0 3px rgba(192, 192, 192, 0.8));
+  animation: silverGlow 2s ease-in-out infinite alternate;
+}
+
+@keyframes silverGlow {
+  from {
+    text-shadow: 
+      0 0 10px rgba(192, 192, 192, 0.8),
+      0 0 20px rgba(192, 192, 192, 0.6),
+      0 0 30px rgba(192, 192, 192, 0.4),
+      0 0 40px rgba(192, 192, 192, 0.2),
+      0 0 50px rgba(232, 232, 232, 0.4),
+      0 0 60px rgba(255, 255, 255, 0.2),
+      inset 0 0 20px rgba(192, 192, 192, 0.3);
+    filter: drop-shadow(0 0 3px rgba(192, 192, 192, 0.8));
+  }
+  to {
+    text-shadow: 
+      0 0 15px rgba(192, 192, 192, 1),
+      0 0 25px rgba(192, 192, 192, 0.8),
+      0 0 35px rgba(192, 192, 192, 0.6),
+      0 0 45px rgba(192, 192, 192, 0.4),
+      0 0 55px rgba(232, 232, 232, 0.6),
+      0 0 65px rgba(255, 255, 255, 0.4),
+      inset 0 0 25px rgba(192, 192, 192, 0.5);
+    filter: drop-shadow(0 0 5px rgba(192, 192, 192, 1));
+  }
 }
 
 .title-box p {
   color: #ddd;
   font-size: 14px;
   margin-bottom: 30px;
+  letter-spacing: 4px;
+  text-shadow: 0 0 5px rgba(255, 255, 255, 0.3);
 }
 
 .code-row {
@@ -304,15 +348,12 @@ const handleResetPassword = async () => {
   letter-spacing: 4px;
   background: linear-gradient(90deg, #03a9f4, #f441a5);
   border: none;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .submit-btn:hover {
   opacity: 0.9;
 }
 </style>
-
-
-
-
-
-

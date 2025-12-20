@@ -36,31 +36,51 @@ const WS_URL = CURRENT_USER_ID ? `ws://localhost:8000/api/chat/ws/${CURRENT_USER
 interface MessageData {
   msg_id: string
   sender_id: string
-  receiver_id: string
+  receiver_id?: string  // 私聊时使用
+  group_id?: string     // 群聊时使用
   content: string
   ts: number
-  type: string  // text, image, document, video
+  type: string  // text, image, document, video, group_invite_card
   status?: 'pending' | 'sent' | 'read'
   filename?: string  // 文件消息时的原始文件名
   file_size?: number  // 文件大小
   fileBlobUrl?: string  // 文件的 blob URL (用于图片/视频预览)
   fileLoading?: boolean  // 文件是否正在加载
   fileError?: boolean  // 文件加载是否出错
+  sender_username?: string  // 群聊消息中发送者的用户名
+  sender_avatar?: string  // 群聊消息中发送者的头像文件名
+  sender_avatar_blob?: string  // 群聊消息中发送者的头像blob URL
+  sender_avatar_loading?: boolean  // 发送者头像是否正在加载
+  sender_avatar_error?: boolean  // 发送者头像加载是否出错
+  group_data?: {  // 群邀请卡片消息的群组数据
+    group_id: string
+    group_name: string
+    group_avatar: string
+    member_count: number
+    members: Array<{
+      user_id: string
+      username: string
+      avatar: string
+      is_owner: boolean
+    }>
+  }
 }
 
 interface Contact {
   id: string
   username: string
   avatar: string
-  avatarBlobUrl?: string 
-  avatarLoading?: boolean 
-  avatarError?: boolean 
+  avatarBlobUrl?: string
+  avatarLoading?: boolean
+  avatarError?: boolean
   lastMessage: string
-  lastTime: string 
+  lastTime: string
   unread: number
   active: boolean
   status: 'online' | 'offline' | 'busy'
   messages: MessageData[]
+  type?: 'private' | 'group'  // 标识私聊或群聊
+  member_count?: number       // 群聊成员数量
 }
 
 // ==================== Toast 通知系统 ====================
@@ -122,7 +142,25 @@ const uploadProgress = ref(0)
 // ====== 弹窗状态管理 ======
 const showAddFriendModal = ref(false)
 const addFriendInput = ref('')
-const isAddingFriend = ref(false) 
+const addFriendMessage = ref('Hi, I\'d like to be your friend.')
+const isAddingFriend = ref(false)
+
+// ====== 创建群组弹窗状态 ======
+const showCreateGroupModal = ref(false)
+const createGroupName = ref('')
+const createGroupDesc = ref('')
+const isCreatingGroup = ref(false)
+
+// ====== 邀请进群弹窗状态 ======
+const showInviteModal = ref(false)
+const myGroupsList = ref<any[]>([])
+const selectedGroupForInvite = ref<any>(null)
+const isLoadingInvite = ref(false)
+
+// ====== 右上角菜单状态 ======
+const showHeaderMenu = ref(false)
+const headerMenuX = ref(0)
+const headerMenuY = ref(0)
 
 // ====== 好友申请弹窗状态 ======
 const showRequestsModal = ref(false)
@@ -140,6 +178,7 @@ const longPressTimer = ref<number | null>(null)
 function openAddFriendModal() {
   showAddFriendModal.value = true
   addFriendInput.value = ''
+  addFriendMessage.value = 'Hi, I\'d like to be your friend.'
   nextTick(() => {
     document.getElementById('add-friend-input')?.focus()
   })
@@ -148,6 +187,125 @@ function openAddFriendModal() {
 // 关闭添加好友弹窗
 function closeAddFriendModal() {
   showAddFriendModal.value = false
+}
+
+// 打开创建群组弹窗
+function openCreateGroupModal() {
+  showCreateGroupModal.value = true
+  createGroupName.value = ''
+  createGroupDesc.value = ''
+  nextTick(() => {
+    document.getElementById('create-group-name')?.focus()
+  })
+}
+
+// 关闭创建群组弹窗
+function closeCreateGroupModal() {
+  showCreateGroupModal.value = false
+}
+
+// 打开邀请进群弹窗
+async function openInviteModal() {
+  if (!activeContact.value || activeContact.value.type !== 'private') {
+    showToast('只能向私聊好友发送群邀请', 'error')
+    return
+  }
+
+  showInviteModal.value = true
+  selectedGroupForInvite.value = null
+  await loadMyGroups()
+}
+
+// 关闭邀请进群弹窗
+function closeInviteModal() {
+  showInviteModal.value = false
+}
+
+// 加载我的群组列表
+async function loadMyGroups() {
+  isLoadingInvite.value = true
+  try {
+    const token = localStorage.getItem('token')
+    const response = await request.get('/api/group/list', {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+    myGroupsList.value = response.data
+  } catch (error: any) {
+    showToast('❌ 加载群组列表失败', 'error')
+  } finally {
+    isLoadingInvite.value = false
+  }
+}
+
+// 选择群组并发送邀请卡片消息
+async function selectGroupForInvite(group: any) {
+  if (!activeContact.value || !socket.value) return
+
+  selectedGroupForInvite.value = group
+  isLoadingInvite.value = true
+
+  try {
+    const token = localStorage.getItem('token')
+
+    // 获取群成员信息（最多3个）
+    const membersResponse = await request.get(`/api/group/${group._id}/members`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+
+    const members = membersResponse.data.members.slice(0, 3)
+
+    // 构造群邀请卡片消息
+    const payload = {
+      type: "message",
+      target_id: activeContact.value.id,
+      content: group._id,  // 存储群组ID作为content
+      msg_type: "group_invite_card",
+      group_data: {
+        group_id: group._id,
+        group_name: group.group_name,
+        group_avatar: group.group_avatar,
+        member_count: group.member_count,
+        members: members
+      }
+    }
+
+    // 创建本地消息（乐观更新）
+    const msgData: MessageData = {
+      msg_id: `temp-${Date.now()}`,
+      sender_id: CURRENT_USER_ID!,
+      receiver_id: activeContact.value.id,
+      content: group._id,
+      ts: Date.now() / 1000,
+      type: 'group_invite_card',
+      status: 'pending',
+      group_data: payload.group_data
+    }
+
+    activeContact.value.messages.push(msgData)
+    activeContact.value.lastMessage = '[群聊邀请]'
+    activeContact.value.lastTime = 'Now'
+
+    // 通过WebSocket发送
+    if (socket.value.readyState === WebSocket.OPEN) {
+      socket.value.send(JSON.stringify(payload))
+      showToast('✅ 群邀请已发送', 'success')
+      closeInviteModal()
+    } else {
+      showToast('发送失败：网络连接断开', 'error')
+    }
+
+    scrollToBottom()
+
+  } catch (error: any) {
+    console.error('发送群邀请失败:', error)
+    showToast('❌ 发送群邀请失败', 'error')
+  } finally {
+    isLoadingInvite.value = false
+  }
 }
 
 // ==================== 计算属性 ====================
@@ -284,6 +442,52 @@ const loadAvatar = async (contact: Contact) => {
   }
 }
 
+// 加载群聊消息中发送者的头像
+const loadMessageSenderAvatar = async (msg: MessageData) => {
+  if (!msg.sender_avatar || msg.sender_avatar_blob || msg.sender_avatar_loading) {
+    return
+  }
+
+  msg.sender_avatar_loading = true
+  msg.sender_avatar_error = false
+
+  try {
+    // 先尝试从缓存获取
+    const cachedUrl = await avatarCache.get(msg.sender_id, msg.sender_avatar)
+    if (cachedUrl) {
+      msg.sender_avatar_blob = cachedUrl
+      msg.sender_avatar_loading = false
+      return
+    }
+
+    // 从服务器获取
+    const response = await request.get(`/auth/avatar/${msg.sender_avatar}`, {
+      responseType: 'blob',
+      timeout: 10000
+    })
+
+    const contentType = response.headers['content-type']
+    if (!contentType || !contentType.startsWith('image/')) {
+      msg.sender_avatar_error = true
+      msg.sender_avatar_loading = false
+      return
+    }
+
+    const blob = response.data
+    const blobUrl = URL.createObjectURL(blob)
+    msg.sender_avatar_blob = blobUrl
+
+    // 缓存头像
+    await avatarCache.set(msg.sender_id, msg.sender_avatar, blob, contentType)
+
+  } catch (error) {
+    console.error('加载发送者头像失败:', error)
+    msg.sender_avatar_error = true
+  } finally {
+    msg.sender_avatar_loading = false
+  }
+}
+
 const lazyLoadAvatars = () => {
   setTimeout(() => {
     contacts.value.forEach((contact, index) => {
@@ -356,6 +560,14 @@ function stopHeartbeat() {
 function handleIncomingMessage(payload: any) {
   if (payload.type === 'pong') return
 
+  // 处理token刷新
+  if (payload.type === 'token_refresh') {
+    localStorage.setItem('token', payload.new_token)
+    showToast('Token已自动刷新', 'success')
+    return
+  }
+
+  // 处理私聊消息
   if (payload.type === 'new_message') {
     const msgData: MessageData = payload.data
 
@@ -363,7 +575,7 @@ function handleIncomingMessage(payload: any) {
       ? msgData.receiver_id
       : msgData.sender_id
 
-    const contact = contacts.value.find(c => c.id === targetUserId)
+    const contact = contacts.value.find(c => c.id === targetUserId && c.type === 'private')
 
     if (contact) {
       const lastMsg = contact.messages[contact.messages.length - 1]
@@ -374,7 +586,6 @@ function handleIncomingMessage(payload: any) {
         lastMsg.msg_id = msgData.msg_id
         lastMsg.ts = msgData.ts
       } else {
-        // 添加消息到列表
         contact.messages.push({
           ...msgData,
           status: 'sent',
@@ -383,7 +594,6 @@ function handleIncomingMessage(payload: any) {
           fileError: false
         })
 
-        // 如果是文件消息(图片或视频),自动加载
         if (msgData.type === 'image' || msgData.type === 'video') {
           const addedMsg = contact.messages[contact.messages.length - 1]
           nextTick(() => loadMessageFile(addedMsg))
@@ -405,26 +615,77 @@ function handleIncomingMessage(payload: any) {
     }
   }
 
+  // 处理群聊消息
+  if (payload.type === 'new_group_message') {
+    const msgData: MessageData = payload.data
+    const groupId = payload.group_id
+
+    const contact = contacts.value.find(c => c.id === groupId && c.type === 'group')
+
+    if (contact) {
+      const lastMsg = contact.messages[contact.messages.length - 1]
+      const isMyMessage = msgData.sender_id === CURRENT_USER_ID
+
+      if (isMyMessage && lastMsg && lastMsg.status === 'pending' && lastMsg.content === msgData.content) {
+        lastMsg.status = 'sent'
+        lastMsg.msg_id = msgData.msg_id
+        lastMsg.ts = msgData.ts
+      } else {
+        const newMsg: MessageData = {
+          ...msgData,
+          status: 'sent',
+          fileBlobUrl: undefined,
+          fileLoading: false,
+          fileError: false,
+          sender_avatar_blob: undefined,
+          sender_avatar_loading: false,
+          sender_avatar_error: false
+        }
+
+        contact.messages.push(newMsg)
+
+        // 加载图片/视频消息的文件
+        if (msgData.type === 'image' || msgData.type === 'video') {
+          nextTick(() => loadMessageFile(newMsg))
+        }
+
+        // 加载群聊消息发送者头像
+        if (msgData.sender_avatar && !isMyMessage) {
+          nextTick(() => loadMessageSenderAvatar(newMsg))
+        }
+
+        if (groupId !== currentChatId.value) {
+          contact.unread++
+        }
+
+        if (groupId === currentChatId.value) {
+          scrollToBottom()
+        }
+      }
+
+      contact.lastMessage = msgData.type === 'text'
+        ? msgData.content
+        : getFileMessagePreview(msgData.type, msgData.filename || '')
+      contact.lastTime = formatTime(msgData.ts)
+    }
+  }
+
   // 处理消息撤回通知
   if (payload.type === 'message_recalled') {
     const { msg_id, chat_id, recaller_id } = payload.data
 
-    // 找到对应的联系人
     const contact = contacts.value.find(c => {
       const calculatedChatId = getChatId(CURRENT_USER_ID!, c.id)
       return calculatedChatId === chat_id
     })
 
     if (contact) {
-      // 找到被撤回的消息
       const msgIndex = contact.messages.findIndex(m => m.msg_id === msg_id)
       if (msgIndex !== -1) {
-        // 更新消息为撤回状态
         const isMyRecall = recaller_id === CURRENT_USER_ID
         contact.messages[msgIndex].type = 'recalled'
         contact.messages[msgIndex].content = isMyRecall ? '你撤回了一条消息' : `${contact.username}撤回了一条消息`
 
-        // 如果是最后一条消息，更新联系人列表显示
         if (msgIndex === contact.messages.length - 1) {
           contact.lastMessage = contact.messages[msgIndex].content
         }
@@ -441,8 +702,12 @@ function handleIncomingMessage(payload: any) {
     }
   }
 
+  // 处理好友请求通过通知
   if (payload.type === 'friend_accepted') {
     const friendData = payload.data
+    console.log('收到好友通过通知:', friendData)
+    console.log('头像 base64 数据:', friendData.avatar_base64 ? `有数据，长度: ${friendData.avatar_base64.length}` : '无数据')
+
     if (friendData && friendData.friend_id) {
       const existingContact = contacts.value.find(c => c.id === friendData.friend_id)
       if (!existingContact) {
@@ -450,23 +715,65 @@ function handleIncomingMessage(payload: any) {
           id: friendData.friend_id,
           username: friendData.username || 'Unknown',
           avatar: friendData.avatar || '',
-          avatarBlobUrl: '',
+          avatarBlobUrl: friendData.avatar_base64 || '',  // 优先使用 base64 数据
           avatarLoading: false,
           avatarError: false,
-          lastMessage: 'You are now connected.',
-          lastTime: formatTime(Date.now() / 1000),
+          lastMessage: friendData.lastMessage || 'You are now connected.',
+          lastTime: friendData.lastTime ? formatTime(friendData.lastTime) : formatTime(Date.now() / 1000),
           unread: 0,
           active: false,
           status: 'offline',
-          messages: []
+          messages: [],
+          type: 'private'
         }
+        console.log('创建新联系人:', newContact.username, '头像URL:', newContact.avatarBlobUrl ? '有' : '无')
         contacts.value.unshift(newContact)
-        if (newContact.avatar) {
+
+        // 如果有 base64 数据，缓存到 localStorage
+        if (friendData.avatar_base64 && friendData.avatar) {
+          try {
+            fetch(friendData.avatar_base64)
+              .then(res => res.blob())
+              .then(blob => {
+                const mimeType = friendData.avatar_base64.split(';')[0].split(':')[1]
+                avatarCache.set(friendData.friend_id, friendData.avatar, blob, mimeType)
+                console.log('✅ 头像已缓存到 localStorage')
+              })
+              .catch(err => console.error('❌ 缓存头像失败:', err))
+          } catch (e) {
+            console.error('❌ 转换头像失败:', e)
+          }
+        } else if (friendData.avatar) {
+          // 如果没有 base64 数据但有头像文件名，使用现有的加载方式
+          console.log('使用现有方式加载头像:', friendData.avatar)
           loadAvatar(newContact)
         }
+
         showToast(`✅ ${friendData.username} 已同意你的好友请求`, 'success')
+        console.log('✅ 新好友已添加到联系人列表')
+      } else {
+        console.log('该好友已在联系人列表中')
+      }
+    } else {
+      console.error('好友数据不完整:', friendData)
+    }
+  }
+
+  // 处理群组通知
+  if (payload.type === 'group_created' || payload.type === 'added_to_group') {
+    showToast('你被添加到一个新群组', 'info')
+    loadContacts()  // 重新加载联系人列表
+  }
+
+  if (payload.type === 'removed_from_group' || payload.type === 'group_deleted') {
+    const groupId = payload.data?.group_id
+    if (groupId) {
+      contacts.value = contacts.value.filter(c => !(c.id === groupId && c.type === 'group'))
+      if (currentChatId.value === groupId) {
+        currentChatId.value = ''
       }
     }
+    showToast(payload.type === 'group_deleted' ? '群组已解散' : '你已被移出群组', 'info')
   }
 }
 
@@ -475,22 +782,39 @@ function sendMessage() {
   const text = messageInput.value.trim()
   if (!text || !activeContact.value || !socket.value) return
 
-  const payload = {
-    type: "message",
-    target_id: activeContact.value.id,
+  const isGroupChat = activeContact.value.type === 'group'
+
+  const payload: any = {
+    type: isGroupChat ? "group_message" : "message",
     content: text,
     msg_type: "text"
   }
 
-  activeContact.value.messages.push({
+  // 私聊消息
+  if (!isGroupChat) {
+    payload.target_id = activeContact.value.id
+  } else {
+    // 群聊消息
+    payload.group_id = activeContact.value.id
+  }
+
+  const msgData: MessageData = {
     msg_id: `temp-${Date.now()}`,
     sender_id: CURRENT_USER_ID!,
-    receiver_id: activeContact.value.id,
     content: text,
     ts: Date.now() / 1000,
     type: 'text',
     status: 'pending'
-  })
+  }
+
+  // 添加对应的receiver_id或group_id
+  if (!isGroupChat) {
+    msgData.receiver_id = activeContact.value.id
+  } else {
+    msgData.group_id = activeContact.value.id
+  }
+
+  activeContact.value.messages.push(msgData)
 
   activeContact.value.lastMessage = text
   activeContact.value.lastTime = 'Now'
@@ -770,7 +1094,19 @@ function getChatId(userId1: string, userId2: string): string {
 async function loadChatHistory(friendId: string, beforeTs?: number) {
   if (!CURRENT_USER_ID || isLoadingHistory.value) return
 
-  const chatId = getChatId(CURRENT_USER_ID, friendId)
+  const contact = contacts.value.find(c => c.id === friendId)
+  if (!contact) return
+
+  // 根据联系人类型生成正确的 chat_id
+  let chatId: string
+  if (contact.type === 'group') {
+    // 群聊：使用 group:群组ID 格式
+    chatId = `group:${friendId}`
+  } else {
+    // 私聊：使用两个用户ID排序后的格式
+    chatId = getChatId(CURRENT_USER_ID, friendId)
+  }
+
   isLoadingHistory.value = true
 
   try {
@@ -785,9 +1121,6 @@ async function loadChatHistory(friendId: string, beforeTs?: number) {
 
     const response = await request.get('/api/chat/history', { params })
     const messages = response.data || []
-
-    const contact = contacts.value.find(c => c.id === friendId)
-    if (!contact) return
 
     if (messages.length < 50) {
       hasMoreHistory.value = false
@@ -805,7 +1138,10 @@ async function loadChatHistory(friendId: string, beforeTs?: number) {
         status: 'sent' as const,
         fileBlobUrl: undefined,
         fileLoading: false,
-        fileError: false
+        fileError: false,
+        sender_avatar_blob: undefined,
+        sender_avatar_loading: false,
+        sender_avatar_error: false
       }))
 
       contact.messages = [
@@ -814,10 +1150,15 @@ async function loadChatHistory(friendId: string, beforeTs?: number) {
       ]
 
       // 为图片和视频消息加载 blob URL
+      // 为群聊消息加载发送者头像
       nextTick(() => {
         processedMessages.forEach((msg: MessageData) => {
           if (msg.type === 'image' || msg.type === 'video') {
             loadMessageFile(msg)
+          }
+          // 加载群聊消息发送者头像
+          if (contact.type === 'group' && msg.sender_avatar && msg.sender_id !== CURRENT_USER_ID) {
+            loadMessageSenderAvatar(msg)
           }
         })
       })
@@ -836,14 +1177,22 @@ async function loadChatHistory(friendId: string, beforeTs?: number) {
         status: 'sent' as const,
         fileBlobUrl: undefined,
         fileLoading: false,
-        fileError: false
+        fileError: false,
+        sender_avatar_blob: undefined,
+        sender_avatar_loading: false,
+        sender_avatar_error: false
       }))
 
       // 为图片和视频消息加载 blob URL
+      // 为群聊消息加载发送者头像
       nextTick(() => {
         contact.messages.forEach((msg: MessageData) => {
           if (msg.type === 'image' || msg.type === 'video') {
             loadMessageFile(msg)
+          }
+          // 加载群聊消息发送者头像
+          if (contact.type === 'group' && msg.sender_avatar && msg.sender_id !== CURRENT_USER_ID) {
+            loadMessageSenderAvatar(msg)
           }
         })
       })
@@ -899,10 +1248,21 @@ async function loadContacts() {
 
 async function submitAddFriend() {
   const targetName = addFriendInput.value.trim()
-  if (!targetName) return
+  const message = addFriendMessage.value.trim()
+  if (!targetName) {
+    showToast('请输入用户名', 'error')
+    return
+  }
+  if (!message) {
+    showToast('请输入打招呼内容', 'error')
+    return
+  }
   isAddingFriend.value = true
   try {
-    const response = await request.post('/api/social/request_add', { target_username: targetName })
+    const response = await request.post('/api/social/request_add', {
+      target_username: targetName,
+      request_msg: message
+    })
     closeAddFriendModal()
     showToast("✅ " + response.data.message, 'success')
     await loadContacts()
@@ -910,6 +1270,36 @@ async function submitAddFriend() {
     showToast("❌ " + (error.response?.data?.detail || "操作失败"), 'error')
   } finally {
     isAddingFriend.value = false
+  }
+}
+
+async function submitCreateGroup() {
+  const groupName = createGroupName.value.trim()
+  if (!groupName) {
+    showToast('请输入群组名称', 'error')
+    return
+  }
+
+  isCreatingGroup.value = true
+  try {
+    const token = localStorage.getItem('token')
+    const response = await request.post('/api/group/create', {
+      group_name: groupName,
+      description: createGroupDesc.value.trim(),
+      member_ids: []  // 暂时只创建只有自己的群，后续可以添加选择成员的功能
+    }, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+
+    closeCreateGroupModal()
+    showToast("✅ 群组创建成功", 'success')
+    await loadContacts()
+  } catch (error: any) {
+    showToast("❌ " + (error.response?.data?.detail || "创建群组失败"), 'error')
+  } finally {
+    isCreatingGroup.value = false
   }
 }
 
@@ -937,7 +1327,7 @@ async function loadFriendRequests() {
   }
 }
 
-async function acceptRequest(requestId: string, fromUserId: string, fromUsername: string, fromAvatar: string) {
+async function acceptRequest(requestId: string, fromUserId: string, fromUsername: string, fromAvatar: string, requestMsg: string) {
   try {
     await request.post('/api/social/handle', {
       request_id: requestId,
@@ -947,28 +1337,8 @@ async function acceptRequest(requestId: string, fromUserId: string, fromUsername
     friendRequests.value = friendRequests.value.filter(r => r._id !== requestId)
     pendingRequestCount.value--
 
-    const existingContact = contacts.value.find(c => c.id === fromUserId)
-    if (!existingContact) {
-      const newContact: Contact = {
-        id: fromUserId,
-        username: fromUsername,
-        avatar: fromAvatar,
-        avatarBlobUrl: '',
-        avatarLoading: false,
-        avatarError: false,
-        lastMessage: 'You are now connected.',
-        lastTime: formatTime(Date.now() / 1000),
-        unread: 0,
-        active: false,
-        status: 'offline',
-        messages: []
-      }
-      contacts.value.unshift(newContact)
-      if (newContact.avatar) {
-        loadAvatar(newContact)
-      }
-    }
-
+    // 不在这里创建联系人，等待 WebSocket 的 friend_accepted 通知
+    // 通知中会包含完整的用户信息和头像 base64 数据
     showToast(`✅ 已添加 ${fromUsername} 为好友`, 'success')
   } catch (error: any) {
     showToast("❌ " + (error.response?.data?.detail || "操作失败"), 'error')
@@ -1091,6 +1461,108 @@ async function recallMessage() {
   }
 }
 
+// --- 右上角菜单功能 ---
+
+function showHeaderContextMenu(event: MouseEvent) {
+  event.preventDefault()
+  headerMenuX.value = event.clientX - 100
+  headerMenuY.value = event.clientY
+  showHeaderMenu.value = true
+}
+
+function hideHeaderMenu() {
+  showHeaderMenu.value = false
+}
+
+// 点击群邀请卡片加入群聊
+async function joinGroupFromCard(groupData: any) {
+  if (!groupData || !groupData.group_id) {
+    showToast('群组信息无效', 'error')
+    return
+  }
+
+  try {
+    const token = localStorage.getItem('token')
+    const response = await request.post('/api/group/join_by_id', {
+      group_id: groupData.group_id
+    }, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+
+    if (response.data.already_member) {
+      showToast(`你已经是 ${groupData.group_name} 的成员了`, 'info')
+    } else {
+      showToast(`✅ 成功加入群聊：${groupData.group_name}`, 'success')
+      // 重新加载联系人列表以显示新加入的群
+      await loadContacts()
+    }
+  } catch (error: any) {
+    console.error('加入群聊失败:', error)
+    const errorMsg = error.response?.data?.detail || '加入群聊失败'
+    showToast(`❌ ${errorMsg}`, 'error')
+  }
+}
+
+// 退出群聊
+async function leaveGroup() {
+  if (!activeContact.value || activeContact.value.type !== 'group') return
+
+  try {
+    const token = localStorage.getItem('token')
+    const response = await request.post('/api/group/remove_member', {
+      group_id: activeContact.value.id,
+      user_id: CURRENT_USER_ID
+    }, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+
+    // 从联系人列表中移除该群聊
+    contacts.value = contacts.value.filter(c => c.id !== activeContact.value!.id)
+    currentChatId.value = ''
+
+    showToast('✅ 已退出群聊', 'success')
+    hideHeaderMenu()
+  } catch (error: any) {
+    console.error('退出群聊失败:', error)
+    showToast('❌ 退出群聊失败', 'error')
+  }
+}
+
+// 删除好友
+async function deleteFriend() {
+  if (!activeContact.value || activeContact.value.type !== 'private') return
+
+  // 确认对话框
+  if (!confirm(`确定要删除好友 ${activeContact.value.username} 吗？`)) {
+    return
+  }
+
+  try {
+    const token = localStorage.getItem('token')
+    const response = await request.post('/api/social/delete_friend', {
+      friend_id: activeContact.value.id
+    }, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+
+    // 从联系人列表中移除该好友
+    contacts.value = contacts.value.filter(c => c.id !== activeContact.value!.id)
+    currentChatId.value = ''
+
+    showToast('✅ 已删除好友', 'success')
+    hideHeaderMenu()
+  } catch (error: any) {
+    console.error('删除好友失败:', error)
+    showToast('❌ 删除好友失败', 'error')
+  }
+}
+
 // --- 生命周期 ---
 onMounted(() => {
   loadContacts() 
@@ -1156,6 +1628,16 @@ onUnmounted(() => {
               <span v-if="pendingRequestCount > 0" class="absolute -top-1 -right-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-lg">
                 {{ pendingRequestCount }}
               </span>
+            </button>
+
+            <!-- 创建群组按钮 -->
+            <button @click="openCreateGroupModal" class="group relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-600 text-white shadow-lg transition-all hover:bg-purple-500 hover:shadow-purple-500/40 active:scale-95" title="创建群组">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
             </button>
 
             <!-- 添加好友按钮 -->
@@ -1233,9 +1715,21 @@ onUnmounted(() => {
 
           <div class="min-w-0 flex-1">
             <div class="flex items-center justify-between mb-0.5">
-              <h3 class="truncate text-sm font-semibold text-slate-100" :class="{'text-indigo-200': contact.active}">
-                {{ contact.username }}
-              </h3>
+              <div class="flex items-center gap-2">
+                <h3 class="truncate text-sm font-semibold text-slate-100" :class="{'text-indigo-200': contact.active}">
+                  {{ contact.username }}
+                </h3>
+                <!-- 群组成员数量标识 -->
+                <span v-if="contact.type === 'group'" class="flex items-center gap-1 text-xs text-slate-400 bg-slate-700/50 px-2 py-0.5 rounded-full">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                  </svg>
+                  {{ contact.member_count }}
+                </span>
+              </div>
               <span class="text-xs text-slate-500">{{ contact.lastTime }}</span>
             </div>
             <div class="flex items-center justify-between">
@@ -1294,7 +1788,7 @@ onUnmounted(() => {
            </div>
            <div class="ml-auto flex gap-4 text-slate-400">
              <button class="hover:text-white transition"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg></button>
-             <button class="hover:text-white transition"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></button>
+             <button @click="showHeaderContextMenu" class="hover:text-white transition" title="更多选项"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></button>
            </div>
         </header>
 
@@ -1327,24 +1821,55 @@ onUnmounted(() => {
              @touchend="handleLongPressEnd"
              @touchcancel="handleLongPressEnd"
            >
+             <!-- 对于非自己的消息，显示发送者头像 -->
              <div v-if="!isMyMessage(msg)" class="shrink-0">
-               <div v-if="activeContact.avatarLoading" class="h-8 w-8 rounded-full bg-slate-700 animate-pulse mt-1"></div>
-               <img
-                 v-else-if="activeContact.avatarBlobUrl && !activeContact.avatarError"
-                 :src="activeContact.avatarBlobUrl"
-                 class="h-8 w-8 rounded-full mt-1 object-cover shadow-md"
-                 alt="Avatar"
-                 @error="activeContact.avatarError = true"
-               />
-               <div
-                 v-else
-                 class="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm shadow-md mt-1"
-               >
-                 {{ (activeContact.username || 'U')[0].toUpperCase() }}
-               </div>
+               <!-- 群聊消息：显示发送者的头像和名字 -->
+               <template v-if="activeContact.type === 'group'">
+                 <!-- 加载中 -->
+                 <div v-if="msg.sender_avatar_loading" class="h-8 w-8 rounded-full bg-slate-700 animate-pulse mt-1"></div>
+                 <!-- 显示头像 -->
+                 <img
+                   v-else-if="msg.sender_avatar_blob && !msg.sender_avatar_error"
+                   :src="msg.sender_avatar_blob"
+                   class="h-8 w-8 rounded-full mt-1 object-cover shadow-md"
+                   :alt="msg.sender_username || 'User'"
+                   :title="msg.sender_username || 'Unknown'"
+                   @error="msg.sender_avatar_error = true"
+                 />
+                 <!-- 加载失败或没有头像，显示用户名首字母 -->
+                 <div
+                   v-else
+                   class="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm shadow-md mt-1"
+                   :title="msg.sender_username || 'Unknown'"
+                 >
+                   {{ (msg.sender_username || 'U')[0].toUpperCase() }}
+                 </div>
+               </template>
+               <!-- 私聊消息：显示联系人头像 -->
+               <template v-else>
+                 <div v-if="activeContact.avatarLoading" class="h-8 w-8 rounded-full bg-slate-700 animate-pulse mt-1"></div>
+                 <img
+                   v-else-if="activeContact.avatarBlobUrl && !activeContact.avatarError"
+                   :src="activeContact.avatarBlobUrl"
+                   class="h-8 w-8 rounded-full mt-1 object-cover shadow-md"
+                   alt="Avatar"
+                   @error="activeContact.avatarError = true"
+                 />
+                 <div
+                   v-else
+                   class="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm shadow-md mt-1"
+                 >
+                   {{ (activeContact.username || 'U')[0].toUpperCase() }}
+                 </div>
+               </template>
              </div>
-             
+
              <div class="max-w-[70%]">
+               <!-- 群聊中显示发送者名字（仅对别人的消息） -->
+               <div v-if="!isMyMessage(msg) && activeContact.type === 'group' && msg.sender_username" class="mb-1 px-2">
+                 <span class="text-xs text-slate-400">{{ msg.sender_username }}</span>
+               </div>
+
                <div
                  v-if="msg.type !== 'recalled'"
                  class="px-4 py-2.5 text-sm shadow-md break-words relative overflow-hidden"
@@ -1452,6 +1977,52 @@ onUnmounted(() => {
                      </div>
                    </div>
                  </template>
+
+                 <!-- 群邀请卡片消息 -->
+                 <template v-else-if="msg.type === 'group_invite_card' && msg.group_data">
+                   <div
+                     @click="joinGroupFromCard(msg.group_data)"
+                     class="flex items-start gap-3 p-4 rounded-lg border transition-colors cursor-pointer max-w-sm"
+                     :class="isMyMessage(msg) ? 'bg-indigo-700 hover:bg-indigo-800 border-indigo-600' : 'bg-slate-700 hover:bg-slate-600 border-slate-600'"
+                   >
+                     <!-- 群组头像 -->
+                     <div class="flex-shrink-0">
+                       <div v-if="msg.group_data.group_avatar" class="h-12 w-12 rounded-lg overflow-hidden">
+                         <img :src="msg.group_data.group_avatar" class="h-full w-full object-cover" alt="群头像" />
+                       </div>
+                       <div v-else class="h-12 w-12 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-md">
+                         {{ msg.group_data.group_name[0].toUpperCase() }}
+                       </div>
+                     </div>
+
+                     <!-- 群组信息 -->
+                     <div class="flex-1 min-w-0">
+                       <div class="flex items-center gap-2 mb-1">
+                         <h4 class="font-semibold text-sm truncate">{{ msg.group_data.group_name }}</h4>
+                         <span class="text-xs opacity-60">({{ msg.group_data.member_count }}人)</span>
+                       </div>
+
+                       <!-- 成员列表（最多3个） -->
+                       <div v-if="msg.group_data.members && msg.group_data.members.length > 0" class="flex -space-x-2 mb-2">
+                         <div
+                           v-for="(member, idx) in msg.group_data.members.slice(0, 3)"
+                           :key="idx"
+                           class="h-6 w-6 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-xs font-semibold ring-2 ring-slate-700"
+                           :title="member.username"
+                         >
+                           {{ member.username[0].toUpperCase() }}
+                         </div>
+                       </div>
+
+                       <div class="flex items-center gap-2">
+                         <p class="text-xs opacity-75">点击加入群聊</p>
+                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="opacity-75">
+                           <polyline points="9 18 15 12 9 6"></polyline>
+                         </svg>
+                       </div>
+                     </div>
+                   </div>
+                 </template>
                </div>
 
                <!-- 撤回消息样式 -->
@@ -1549,20 +2120,33 @@ onUnmounted(() => {
 
                 <div class="relative px-6 pt-6">
                   <h3 class="text-xl font-bold text-white">Add New Friend</h3>
-                  <p class="text-sm text-slate-400 mt-1">Enter username to start a new chat.</p>
+                  <p class="text-sm text-slate-400 mt-1">Enter username and greeting message.</p>
                 </div>
 
-                <div class="relative px-6 py-6">
+                <div class="relative px-6 py-6 space-y-4">
                   <div class="group relative flex items-center">
                     <svg xmlns="http://www.w3.org/2000/svg" class="absolute left-4 h-5 w-5 text-slate-500 transition-colors group-focus-within:text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                    <input 
+                    <input
                       id="add-friend-input"
                       v-model="addFriendInput"
                       @keydown.enter="submitAddFriend"
-                      type="text" 
-                      placeholder="Username (e.g., Mike)" 
+                      type="text"
+                      placeholder="Username (e.g., Mike)"
                       class="h-12 w-full rounded-xl bg-slate-800/50 border border-white/5 pl-12 pr-4 text-slate-200 placeholder-slate-500 outline-none ring-1 ring-transparent transition-all focus:bg-slate-800 focus:ring-2 focus:ring-indigo-500/50"
                     >
+                  </div>
+
+                  <div class="group relative">
+                    <textarea
+                      v-model="addFriendMessage"
+                      placeholder="Say hello..."
+                      rows="3"
+                      maxlength="200"
+                      class="w-full rounded-xl bg-slate-800/50 border border-white/5 p-4 text-slate-200 placeholder-slate-500 outline-none ring-1 ring-transparent transition-all focus:bg-slate-800 focus:ring-2 focus:ring-indigo-500/50 resize-none"
+                    ></textarea>
+                    <div class="absolute bottom-2 right-2 text-xs text-slate-500">
+                      {{ addFriendMessage.length }}/200
+                    </div>
                   </div>
                 </div>
 
@@ -1576,6 +2160,164 @@ onUnmounted(() => {
                     <span v-if="isAddingFriend" class="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-white"></span>
                     <span v-else>Send Request</span>
                   </button>
+                </div>
+              </div>
+            </Transition>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- 创建群组弹窗 -->
+    <Teleport to="body">
+      <Transition
+        enter-active-class="transition duration-300 ease-out"
+        enter-from-class="opacity-0"
+        enter-to-class="opacity-100"
+        leave-active-class="transition duration-200 ease-in"
+        leave-from-class="opacity-100"
+        leave-to-class="opacity-0"
+      >
+        <div v-if="showCreateGroupModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" @click="closeCreateGroupModal">
+          <div @click.stop class="w-full max-w-md p-6">
+            <Transition
+              appear
+              enter-active-class="transition duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)]"
+              enter-from-class="opacity-0 scale-90 translate-y-4"
+              enter-to-class="opacity-100 scale-100 translate-y-0"
+              leave-active-class="transition duration-200 ease-in"
+              leave-from-class="opacity-100 scale-100"
+              leave-to-class="opacity-0 scale-95"
+            >
+              <div v-if="showCreateGroupModal" class="relative overflow-hidden rounded-3xl bg-slate-900 border border-white/10 shadow-2xl shadow-black/50 ring-1 ring-white/10">
+                <div class="absolute -top-10 -right-10 h-32 w-32 rounded-full bg-purple-500/20 blur-[50px] pointer-events-none"></div>
+                <div class="absolute -bottom-10 -left-10 h-32 w-32 rounded-full bg-blue-500/20 blur-[50px] pointer-events-none"></div>
+
+                <div class="relative px-6 pt-6">
+                  <h3 class="text-xl font-bold text-white">创建群组</h3>
+                  <p class="text-sm text-slate-400 mt-1">创建一个新的群聊</p>
+                </div>
+
+                <div class="relative px-6 py-6 space-y-4">
+                  <div class="group relative flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="absolute left-4 h-5 w-5 text-slate-500 transition-colors group-focus-within:text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                      <circle cx="9" cy="7" r="4"></circle>
+                      <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                      <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                    <input
+                      id="create-group-name"
+                      v-model="createGroupName"
+                      @keydown.enter="submitCreateGroup"
+                      type="text"
+                      placeholder="群组名称"
+                      maxlength="50"
+                      class="h-12 w-full rounded-xl bg-slate-800/50 border border-white/5 pl-12 pr-4 text-slate-200 placeholder-slate-500 outline-none ring-1 ring-transparent transition-all focus:bg-slate-800 focus:ring-2 focus:ring-purple-500/50"
+                    >
+                  </div>
+
+                  <div class="group relative">
+                    <textarea
+                      v-model="createGroupDesc"
+                      placeholder="群组简介（可选）"
+                      maxlength="200"
+                      rows="3"
+                      class="w-full rounded-xl bg-slate-800/50 border border-white/5 p-4 text-slate-200 placeholder-slate-500 outline-none ring-1 ring-transparent transition-all focus:bg-slate-800 focus:ring-2 focus:ring-purple-500/50 resize-none"
+                    ></textarea>
+                  </div>
+                </div>
+
+                <div class="relative flex items-center justify-end gap-3 bg-slate-800/30 px-6 py-4 border-t border-white/5 backdrop-blur-md">
+                  <button @click="closeCreateGroupModal" class="rounded-lg px-4 py-2 text-sm font-medium text-slate-400 transition hover:bg-white/5 hover:text-white">取消</button>
+                  <button
+                    @click="submitCreateGroup"
+                    :disabled="isCreatingGroup || !createGroupName.trim()"
+                    class="flex items-center gap-2 rounded-lg bg-purple-600 px-6 py-2 text-sm font-bold text-white shadow-lg shadow-purple-500/30 transition-all hover:bg-purple-500 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span v-if="isCreatingGroup" class="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-white"></span>
+                    <span v-else>创建</span>
+                  </button>
+                </div>
+              </div>
+            </Transition>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- 邀请进群弹窗 -->
+    <Teleport to="body">
+      <Transition
+        enter-active-class="transition duration-300 ease-out"
+        enter-from-class="opacity-0"
+        enter-to-class="opacity-100"
+        leave-active-class="transition duration-200 ease-in"
+        leave-from-class="opacity-100"
+        leave-to-class="opacity-0"
+      >
+        <div v-if="showInviteModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" @click="closeInviteModal">
+          <div @click.stop class="w-full max-w-md p-6">
+            <Transition
+              appear
+              enter-active-class="transition duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)]"
+              enter-from-class="opacity-0 scale-90 translate-y-4"
+              enter-to-class="opacity-100 scale-100 translate-y-0"
+              leave-active-class="transition duration-200 ease-in"
+              leave-from-class="opacity-100 scale-100"
+              leave-to-class="opacity-0 scale-95"
+            >
+              <div v-if="showInviteModal" class="relative overflow-hidden rounded-3xl bg-slate-900 border border-white/10 shadow-2xl shadow-black/50 ring-1 ring-white/10 max-h-[80vh] flex flex-col">
+                <div class="absolute -top-10 -right-10 h-32 w-32 rounded-full bg-indigo-500/20 blur-[50px] pointer-events-none"></div>
+                <div class="absolute -bottom-10 -left-10 h-32 w-32 rounded-full bg-blue-500/20 blur-[50px] pointer-events-none"></div>
+
+                <div class="relative px-6 pt-6 pb-4 border-b border-white/5">
+                  <h3 class="text-xl font-bold text-white">邀请好友进群</h3>
+                  <p class="text-sm text-slate-400 mt-1">选择一个群组发送邀请</p>
+                </div>
+
+                <!-- 群组列表 -->
+                <div class="relative px-6 py-4 overflow-y-auto custom-scrollbar flex-1">
+                  <div v-if="isLoadingInvite" class="flex items-center justify-center py-8">
+                    <div class="h-8 w-8 animate-spin rounded-full border-4 border-slate-700 border-t-indigo-500"></div>
+                  </div>
+
+                  <div v-else-if="myGroupsList.length === 0" class="flex flex-col items-center justify-center py-12">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-slate-600 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                      <circle cx="9" cy="7" r="4"></circle>
+                      <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                      <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                    <p class="text-slate-400 text-sm">你还没有加入任何群组</p>
+                  </div>
+
+                  <div v-else class="space-y-2">
+                    <div
+                      v-for="group in myGroupsList"
+                      :key="group._id"
+                      @click="selectGroupForInvite(group)"
+                      class="group cursor-pointer rounded-xl bg-slate-800/50 p-4 border border-white/5 hover:bg-slate-800 hover:border-indigo-500/50 transition-all"
+                      :class="{'bg-indigo-600/20 border-indigo-500/50': selectedGroupForInvite?._id === group._id}"
+                    >
+                      <div class="flex items-center gap-3">
+                        <div class="h-12 w-12 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-md">
+                          {{ group.group_name[0].toUpperCase() }}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                          <h4 class="font-semibold text-slate-100 truncate">{{ group.group_name }}</h4>
+                          <p class="text-xs text-slate-400">{{ group.member_count }} 成员</p>
+                        </div>
+                        <svg v-if="selectedGroupForInvite?._id === group._id" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="relative flex items-center justify-end gap-3 bg-slate-800/30 px-6 py-4 border-t border-white/5 backdrop-blur-md">
+                  <button @click="closeInviteModal" class="rounded-lg px-6 py-2 text-sm font-medium text-slate-400 transition hover:bg-white/5 hover:text-white">关闭</button>
                 </div>
               </div>
             </Transition>
@@ -1639,7 +2381,7 @@ onUnmounted(() => {
                         <p class="text-sm text-slate-400 mb-3 line-clamp-2">{{ request.request_msg }}</p>
                         <div class="flex items-center gap-2">
                           <button
-                            @click="acceptRequest(request._id, request.from_user_id, request.from_username, request.from_avatar)"
+                            @click="acceptRequest(request._id, request.from_user_id, request.from_username, request.from_avatar, request.request_msg)"
                             class="flex-1 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-indigo-500/30 transition-all hover:bg-indigo-500 hover:scale-105 active:scale-95"
                           >
                             同意
@@ -1700,6 +2442,76 @@ onUnmounted(() => {
         v-if="showContextMenu"
         class="fixed inset-0 z-[199]"
         @click="hideContextMenu"
+      ></div>
+    </Teleport>
+
+    <!-- 右上角头部菜单 -->
+    <Teleport to="body">
+      <Transition
+        enter-active-class="transition duration-200 ease-out"
+        enter-from-class="opacity-0 scale-95"
+        enter-to-class="opacity-100 scale-100"
+        leave-active-class="transition duration-150 ease-in"
+        leave-from-class="opacity-100 scale-100"
+        leave-to-class="opacity-0 scale-95"
+      >
+        <div
+          v-if="showHeaderMenu"
+          class="fixed z-[200] bg-slate-800 border border-white/10 rounded-lg shadow-2xl overflow-hidden min-w-[160px]"
+          :style="{ left: `${headerMenuX}px`, top: `${headerMenuY}px` }"
+          @click.stop
+        >
+          <!-- 邀请进群（仅私聊） -->
+          <button
+            v-if="activeContact?.type === 'private'"
+            @click="openInviteModal(); hideHeaderMenu()"
+            class="w-full px-4 py-3 text-left text-sm text-slate-200 hover:bg-slate-700 transition-colors flex items-center gap-2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+            <span>邀请进群</span>
+          </button>
+
+          <!-- 删除好友（仅私聊） -->
+          <button
+            v-if="activeContact?.type === 'private'"
+            @click="deleteFriend"
+            class="w-full px-4 py-3 text-left text-sm text-red-400 hover:bg-slate-700 transition-colors flex items-center gap-2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="8.5" cy="7" r="4"></circle>
+              <line x1="18" y1="8" x2="23" y2="13"></line>
+              <line x1="23" y1="8" x2="18" y2="13"></line>
+            </svg>
+            <span>删除好友</span>
+          </button>
+
+          <!-- 退出群聊（仅群聊） -->
+          <button
+            v-if="activeContact?.type === 'group'"
+            @click="leaveGroup"
+            class="w-full px-4 py-3 text-left text-sm text-red-400 hover:bg-slate-700 transition-colors flex items-center gap-2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+              <polyline points="16 17 21 12 16 7"></polyline>
+              <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+            <span>退出群聊</span>
+          </button>
+        </div>
+      </Transition>
+
+      <!-- 点击其他地方关闭菜单 -->
+      <div
+        v-if="showHeaderMenu"
+        class="fixed inset-0 z-[199]"
+        @click="hideHeaderMenu"
       ></div>
     </Teleport>
 

@@ -1622,8 +1622,23 @@ async function joinGroupFromCard(groupData: any) {
 const rtcConfiguration = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' }
-  ]
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    // 添加免费的 TURN 服务器用于 NAT 穿透
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    }
+  ],
+  iceCandidatePoolSize: 10
 }
 
 // 发起通话
@@ -1698,7 +1713,12 @@ async function startCall() {
     // 监听 ICE 候选
     peerConnection.value.onicecandidate = (event) => {
       if (event.candidate) {
-        console.log('📤 [发起方] 生成 ICE candidate:', event.candidate.type)
+        console.log('📤 [发起方] 生成 ICE candidate:', {
+          type: event.candidate.type,
+          protocol: event.candidate.protocol,
+          address: event.candidate.address,
+          port: event.candidate.port
+        })
         if (socket.value) {
           socket.value.send(JSON.stringify({
             type: 'ice_candidate',
@@ -1710,6 +1730,11 @@ async function startCall() {
       } else {
         console.log('🏁 [发起方] ICE 候选收集完成')
       }
+    }
+
+    // 监听 ICE gathering 状态
+    peerConnection.value.onicegatheringstatechange = () => {
+      console.log('🔍 [发起方] ICE Gathering 状态:', peerConnection.value?.iceGatheringState)
     }
 
     // 监听连接状态
@@ -1726,7 +1751,17 @@ async function startCall() {
     // 监听 ICE 连接状态
     peerConnection.value.oniceconnectionstatechange = () => {
       console.log('🧊 [发起方] ICE 连接状态:', peerConnection.value?.iceConnectionState)
-      if (peerConnection.value?.iceConnectionState === 'disconnected') {
+
+      if (peerConnection.value?.iceConnectionState === 'connected') {
+        // 连接成功，打印选择的 candidate pair
+        peerConnection.value.getStats(null).then(stats => {
+          stats.forEach(report => {
+            if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+              console.log('✅ [发起方] 使用的 ICE Candidate Pair:', report)
+            }
+          })
+        })
+      } else if (peerConnection.value?.iceConnectionState === 'disconnected') {
         console.warn('⚠️ [发起方] ICE 连接断开')
       } else if (peerConnection.value?.iceConnectionState === 'failed') {
         console.error('❌ [发起方] ICE 连接失败')
@@ -1866,7 +1901,12 @@ async function acceptCall() {
     // 监听 ICE 候选
     peerConnection.value.onicecandidate = (event) => {
       if (event.candidate) {
-        console.log('📤 [接听方] 生成 ICE candidate:', event.candidate.type)
+        console.log('📤 [接听方] 生成 ICE candidate:', {
+          type: event.candidate.type,
+          protocol: event.candidate.protocol,
+          address: event.candidate.address,
+          port: event.candidate.port
+        })
         if (socket.value) {
           socket.value.send(JSON.stringify({
             type: 'ice_candidate',
@@ -1878,6 +1918,11 @@ async function acceptCall() {
       } else {
         console.log('🏁 [接听方] ICE 候选收集完成')
       }
+    }
+
+    // 监听 ICE gathering 状态
+    peerConnection.value.onicegatheringstatechange = () => {
+      console.log('🔍 [接听方] ICE Gathering 状态:', peerConnection.value?.iceGatheringState)
     }
 
     // 监听连接状态
@@ -1894,7 +1939,17 @@ async function acceptCall() {
     // 监听 ICE 连接状态
     peerConnection.value.oniceconnectionstatechange = () => {
       console.log('🧊 [接听方] ICE 连接状态:', peerConnection.value?.iceConnectionState)
-      if (peerConnection.value?.iceConnectionState === 'disconnected') {
+
+      if (peerConnection.value?.iceConnectionState === 'connected') {
+        // 连接成功，打印选择的 candidate pair
+        peerConnection.value.getStats(null).then(stats => {
+          stats.forEach(report => {
+            if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+              console.log('✅ [接听方] 使用的 ICE Candidate Pair:', report)
+            }
+          })
+        })
+      } else if (peerConnection.value?.iceConnectionState === 'disconnected') {
         console.warn('⚠️ [接听方] ICE 连接断开')
       } else if (peerConnection.value?.iceConnectionState === 'failed') {
         console.error('❌ [接听方] ICE 连接失败')

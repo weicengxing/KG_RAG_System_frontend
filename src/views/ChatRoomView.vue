@@ -30,7 +30,7 @@ function extractUserInfoFromToken(): { userId: string | null, username: string |
 const userInfo = extractUserInfoFromToken()
 const CURRENT_USER_ID = userInfo.userId || userInfo.username 
 const CURRENT_USERNAME = userInfo.username
-const WS_URL = CURRENT_USER_ID ? `ws://localhost:8000/api/chat/ws/${CURRENT_USER_ID}` : ''
+const WS_URL = CURRENT_USER_ID ? `wss://5b5009a4.r24.cpolar.top/api/chat/ws/${CURRENT_USER_ID}` : ''
 
 // ==================== 类型定义 ====================
 interface MessageData {

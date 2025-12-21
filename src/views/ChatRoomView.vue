@@ -1682,15 +1682,11 @@ async function startCall() {
         remoteStream.value = event.streams[0]
         console.log('✅ [发起方] 远程流已保存，轨道数:', remoteStream.value.getTracks().length)
 
-        if (remoteVideoRef.value) {
+        // 只在收到视频轨道时设置视频元素（避免重复设置）
+        if (event.track.kind === 'video' && remoteVideoRef.value) {
           remoteVideoRef.value.srcObject = remoteStream.value
-          console.log('✅ [发起方] 远程视频元素已设置')
-
-          // 自动播放
-          remoteVideoRef.value.play().catch(err => {
-            console.error('❌ [发起方] 远程视频播放失败:', err)
-          })
-        } else {
+          console.log('✅ [发起方] 远程视频元素已设置（autoplay 将自动播放）')
+        } else if (!remoteVideoRef.value) {
           console.warn('⚠️ [发起方] remoteVideoRef 不存在')
         }
       } else {
@@ -1854,15 +1850,11 @@ async function acceptCall() {
         remoteStream.value = event.streams[0]
         console.log('✅ [接听方] 远程流已保存，轨道数:', remoteStream.value.getTracks().length)
 
-        if (remoteVideoRef.value) {
+        // 只在收到视频轨道时设置视频元素（避免重复设置）
+        if (event.track.kind === 'video' && remoteVideoRef.value) {
           remoteVideoRef.value.srcObject = remoteStream.value
-          console.log('✅ [接听方] 远程视频元素已设置')
-
-          // 自动播放
-          remoteVideoRef.value.play().catch(err => {
-            console.error('❌ [接听方] 远程视频播放失败:', err)
-          })
-        } else {
+          console.log('✅ [接听方] 远程视频元素已设置（autoplay 将自动播放）')
+        } else if (!remoteVideoRef.value) {
           console.warn('⚠️ [接听方] remoteVideoRef 不存在')
         }
       } else {

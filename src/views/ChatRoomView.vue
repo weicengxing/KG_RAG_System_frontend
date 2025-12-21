@@ -48,10 +48,8 @@ interface MessageData {
   fileLoading?: boolean  // 文件是否正在加载
   fileError?: boolean  // 文件加载是否出错
   sender_username?: string  // 群聊消息中发送者的用户名
-  sender_avatar?: string  // 群聊消息中发送者的头像文件名
-  sender_avatar_blob?: string  // 群聊消息中发送者的头像blob URL
-  sender_avatar_loading?: boolean  // 发送者头像是否正在加载
-  sender_avatar_error?: boolean  // 发送者头像加载是否出错
+  sender_avatar?: string  // 群聊消息中发送者的头像文件名（已废弃，改用 sender_avatar_base64）
+  sender_avatar_base64?: string  // 群聊消息中发送者的头像base64数据（后端直接返回）
   group_data?: {  // 群邀请卡片消息的群组数据
     group_id: string
     group_name: string
@@ -127,6 +125,7 @@ const heartbeatTimer = ref<number | null>(null)
 const isLoadingContacts = ref(false)
 const pendingRequestCount = ref(0)
 const avatarLoadQueue = ref<Set<string>>(new Set())
+const activeFilter = ref<'all' | 'group' | 'unread'>('all')
 
 // 历史消息加载状态
 const isLoadingHistory = ref(false)
@@ -172,7 +171,19 @@ const showContextMenu = ref(false)
 const contextMenuX = ref(0)
 const contextMenuY = ref(0)
 const selectedMessage = ref<MessageData | null>(null)
-const longPressTimer = ref<number | null>(null) 
+const longPressTimer = ref<number | null>(null)
+
+// ====== WebRTC 通话状态 ======
+const callStatus = ref<'idle' | 'calling' | 'ringing' | 'connected'>('idle')
+const peerConnection = ref<RTCPeerConnection | null>(null)
+const localStream = ref<MediaStream | null>(null)
+const remoteStream = ref<MediaStream | null>(null)
+const localVideoRef = ref<HTMLVideoElement | null>(null)
+const remoteVideoRef = ref<HTMLVideoElement | null>(null)
+const isVideoEnabled = ref(true)
+const isAudioEnabled = ref(true)
+const incomingCallData = ref<any>(null)
+const callStartTime = ref<number>(0) 
 
 // 打开添加好友弹窗
 function openAddFriendModal() {
@@ -311,9 +322,19 @@ async function selectGroupForInvite(group: any) {
 // ==================== 计算属性 ====================
 
 const filteredContacts = computed(() => {
-  return contacts.value.filter(c => 
+  let result = contacts.value.filter(c =>
     c.username.toLowerCase().includes(searchQuery.value.toLowerCase())
   )
+
+  // 根据选中的标签进行筛选
+  if (activeFilter.value === 'group') {
+    result = result.filter(c => c.type === 'group')
+  } else if (activeFilter.value === 'unread') {
+    result = result.filter(c => c.unread > 0)
+  }
+  // 'all' 不需要额外筛选
+
+  return result
 })
 
 const activeContact = computed(() => {
@@ -325,6 +346,11 @@ const currentMessages = computed(() => {
 })
 
 // ==================== 方法实现 ====================
+
+// --- 筛选标签切换 ---
+function setFilter(filter: 'all' | 'group' | 'unread') {
+  activeFilter.value = filter
+}
 
 // --- 0. 头像缓存与加载逻辑 ---
 
@@ -449,51 +475,8 @@ const loadAvatar = async (contact: Contact) => {
   }
 }
 
-// 加载群聊消息中发送者的头像
-const loadMessageSenderAvatar = async (msg: MessageData) => {
-  if (!msg.sender_avatar || msg.sender_avatar_blob || msg.sender_avatar_loading) {
-    return
-  }
-
-  msg.sender_avatar_loading = true
-  msg.sender_avatar_error = false
-
-  try {
-    // 先尝试从缓存获取
-    const cachedUrl = await avatarCache.get(msg.sender_id, msg.sender_avatar)
-    if (cachedUrl) {
-      msg.sender_avatar_blob = cachedUrl
-      msg.sender_avatar_loading = false
-      return
-    }
-
-    // 从服务器获取
-    const response = await request.get(`/auth/avatar/${msg.sender_avatar}`, {
-      responseType: 'blob',
-      timeout: 10000
-    })
-
-    const contentType = response.headers['content-type']
-    if (!contentType || !contentType.startsWith('image/')) {
-      msg.sender_avatar_error = true
-      msg.sender_avatar_loading = false
-      return
-    }
-
-    const blob = response.data
-    const blobUrl = URL.createObjectURL(blob)
-    msg.sender_avatar_blob = blobUrl
-
-    // 缓存头像
-    await avatarCache.set(msg.sender_id, msg.sender_avatar, blob, contentType)
-
-  } catch (error) {
-    console.error('加载发送者头像失败:', error)
-    msg.sender_avatar_error = true
-  } finally {
-    msg.sender_avatar_loading = false
-  }
-}
+// 注意：群聊消息的发送者头像现在由后端直接返回 base64 数据
+// 不再需要前端单独加载，已移除 loadMessageSenderAvatar 函数
 
 const lazyLoadAvatars = () => {
   setTimeout(() => {
@@ -526,7 +509,21 @@ function initWebSocket() {
 
   socket.value.onmessage = (event) => {
     try {
+      // 【调试】打印收到的原始数据大小
+      const dataSizeKB = event.data.length / 1024
+      console.log(`📥 收到 WebSocket 消息: 大小=${dataSizeKB.toFixed(2)}KB`)
+
       const payload = JSON.parse(event.data)
+
+      // 【调试】打印解析后的数据类型
+      if (payload.type === 'new_group_message') {
+        console.log('📥 解析后的群聊消息:', {
+          type: payload.type,
+          has_data: !!payload.data,
+          data_keys: payload.data ? Object.keys(payload.data) : []
+        })
+      }
+
       handleIncomingMessage(payload)
     } catch (e) {
       console.error('Parsed error:', e)
@@ -581,6 +578,7 @@ function handleIncomingMessage(payload: any) {
     const targetUserId = msgData.sender_id === CURRENT_USER_ID
       ? msgData.receiver_id
       : msgData.sender_id
+ 
 
     const contact = contacts.value.find(c => c.id === targetUserId && c.type === 'private')
 
@@ -627,6 +625,16 @@ function handleIncomingMessage(payload: any) {
     const msgData: MessageData = payload.data
     const groupId = payload.group_id
 
+    // 【调试】打印接收到的消息数据
+    console.log('🔍 收到群聊消息:', {
+      msg_id: msgData.msg_id,
+      sender_id: msgData.sender_id,
+      sender_username: msgData.sender_username,
+      sender_avatar: msgData.sender_avatar,
+      has_sender_avatar_base64: !!msgData.sender_avatar_base64,
+      sender_avatar_base64_preview: msgData.sender_avatar_base64?.substring(0, 50) + '...'
+    })
+
     const contact = contacts.value.find(c => c.id === groupId && c.type === 'group')
 
     if (contact) {
@@ -643,11 +651,15 @@ function handleIncomingMessage(payload: any) {
           status: 'sent',
           fileBlobUrl: undefined,
           fileLoading: false,
-          fileError: false,
-          sender_avatar_blob: undefined,
-          sender_avatar_loading: false,
-          sender_avatar_error: false
+          fileError: false
         }
+
+        // 【调试】打印处理后的消息对象
+        console.log('🔍 添加到消息列表的消息:', {
+          msg_id: newMsg.msg_id,
+          sender_username: newMsg.sender_username,
+          has_sender_avatar_base64: !!newMsg.sender_avatar_base64
+        })
 
         contact.messages.push(newMsg)
 
@@ -656,10 +668,7 @@ function handleIncomingMessage(payload: any) {
           nextTick(() => loadMessageFile(newMsg))
         }
 
-        // 加载群聊消息发送者头像
-        if (msgData.sender_avatar && !isMyMessage) {
-          nextTick(() => loadMessageSenderAvatar(newMsg))
-        }
+        // 群聊消息发送者头像已由后端返回 base64 数据，无需前端加载
 
         if (groupId !== currentChatId.value) {
           contact.unread++
@@ -785,6 +794,23 @@ function handleIncomingMessage(payload: any) {
       }
     }
     showToast(payload.type === 'group_deleted' ? '群组已解散' : '你已被移出群组', 'info')
+  }
+
+  // 处理 WebRTC 通话信令
+  if (payload.type === 'call_offer') {
+    handleCallOffer(payload)
+  }
+
+  if (payload.type === 'call_answer') {
+    handleCallAnswer(payload)
+  }
+
+  if (payload.type === 'ice_candidate') {
+    handleIceCandidate(payload)
+  }
+
+  if (payload.type === 'call_hangup') {
+    handleCallHangup(payload)
   }
 }
 
@@ -1119,8 +1145,48 @@ function resizeTextarea(event?: Event) {
 }
 
 function formatTime(timestamp: number) {
-  const date = new Date(timestamp * 1000)
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const msgDate = new Date(timestamp * 1000)
+  const now = new Date()
+
+  // 获取今天、昨天、前天的零点时间戳
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  const yesterdayStart = todayStart - 24 * 60 * 60 * 1000
+  const beforeYesterdayStart = todayStart - 2 * 24 * 60 * 60 * 1000
+
+  const msgTime = msgDate.getTime()
+  const timeStr = msgDate.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+
+  // 今天：只显示时间
+  if (msgTime >= todayStart) {
+    return timeStr
+  }
+
+  // 昨天
+  if (msgTime >= yesterdayStart) {
+    return `昨天 ${timeStr}`
+  }
+
+  // 前天
+  if (msgTime >= beforeYesterdayStart) {
+    return `前天 ${timeStr}`
+  }
+
+  // 更早的消息
+  const msgYear = msgDate.getFullYear()
+  const currentYear = now.getFullYear()
+
+  // 今年：显示月-日 时间
+  if (msgYear === currentYear) {
+    const month = String(msgDate.getMonth() + 1).padStart(2, '0')
+    const day = String(msgDate.getDate()).padStart(2, '0')
+    return `${month}-${day} ${timeStr}`
+  }
+
+  // 往年：显示年-月-日 时间
+  const year = msgYear
+  const month = String(msgDate.getMonth() + 1).padStart(2, '0')
+  const day = String(msgDate.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day} ${timeStr}`
 }
 
 function isMyMessage(msg: MessageData) {
@@ -1165,6 +1231,19 @@ async function loadChatHistory(friendId: string, beforeTs?: number) {
     const response = await request.get('/api/chat/history', { params })
     const messages = response.data || []
 
+    // 【调试】打印接收到的历史消息
+    console.log(`🔍 加载历史消息: chat_id=${chatId}, 消息数=${messages.length}`)
+    if (messages.length > 0 && contact.type === 'group') {
+      const sampleMsg = messages[0]
+      console.log('🔍 历史消息样本:', {
+        msg_id: sampleMsg.msg_id,
+        sender_id: sampleMsg.sender_id,
+        sender_username: sampleMsg.sender_username,
+        has_sender_avatar_base64: !!sampleMsg.sender_avatar_base64,
+        sender_avatar_base64_preview: sampleMsg.sender_avatar_base64?.substring(0, 50) + '...'
+      })
+    }
+
     if (messages.length < 50) {
       hasMoreHistory.value = false
     }
@@ -1181,10 +1260,7 @@ async function loadChatHistory(friendId: string, beforeTs?: number) {
         status: 'sent' as const,
         fileBlobUrl: undefined,
         fileLoading: false,
-        fileError: false,
-        sender_avatar_blob: undefined,
-        sender_avatar_loading: false,
-        sender_avatar_error: false
+        fileError: false
       }))
 
       contact.messages = [
@@ -1199,10 +1275,7 @@ async function loadChatHistory(friendId: string, beforeTs?: number) {
           if (msg.type === 'image' || msg.type === 'video') {
             loadMessageFile(msg)
           }
-          // 加载群聊消息发送者头像
-          if (contact.type === 'group' && msg.sender_avatar && msg.sender_id !== CURRENT_USER_ID) {
-            loadMessageSenderAvatar(msg)
-          }
+          // 群聊消息发送者头像已由后端返回 base64 数据，无需前端加载
         })
       })
 
@@ -1220,10 +1293,7 @@ async function loadChatHistory(friendId: string, beforeTs?: number) {
         status: 'sent' as const,
         fileBlobUrl: undefined,
         fileLoading: false,
-        fileError: false,
-        sender_avatar_blob: undefined,
-        sender_avatar_loading: false,
-        sender_avatar_error: false
+        fileError: false
       }))
 
       // 为图片和视频消息加载 blob URL
@@ -1233,10 +1303,7 @@ async function loadChatHistory(friendId: string, beforeTs?: number) {
           if (msg.type === 'image' || msg.type === 'video') {
             loadMessageFile(msg)
           }
-          // 加载群聊消息发送者头像
-          if (contact.type === 'group' && msg.sender_avatar && msg.sender_id !== CURRENT_USER_ID) {
-            loadMessageSenderAvatar(msg)
-          }
+          // 群聊消息发送者头像已由后端返回 base64 数据，无需前端加载
         })
       })
 
@@ -1548,6 +1615,428 @@ async function joinGroupFromCard(groupData: any) {
   }
 }
 
+// ==================== WebRTC 通话功能 ====================
+
+// WebRTC 配置
+const rtcConfiguration = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' }
+  ]
+}
+
+// 发起通话
+async function startCall() {
+  console.log('📱 发起通话')
+  console.log('当前联系人:', activeContact.value)
+
+  if (!activeContact.value) {
+    showToast('请先选择联系人', 'error')
+    return
+  }
+
+  if (activeContact.value.type === 'group') {
+    showToast('暂不支持群组通话', 'info')
+    return
+  }
+
+  try {
+    console.log('1️⃣ 请求摄像头和麦克风权限...')
+
+    // 先清理可能存在的旧媒体流
+    if (localStream.value) {
+      console.log('⚠️ 检测到旧的本地媒体流，正在清理...')
+      localStream.value.getTracks().forEach(track => track.stop())
+      localStream.value = null
+    }
+
+    callStatus.value = 'calling'
+    callStartTime.value = Date.now()
+
+    // 获取本地媒体流
+    localStream.value = await navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: true
+    })
+    console.log('✅ 成功获取本地媒体流')
+
+    console.log('2️⃣ 创建 RTCPeerConnection...')
+    // 创建 RTCPeerConnection
+    peerConnection.value = new RTCPeerConnection(rtcConfiguration)
+
+    // 添加本地流到连接
+    localStream.value.getTracks().forEach(track => {
+      console.log('添加本地轨道:', track.kind)
+      peerConnection.value!.addTrack(track, localStream.value!)
+    })
+
+    // 监听远程流
+    peerConnection.value.ontrack = (event) => {
+      console.log('🎥 收到远程流', event.streams)
+      remoteStream.value = event.streams[0]
+      if (remoteVideoRef.value) {
+        remoteVideoRef.value.srcObject = remoteStream.value
+        console.log('✅ 远程视频已设置')
+      }
+    }
+
+    // 监听 ICE 候选
+    peerConnection.value.onicecandidate = (event) => {
+      if (event.candidate && socket.value) {
+        console.log('📤 发送 ICE candidate')
+        socket.value.send(JSON.stringify({
+          type: 'ice_candidate',
+          target_id: activeContact.value!.id,
+          candidate: event.candidate
+        }))
+      }
+    }
+
+    // 监听连接状态
+    peerConnection.value.onconnectionstatechange = () => {
+      console.log('🔗 连接状态:', peerConnection.value?.connectionState)
+    }
+
+    console.log('3️⃣ 创建 offer...')
+    // 创建 offer
+    const offer = await peerConnection.value.createOffer()
+    await peerConnection.value.setLocalDescription(offer)
+    console.log('✅ Offer 已创建')
+
+    console.log('4️⃣ 发送 offer 到对方...')
+    console.log('目标用户ID:', activeContact.value.id)
+    console.log('当前用户名:', CURRENT_USERNAME)
+    // 通过 WebSocket 发送 offer
+    if (socket.value) {
+      socket.value.send(JSON.stringify({
+        type: 'call_offer',
+        target_id: activeContact.value.id,
+        caller_name: CURRENT_USERNAME,
+        sdp: offer
+      }))
+      console.log('✅ Offer 已发送')
+      showToast(`正在呼叫 ${activeContact.value.username}...`, 'info')
+    }
+
+    // 设置本地视频
+    if (localVideoRef.value) {
+      localVideoRef.value.srcObject = localStream.value
+      console.log('✅ 本地视频已设置')
+    }
+
+    console.log('🎉 发起通话流程完成，等待对方接听...')
+
+  } catch (error: any) {
+    console.error('❌ 发起通话失败:', error)
+    console.error('错误详情:', error.message, error.name)
+
+    // 根据错误类型给出不同的提示
+    if (error.name === 'NotAllowedError') {
+      showToast('请允许访问摄像头和麦克风', 'error')
+    } else if (error.name === 'NotReadableError') {
+      showToast('摄像头或麦克风被占用，请关闭其他使用摄像头的应用', 'error')
+    } else if (error.name === 'NotFoundError') {
+      showToast('未检测到摄像头或麦克风设备', 'error')
+    } else {
+      showToast(`发起通话失败: ${error.message}`, 'error')
+    }
+
+    // 清理资源
+    if (localStream.value) {
+      localStream.value.getTracks().forEach(track => track.stop())
+      localStream.value = null
+    }
+    if (peerConnection.value) {
+      peerConnection.value.close()
+      peerConnection.value = null
+    }
+
+    // 重置状态
+    callStatus.value = 'idle'
+  }
+}
+
+// 接听通话
+async function acceptCall() {
+  console.log('📞 开始接听通话')
+  console.log('incomingCallData:', incomingCallData.value)
+
+  if (!incomingCallData.value) {
+    console.error('❌ 没有来电数据')
+    showToast('接听失败：没有来电数据', 'error')
+    return
+  }
+
+  try {
+    console.log('1️⃣ 请求摄像头和麦克风权限...')
+
+    // 先清理可能存在的旧媒体流
+    if (localStream.value) {
+      console.log('⚠️ 检测到旧的本地媒体流，正在清理...')
+      localStream.value.getTracks().forEach(track => track.stop())
+      localStream.value = null
+    }
+
+    // 获取本地媒体流
+    localStream.value = await navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: true
+    })
+    console.log('✅ 成功获取本地媒体流')
+
+    // 媒体流获取成功后才设置状态为 connected
+    callStatus.value = 'connected'
+    callStartTime.value = Date.now()
+
+    console.log('2️⃣ 创建 RTCPeerConnection...')
+    // 创建 RTCPeerConnection
+    peerConnection.value = new RTCPeerConnection(rtcConfiguration)
+
+    // 添加本地流到连接
+    localStream.value.getTracks().forEach(track => {
+      console.log('添加本地轨道:', track.kind)
+      peerConnection.value!.addTrack(track, localStream.value!)
+    })
+
+    // 监听远程流
+    peerConnection.value.ontrack = (event) => {
+      console.log('🎥 收到远程流', event.streams)
+      remoteStream.value = event.streams[0]
+      if (remoteVideoRef.value) {
+        remoteVideoRef.value.srcObject = remoteStream.value
+        console.log('✅ 远程视频已设置')
+      }
+    }
+
+    // 监听 ICE 候选
+    peerConnection.value.onicecandidate = (event) => {
+      if (event.candidate && socket.value) {
+        console.log('📤 发送 ICE candidate')
+        socket.value.send(JSON.stringify({
+          type: 'ice_candidate',
+          target_id: incomingCallData.value!.caller_id,
+          candidate: event.candidate
+        }))
+      }
+    }
+
+    // 监听连接状态
+    peerConnection.value.onconnectionstatechange = () => {
+      console.log('🔗 连接状态:', peerConnection.value?.connectionState)
+    }
+
+    console.log('3️⃣ 设置远程描述...')
+    // 设置远程描述
+    await peerConnection.value.setRemoteDescription(new RTCSessionDescription(incomingCallData.value.sdp))
+    console.log('✅ 远程描述已设置')
+
+    console.log('4️⃣ 创建 answer...')
+    // 创建 answer
+    const answer = await peerConnection.value.createAnswer()
+    await peerConnection.value.setLocalDescription(answer)
+    console.log('✅ Answer 已创建')
+
+    console.log('5️⃣ 发送 answer 到对方...')
+    // 通过 WebSocket 发送 answer
+    if (socket.value) {
+      socket.value.send(JSON.stringify({
+        type: 'call_answer',
+        target_id: incomingCallData.value.caller_id,
+        sdp: answer
+      }))
+      console.log('✅ Answer 已发送')
+    }
+
+    // 设置本地视频
+    if (localVideoRef.value) {
+      localVideoRef.value.srcObject = localStream.value
+      console.log('✅ 本地视频已设置')
+    }
+
+    incomingCallData.value = null
+    console.log('🎉 接听通话流程完成')
+
+  } catch (error: any) {
+    console.error('❌ 接听通话失败:', error)
+    console.error('错误详情:', error.message, error.name)
+
+    // 根据错误类型给出不同的提示
+    if (error.name === 'NotAllowedError') {
+      showToast('请允许访问摄像头和麦克风', 'error')
+    } else if (error.name === 'NotReadableError') {
+      showToast('摄像头或麦克风被占用，请关闭其他使用摄像头的应用', 'error')
+    } else if (error.name === 'NotFoundError') {
+      showToast('未检测到摄像头或麦克风设备', 'error')
+    } else {
+      showToast(`接听通话失败: ${error.message}`, 'error')
+    }
+
+    // 清理资源但不发送挂断信令（因为连接还没建立成功）
+    if (localStream.value) {
+      localStream.value.getTracks().forEach(track => track.stop())
+      localStream.value = null
+    }
+    if (peerConnection.value) {
+      peerConnection.value.close()
+      peerConnection.value = null
+    }
+
+    // 重置状态
+    callStatus.value = 'idle'
+    incomingCallData.value = null
+    isVideoEnabled.value = true
+    isAudioEnabled.value = true
+  }
+}
+
+// 拒绝通话
+function rejectCall() {
+  if (!incomingCallData.value) return
+
+  if (socket.value) {
+    socket.value.send(JSON.stringify({
+      type: 'call_hangup',
+      target_id: incomingCallData.value.caller_id
+    }))
+  }
+
+  incomingCallData.value = null
+  callStatus.value = 'idle'
+  showToast('已拒绝通话', 'info')
+}
+
+// 挂断通话
+function hangupCall() {
+  // 发送挂断信令
+  if (socket.value && activeContact.value && callStatus.value !== 'idle') {
+    socket.value.send(JSON.stringify({
+      type: 'call_hangup',
+      target_id: activeContact.value.id
+    }))
+  }
+
+  // 停止所有媒体流
+  if (localStream.value) {
+    localStream.value.getTracks().forEach(track => track.stop())
+    localStream.value = null
+  }
+
+  if (remoteStream.value) {
+    remoteStream.value.getTracks().forEach(track => track.stop())
+    remoteStream.value = null
+  }
+
+  // 关闭 PeerConnection
+  if (peerConnection.value) {
+    peerConnection.value.close()
+    peerConnection.value = null
+  }
+
+  // 清空视频元素
+  if (localVideoRef.value) {
+    localVideoRef.value.srcObject = null
+  }
+  if (remoteVideoRef.value) {
+    remoteVideoRef.value.srcObject = null
+  }
+
+  callStatus.value = 'idle'
+  incomingCallData.value = null
+  isVideoEnabled.value = true
+  isAudioEnabled.value = true
+}
+
+// 切换视频
+function toggleVideo() {
+  if (localStream.value) {
+    const videoTrack = localStream.value.getVideoTracks()[0]
+    if (videoTrack) {
+      videoTrack.enabled = !videoTrack.enabled
+      isVideoEnabled.value = videoTrack.enabled
+    }
+  }
+}
+
+// 切换音频
+function toggleAudio() {
+  if (localStream.value) {
+    const audioTrack = localStream.value.getAudioTracks()[0]
+    if (audioTrack) {
+      audioTrack.enabled = !audioTrack.enabled
+      isAudioEnabled.value = audioTrack.enabled
+    }
+  }
+}
+
+// 处理收到的通话 offer
+function handleCallOffer(payload: any) {
+  console.log('🔔 收到通话请求:', payload)
+  console.log('当前通话状态:', callStatus.value)
+  console.log('Payload包含的数据:', {
+    caller_id: payload.caller_id,
+    caller_name: payload.caller_name,
+    has_sdp: !!payload.sdp
+  })
+
+  // 如果正在通话中，拒绝新的呼叫
+  if (callStatus.value !== 'idle') {
+    console.warn('⚠️ 正在通话中，拒绝新呼叫')
+    if (socket.value) {
+      socket.value.send(JSON.stringify({
+        type: 'call_hangup',
+        target_id: payload.caller_id
+      }))
+    }
+    return
+  }
+
+  incomingCallData.value = {
+    caller_id: payload.caller_id,
+    caller_name: payload.caller_name || 'Unknown',
+    sdp: payload.sdp
+  }
+  callStatus.value = 'ringing'
+  console.log('✅ 设置来电状态为 ringing')
+  console.log('incomingCallData:', incomingCallData.value)
+}
+
+// 处理收到的通话 answer
+async function handleCallAnswer(payload: any) {
+  console.log('收到通话应答:', payload)
+
+  if (peerConnection.value && payload.sdp) {
+    try {
+      await peerConnection.value.setRemoteDescription(new RTCSessionDescription(payload.sdp))
+      callStatus.value = 'connected'
+      showToast('通话已接通', 'success')
+    } catch (error) {
+      console.error('设置远程描述失败:', error)
+      showToast('通话连接失败', 'error')
+      hangupCall()
+    }
+  }
+}
+
+// 处理 ICE 候选
+async function handleIceCandidate(payload: any) {
+  console.log('收到 ICE 候选:', payload)
+
+  if (peerConnection.value && payload.candidate) {
+    try {
+      await peerConnection.value.addIceCandidate(new RTCIceCandidate(payload.candidate))
+    } catch (error) {
+      console.error('添加 ICE 候选失败:', error)
+    }
+  }
+}
+
+// 处理对方挂断
+function handleCallHangup(payload: any) {
+  console.log('对方已挂断')
+  showToast('通话已结束', 'info')
+  hangupCall()
+}
+
 // 退出群聊
 async function leaveGroup() {
   if (!activeContact.value || activeContact.value.type !== 'group') return
@@ -1662,7 +2151,7 @@ onUnmounted(() => {
 
           <div class="flex items-center gap-2">
             <!-- 好友申请按钮 -->
-            <button @click="openRequestsModal" class="group relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-700 text-white shadow-lg transition-all hover:bg-slate-600 hover:shadow-slate-500/40 active:scale-95">
+            <button @click="openRequestsModal" class="group relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-700 text-white shadow-lg transition-all hover:bg-slate-600 hover:shadow-slate-500/40 active:scale-95" title="好友申请">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
                 <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
@@ -1684,7 +2173,7 @@ onUnmounted(() => {
             </button>
 
             <!-- 添加好友按钮 -->
-            <button @click="openAddFriendModal" class="group relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg transition-all hover:bg-indigo-500 hover:shadow-indigo-500/40 active:scale-95">
+            <button @click="openAddFriendModal" class="group relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg transition-all hover:bg-indigo-500 hover:shadow-indigo-500/40 active:scale-95" title="添加好友">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
                 <circle cx="8.5" cy="7" r="4"></circle>
@@ -1710,9 +2199,33 @@ onUnmounted(() => {
 
       <!-- Tabs -->
       <div class="sticky top-[116px] z-30 px-5 py-2 flex gap-4 text-xs font-medium text-slate-400 bg-slate-900/95 backdrop-blur-md shrink-0 border-b border-white/5">
-        <button class="text-white hover:text-indigo-400 transition-colors">全部</button>
-        <button class="hover:text-indigo-400 transition-colors">群聊</button>
-        <button class="hover:text-indigo-400 transition-colors">未读</button>
+        <button
+          @click="setFilter('all')"
+          :class="[
+            'transition-colors',
+            activeFilter === 'all' ? 'text-white' : 'hover:text-indigo-400'
+          ]"
+        >
+          全部
+        </button>
+        <button
+          @click="setFilter('group')"
+          :class="[
+            'transition-colors',
+            activeFilter === 'group' ? 'text-white' : 'hover:text-indigo-400'
+          ]"
+        >
+          群聊
+        </button>
+        <button
+          @click="setFilter('unread')"
+          :class="[
+            'transition-colors',
+            activeFilter === 'unread' ? 'text-white' : 'hover:text-indigo-400'
+          ]"
+        >
+          未读
+        </button>
       </div>
 
       <!-- 好友列表 -->
@@ -1830,7 +2343,7 @@ onUnmounted(() => {
              <h2 class="font-bold text-slate-100">{{ activeContact.username }}</h2>
            </div>
            <div class="ml-auto flex gap-4 text-slate-400">
-             <button class="hover:text-white transition"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg></button>
+             <button @click="startCall" class="hover:text-white transition" title="语音/视频通话"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg></button>
              <button @click="showHeaderContextMenu" class="hover:text-white transition" title="更多选项"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></button>
            </div>
         </header>
@@ -1868,18 +2381,15 @@ onUnmounted(() => {
              <div v-if="!isMyMessage(msg)" class="shrink-0">
                <!-- 群聊消息：显示发送者的头像和名字 -->
                <template v-if="activeContact.type === 'group'">
-                 <!-- 加载中 -->
-                 <div v-if="msg.sender_avatar_loading" class="h-8 w-8 rounded-full bg-slate-700 animate-pulse mt-1"></div>
-                 <!-- 显示头像 -->
+                 <!-- 显示头像（后端已返回 base64 数据） -->
                  <img
-                   v-else-if="msg.sender_avatar_blob && !msg.sender_avatar_error"
-                   :src="msg.sender_avatar_blob"
+                   v-if="msg.sender_avatar_base64"
+                   :src="msg.sender_avatar_base64"
                    class="h-8 w-8 rounded-full mt-1 object-cover shadow-md"
                    :alt="msg.sender_username || 'User'"
                    :title="msg.sender_username || 'Unknown'"
-                   @error="msg.sender_avatar_error = true"
                  />
-                 <!-- 加载失败或没有头像，显示用户名首字母 -->
+                 <!-- 没有头像，显示用户名首字母 -->
                  <div
                    v-else
                    class="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm shadow-md mt-1"
@@ -2592,6 +3102,189 @@ onUnmounted(() => {
           </div>
         </TransitionGroup>
       </div>
+    </Teleport>
+
+    <!-- WebRTC 通话界面 -->
+    <!-- 来电弹窗 -->
+    <Teleport to="body">
+      <Transition
+        enter-active-class="transition duration-300 ease-out"
+        enter-from-class="opacity-0 scale-95"
+        enter-to-class="opacity-100 scale-100"
+        leave-active-class="transition duration-200 ease-in"
+        leave-from-class="opacity-100 scale-100"
+        leave-to-class="opacity-0 scale-95"
+      >
+        <div
+          v-if="callStatus === 'ringing'"
+          class="fixed inset-0 z-[500] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+        >
+          <div class="bg-slate-800 rounded-2xl p-8 shadow-2xl border border-slate-700 w-full max-w-md mx-4">
+            <div class="flex flex-col items-center gap-6">
+              <!-- 来电动画 -->
+              <div class="relative">
+                <div class="h-24 w-24 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-3xl shadow-lg">
+                  {{ (incomingCallData?.caller_name || 'U')[0].toUpperCase() }}
+                </div>
+                <div class="absolute inset-0 h-24 w-24 rounded-full bg-indigo-500 animate-ping opacity-20"></div>
+              </div>
+
+              <!-- 来电信息 -->
+              <div class="text-center">
+                <h3 class="text-2xl font-bold text-white mb-2">{{ incomingCallData?.caller_name || 'Unknown' }}</h3>
+                <p class="text-slate-400">视频通话呼入...</p>
+              </div>
+
+              <!-- 操作按钮 -->
+              <div class="flex gap-6 mt-4">
+                <!-- 拒绝按钮 -->
+                <button
+                  @click="rejectCall"
+                  class="flex flex-col items-center gap-2 group"
+                >
+                  <div class="h-16 w-16 rounded-full bg-red-500 hover:bg-red-600 transition-all flex items-center justify-center shadow-lg hover:shadow-xl hover:scale-110">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="white" stroke="none">
+                      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" transform="rotate(135 12 12)"/>
+                    </svg>
+                  </div>
+                  <span class="text-sm text-slate-300 group-hover:text-white transition">拒绝</span>
+                </button>
+
+                <!-- 接听按钮 -->
+                <button
+                  @click="acceptCall"
+                  class="flex flex-col items-center gap-2 group"
+                >
+                  <div class="h-16 w-16 rounded-full bg-green-500 hover:bg-green-600 transition-all flex items-center justify-center shadow-lg hover:shadow-xl hover:scale-110">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="white" stroke="none">
+                      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                    </svg>
+                  </div>
+                  <span class="text-sm text-slate-300 group-hover:text-white transition">接听</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- 通话中界面 -->
+    <Teleport to="body">
+      <Transition
+        enter-active-class="transition duration-300 ease-out"
+        enter-from-class="opacity-0 scale-95"
+        enter-to-class="opacity-100 scale-100"
+        leave-active-class="transition duration-200 ease-in"
+        leave-from-class="opacity-100 scale-100"
+        leave-to-class="opacity-0 scale-95"
+      >
+        <div
+          v-if="callStatus === 'calling' || callStatus === 'connected'"
+          class="fixed inset-0 z-[500] bg-slate-900"
+        >
+          <!-- 远程视频 (全屏) -->
+          <video
+            ref="remoteVideoRef"
+            autoplay
+            playsinline
+            class="absolute inset-0 w-full h-full object-cover"
+          ></video>
+
+          <!-- 本地视频 (小窗口) -->
+          <div class="absolute top-6 right-6 w-48 h-36 rounded-xl overflow-hidden shadow-2xl border-2 border-white/10">
+            <video
+              ref="localVideoRef"
+              autoplay
+              muted
+              playsinline
+              class="w-full h-full object-cover"
+              :class="{ 'hidden': !isVideoEnabled }"
+            ></video>
+            <div
+              v-if="!isVideoEnabled"
+              class="w-full h-full bg-slate-800 flex items-center justify-center"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-slate-600">
+                <path d="m2 2 20 20M10.66 5H14a2 2 0 0 1 2 2v2.34l1 1L22 7v10M16 16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2l10 10Z"/>
+              </svg>
+            </div>
+          </div>
+
+          <!-- 通话信息 -->
+          <div class="absolute top-6 left-6 text-white">
+            <h3 class="text-2xl font-bold mb-2">
+              {{ callStatus === 'calling' ? '呼叫中...' : activeContact?.username }}
+            </h3>
+            <p class="text-slate-300 text-sm" v-if="callStatus === 'connected'">
+              通话中
+            </p>
+          </div>
+
+          <!-- 控制按钮 -->
+          <div class="absolute bottom-12 left-1/2 -translate-x-1/2 flex gap-6">
+            <!-- 静音按钮 -->
+            <button
+              @click="toggleAudio"
+              class="flex flex-col items-center gap-2 group"
+            >
+              <div
+                class="h-14 w-14 rounded-full transition-all flex items-center justify-center shadow-lg hover:scale-110"
+                :class="isAudioEnabled ? 'bg-slate-700 hover:bg-slate-600' : 'bg-red-500 hover:bg-red-600'"
+              >
+                <svg v-if="isAudioEnabled" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                  <line x1="12" y1="19" x2="12" y2="22"/>
+                </svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                  <line x1="2" y1="2" x2="22" y2="22"/>
+                  <path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"/>
+                  <path d="M5 10v2a7 7 0 0 0 12 5"/>
+                  <path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"/>
+                  <path d="M9 9v3a3 3 0 0 0 5.12 2.12"/>
+                  <line x1="12" y1="19" x2="12" y2="22"/>
+                </svg>
+              </div>
+              <span class="text-sm text-white">{{ isAudioEnabled ? '静音' : '取消静音' }}</span>
+            </button>
+
+            <!-- 挂断按钮 -->
+            <button
+              @click="hangupCall"
+              class="flex flex-col items-center gap-2 group"
+            >
+              <div class="h-14 w-14 rounded-full bg-red-500 hover:bg-red-600 transition-all flex items-center justify-center shadow-lg hover:scale-110">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white" stroke="none">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" transform="rotate(135 12 12)"/>
+                </svg>
+              </div>
+              <span class="text-sm text-white">挂断</span>
+            </button>
+
+            <!-- 摄像头按钮 -->
+            <button
+              @click="toggleVideo"
+              class="flex flex-col items-center gap-2 group"
+            >
+              <div
+                class="h-14 w-14 rounded-full transition-all flex items-center justify-center shadow-lg hover:scale-110"
+                :class="isVideoEnabled ? 'bg-slate-700 hover:bg-slate-600' : 'bg-red-500 hover:bg-red-600'"
+              >
+                <svg v-if="isVideoEnabled" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                  <polygon points="23 7 16 12 23 17 23 7"/>
+                  <rect x="2" y="5" width="14" height="14" rx="2"/>
+                </svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                  <path d="m2 2 20 20M10.66 5H14a2 2 0 0 1 2 2v2.34l1 1L22 7v10"/>
+                  <path d="M16 16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2l10 10Z"/>
+                </svg>
+              </div>
+              <span class="text-sm text-white">{{ isVideoEnabled ? '关闭摄像头' : '开启摄像头' }}</span>
+            </button>
+          </div>
+        </div>
+      </Transition>
     </Teleport>
   </div>
 </template>

@@ -1672,29 +1672,69 @@ async function startCall() {
 
     // 监听远程流
     peerConnection.value.ontrack = (event) => {
-      console.log('🎥 收到远程流', event.streams)
-      remoteStream.value = event.streams[0]
-      if (remoteVideoRef.value) {
-        remoteVideoRef.value.srcObject = remoteStream.value
-        console.log('✅ 远程视频已设置')
+      console.log('🎥 [发起方] 收到远程轨道:', {
+        kind: event.track.kind,
+        streams_count: event.streams.length,
+        track_id: event.track.id
+      })
+
+      if (event.streams && event.streams[0]) {
+        remoteStream.value = event.streams[0]
+        console.log('✅ [发起方] 远程流已保存，轨道数:', remoteStream.value.getTracks().length)
+
+        if (remoteVideoRef.value) {
+          remoteVideoRef.value.srcObject = remoteStream.value
+          console.log('✅ [发起方] 远程视频元素已设置')
+
+          // 自动播放
+          remoteVideoRef.value.play().catch(err => {
+            console.error('❌ [发起方] 远程视频播放失败:', err)
+          })
+        } else {
+          console.warn('⚠️ [发起方] remoteVideoRef 不存在')
+        }
+      } else {
+        console.warn('⚠️ [发起方] event.streams 为空')
       }
     }
 
     // 监听 ICE 候选
     peerConnection.value.onicecandidate = (event) => {
-      if (event.candidate && socket.value) {
-        console.log('📤 发送 ICE candidate')
-        socket.value.send(JSON.stringify({
-          type: 'ice_candidate',
-          target_id: activeContact.value!.id,
-          candidate: event.candidate
-        }))
+      if (event.candidate) {
+        console.log('📤 [发起方] 生成 ICE candidate:', event.candidate.type)
+        if (socket.value) {
+          socket.value.send(JSON.stringify({
+            type: 'ice_candidate',
+            target_id: activeContact.value!.id,
+            candidate: event.candidate
+          }))
+          console.log('✅ [发起方] ICE candidate 已发送')
+        }
+      } else {
+        console.log('🏁 [发起方] ICE 候选收集完成')
       }
     }
 
     // 监听连接状态
     peerConnection.value.onconnectionstatechange = () => {
-      console.log('🔗 连接状态:', peerConnection.value?.connectionState)
+      console.log('🔗 [发起方] 连接状态:', peerConnection.value?.connectionState)
+      if (peerConnection.value?.connectionState === 'connected') {
+        console.log('🎉 [发起方] WebRTC 连接已建立')
+      } else if (peerConnection.value?.connectionState === 'failed') {
+        console.error('❌ [发起方] WebRTC 连接失败')
+        showToast('连接失败，请检查网络', 'error')
+      }
+    }
+
+    // 监听 ICE 连接状态
+    peerConnection.value.oniceconnectionstatechange = () => {
+      console.log('🧊 [发起方] ICE 连接状态:', peerConnection.value?.iceConnectionState)
+      if (peerConnection.value?.iceConnectionState === 'disconnected') {
+        console.warn('⚠️ [发起方] ICE 连接断开')
+      } else if (peerConnection.value?.iceConnectionState === 'failed') {
+        console.error('❌ [发起方] ICE 连接失败')
+        showToast('ICE 连接失败，可能需要 TURN 服务器', 'error')
+      }
     }
 
     console.log('3️⃣ 创建 offer...')
@@ -1767,6 +1807,10 @@ async function acceptCall() {
     return
   }
 
+  // 保存 caller_id，因为后面会清空 incomingCallData
+  const callerId = incomingCallData.value.caller_id
+  const callerSdp = incomingCallData.value.sdp
+
   try {
     console.log('1️⃣ 请求摄像头和麦克风权限...')
 
@@ -1800,34 +1844,74 @@ async function acceptCall() {
 
     // 监听远程流
     peerConnection.value.ontrack = (event) => {
-      console.log('🎥 收到远程流', event.streams)
-      remoteStream.value = event.streams[0]
-      if (remoteVideoRef.value) {
-        remoteVideoRef.value.srcObject = remoteStream.value
-        console.log('✅ 远程视频已设置')
+      console.log('🎥 [接听方] 收到远程轨道:', {
+        kind: event.track.kind,
+        streams_count: event.streams.length,
+        track_id: event.track.id
+      })
+
+      if (event.streams && event.streams[0]) {
+        remoteStream.value = event.streams[0]
+        console.log('✅ [接听方] 远程流已保存，轨道数:', remoteStream.value.getTracks().length)
+
+        if (remoteVideoRef.value) {
+          remoteVideoRef.value.srcObject = remoteStream.value
+          console.log('✅ [接听方] 远程视频元素已设置')
+
+          // 自动播放
+          remoteVideoRef.value.play().catch(err => {
+            console.error('❌ [接听方] 远程视频播放失败:', err)
+          })
+        } else {
+          console.warn('⚠️ [接听方] remoteVideoRef 不存在')
+        }
+      } else {
+        console.warn('⚠️ [接听方] event.streams 为空')
       }
     }
 
     // 监听 ICE 候选
     peerConnection.value.onicecandidate = (event) => {
-      if (event.candidate && socket.value) {
-        console.log('📤 发送 ICE candidate')
-        socket.value.send(JSON.stringify({
-          type: 'ice_candidate',
-          target_id: incomingCallData.value!.caller_id,
-          candidate: event.candidate
-        }))
+      if (event.candidate) {
+        console.log('📤 [接听方] 生成 ICE candidate:', event.candidate.type)
+        if (socket.value) {
+          socket.value.send(JSON.stringify({
+            type: 'ice_candidate',
+            target_id: callerId,  // 使用保存的 callerId
+            candidate: event.candidate
+          }))
+          console.log('✅ [接听方] ICE candidate 已发送')
+        }
+      } else {
+        console.log('🏁 [接听方] ICE 候选收集完成')
       }
     }
 
     // 监听连接状态
     peerConnection.value.onconnectionstatechange = () => {
-      console.log('🔗 连接状态:', peerConnection.value?.connectionState)
+      console.log('🔗 [接听方] 连接状态:', peerConnection.value?.connectionState)
+      if (peerConnection.value?.connectionState === 'connected') {
+        console.log('🎉 [接听方] WebRTC 连接已建立')
+      } else if (peerConnection.value?.connectionState === 'failed') {
+        console.error('❌ [接听方] WebRTC 连接失败')
+        showToast('连接失败，请检查网络', 'error')
+      }
+    }
+
+    // 监听 ICE 连接状态
+    peerConnection.value.oniceconnectionstatechange = () => {
+      console.log('🧊 [接听方] ICE 连接状态:', peerConnection.value?.iceConnectionState)
+      if (peerConnection.value?.iceConnectionState === 'disconnected') {
+        console.warn('⚠️ [接听方] ICE 连接断开')
+      } else if (peerConnection.value?.iceConnectionState === 'failed') {
+        console.error('❌ [接听方] ICE 连接失败')
+        showToast('ICE 连接失败，可能需要 TURN 服务器', 'error')
+      }
     }
 
     console.log('3️⃣ 设置远程描述...')
     // 设置远程描述
-    await peerConnection.value.setRemoteDescription(new RTCSessionDescription(incomingCallData.value.sdp))
+    await peerConnection.value.setRemoteDescription(new RTCSessionDescription(callerSdp))
     console.log('✅ 远程描述已设置')
 
     console.log('4️⃣ 创建 answer...')
@@ -1841,7 +1925,7 @@ async function acceptCall() {
     if (socket.value) {
       socket.value.send(JSON.stringify({
         type: 'call_answer',
-        target_id: incomingCallData.value.caller_id,
+        target_id: callerId,  // 使用保存的 callerId
         sdp: answer
       }))
       console.log('✅ Answer 已发送')
@@ -2019,14 +2103,26 @@ async function handleCallAnswer(payload: any) {
 
 // 处理 ICE 候选
 async function handleIceCandidate(payload: any) {
-  console.log('收到 ICE 候选:', payload)
+  console.log('📥 收到 ICE 候选:', {
+    has_candidate: !!payload.candidate,
+    candidate_type: payload.candidate?.candidate ? payload.candidate.candidate.split(' ')[7] : 'unknown'
+  })
 
-  if (peerConnection.value && payload.candidate) {
-    try {
-      await peerConnection.value.addIceCandidate(new RTCIceCandidate(payload.candidate))
-    } catch (error) {
-      console.error('添加 ICE 候选失败:', error)
-    }
+  if (!peerConnection.value) {
+    console.warn('⚠️ PeerConnection 不存在，无法添加 ICE candidate')
+    return
+  }
+
+  if (!payload.candidate) {
+    console.warn('⚠️ ICE candidate 数据为空')
+    return
+  }
+
+  try {
+    await peerConnection.value.addIceCandidate(new RTCIceCandidate(payload.candidate))
+    console.log('✅ ICE candidate 添加成功')
+  } catch (error) {
+    console.error('❌ 添加 ICE 候选失败:', error)
   }
 }
 

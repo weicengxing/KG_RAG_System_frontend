@@ -183,7 +183,8 @@ const remoteVideoRef = ref<HTMLVideoElement | null>(null)
 const isVideoEnabled = ref(true)
 const isAudioEnabled = ref(true)
 const incomingCallData = ref<any>(null)
-const callStartTime = ref<number>(0) 
+const callStartTime = ref<number>(0)
+const pendingIceCandidates = ref<RTCIceCandidateInit[]>([])  // 缓存提前到达的 ICE candidates 
 
 // 打开添加好友弹窗
 function openAddFriendModal() {
@@ -1906,6 +1907,22 @@ async function acceptCall() {
     await peerConnection.value.setRemoteDescription(new RTCSessionDescription(callerSdp))
     console.log('✅ 远程描述已设置')
 
+    // 添加所有缓存的 ICE candidates
+    if (pendingIceCandidates.value.length > 0) {
+      console.log(`📦 开始添加 ${pendingIceCandidates.value.length} 个缓存的 ICE candidates`)
+      for (const candidate of pendingIceCandidates.value) {
+        try {
+          await peerConnection.value.addIceCandidate(new RTCIceCandidate(candidate))
+          console.log('✅ 缓存的 ICE candidate 添加成功')
+        } catch (error) {
+          console.error('❌ 添加缓存的 ICE candidate 失败:', error)
+        }
+      }
+      // 清空缓存
+      pendingIceCandidates.value = []
+      console.log('✅ 所有缓存的 ICE candidates 已处理完毕')
+    }
+
     console.log('4️⃣ 创建 answer...')
     // 创建 answer
     const answer = await peerConnection.value.createAnswer()
@@ -1962,6 +1979,7 @@ async function acceptCall() {
     incomingCallData.value = null
     isVideoEnabled.value = true
     isAudioEnabled.value = true
+    pendingIceCandidates.value = []  // 清空缓存的 ICE candidates
   }
 }
 
@@ -1978,6 +1996,7 @@ function rejectCall() {
 
   incomingCallData.value = null
   callStatus.value = 'idle'
+  pendingIceCandidates.value = []  // 清空缓存的 ICE candidates
   showToast('已拒绝通话', 'info')
 }
 
@@ -2020,6 +2039,7 @@ function hangupCall() {
   incomingCallData.value = null
   isVideoEnabled.value = true
   isAudioEnabled.value = true
+  pendingIceCandidates.value = []  // 清空缓存的 ICE candidates
 }
 
 // 切换视频
@@ -2100,13 +2120,16 @@ async function handleIceCandidate(payload: any) {
     candidate_type: payload.candidate?.candidate ? payload.candidate.candidate.split(' ')[7] : 'unknown'
   })
 
-  if (!peerConnection.value) {
-    console.warn('⚠️ PeerConnection 不存在，无法添加 ICE candidate')
+  if (!payload.candidate) {
+    console.warn('⚠️ ICE candidate 数据为空')
     return
   }
 
-  if (!payload.candidate) {
-    console.warn('⚠️ ICE candidate 数据为空')
+  // 如果 PeerConnection 不存在，缓存 ICE candidate
+  if (!peerConnection.value) {
+    console.log('⚠️ PeerConnection 尚未创建，缓存 ICE candidate')
+    pendingIceCandidates.value.push(payload.candidate)
+    console.log(`📦 已缓存 ICE candidate，当前缓存数量: ${pendingIceCandidates.value.length}`)
     return
   }
 

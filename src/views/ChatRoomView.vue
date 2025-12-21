@@ -427,6 +427,13 @@ const loadAvatar = async (contact: Contact) => {
     return
   }
 
+  // 如果是完整的 URL，直接使用
+  if (contact.avatar.startsWith('http')) {
+    contact.avatarBlobUrl = contact.avatar
+    contact.avatarError = false
+    return
+  }
+
   const cachedUrl = await avatarCache.get(contact.id, contact.avatar)
   if (cachedUrl) {
     contact.avatarBlobUrl = cachedUrl
@@ -715,7 +722,8 @@ function handleIncomingMessage(payload: any) {
           id: friendData.friend_id,
           username: friendData.username || 'Unknown',
           avatar: friendData.avatar || '',
-          avatarBlobUrl: friendData.avatar_base64 || '',  // 优先使用 base64 数据
+          // 如果有 base64 数据，先使用它；否则设置为空，让 loadAvatar 加载
+          avatarBlobUrl: friendData.avatar_base64 || '',
           avatarLoading: false,
           avatarError: false,
           lastMessage: friendData.lastMessage || 'You are now connected.',
@@ -730,7 +738,7 @@ function handleIncomingMessage(payload: any) {
         contacts.value.unshift(newContact)
 
         // 如果有 base64 数据，缓存到 localStorage
-        if (friendData.avatar_base64 && friendData.avatar) {
+        if (friendData.avatar_base64 && friendData.avatar && !friendData.avatar.startsWith('http')) {
           try {
             fetch(friendData.avatar_base64)
               .then(res => res.blob())
@@ -743,9 +751,12 @@ function handleIncomingMessage(payload: any) {
           } catch (e) {
             console.error('❌ 转换头像失败:', e)
           }
-        } else if (friendData.avatar) {
-          // 如果没有 base64 数据但有头像文件名，使用现有的加载方式
-          console.log('使用现有方式加载头像:', friendData.avatar)
+        }
+
+        // 无论是否有 base64 数据，都调用 loadAvatar 确保头像正确加载
+        // loadAvatar 会先检查缓存，如果没有则从服务器加载
+        if (friendData.avatar && !friendData.avatar.startsWith('http')) {
+          console.log('调用 loadAvatar 加载头像:', friendData.avatar)
           loadAvatar(newContact)
         }
 
@@ -1040,7 +1051,11 @@ function selectContact(id: string) {
   contacts.value.forEach(c => c.active = (c.id === id))
 
   if (activeContact.value) {
+    // 在前端立即清零未读数（乐观更新）
     activeContact.value.unread = 0
+
+    // 调用后端接口标记为已读
+    markContactAsRead(id)
 
     // 重置历史消息加载状态
     hasMoreHistory.value = true
@@ -1056,6 +1071,34 @@ function selectContact(id: string) {
   nextTick(() => {
     document.getElementById('msg-input')?.focus({ preventScroll: true })
   })
+}
+
+async function markContactAsRead(contactId: string) {
+  if (!CURRENT_USER_ID || !activeContact.value) return
+
+  try {
+    const contact = activeContact.value
+    let chatId: string
+
+    // 根据联系人类型生成正确的 chat_id
+    if (contact.type === 'group') {
+      // 群聊：使用 group:群组ID 格式
+      chatId = `group:${contactId}`
+    } else {
+      // 私聊：使用两个用户ID排序后的格式
+      chatId = getChatId(CURRENT_USER_ID, contactId)
+    }
+
+    const token = localStorage.getItem('token')
+    await request.post('/api/chat/mark_read', null, {
+      params: { chat_id: chatId },
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+  } catch (error) {
+    console.error('标记已读失败:', error)
+  }
 }
 
 function scrollToBottom() {
@@ -1707,8 +1750,8 @@ onUnmounted(() => {
               class="absolute bottom-0 right-0 block h-3 w-3 rounded-full ring-2 ring-slate-900"
               :class="{
                 'bg-emerald-500': contact.status === 'online',
-                'bg-amber-500': contact.status === 'busy',
-                'bg-slate-500': contact.status === 'offline',
+                'bg-amber-500': contact.status === 'offline',
+                'bg-slate-500': contact.status === 'busy',
               }"
             ></span>
           </div>
@@ -1781,7 +1824,7 @@ onUnmounted(() => {
                </div>
                <span
                  class="absolute bottom-0 right-0 block h-2 w-2 rounded-full ring-2 ring-slate-900 shadow-[0_0_8px_rgba(16,185,129,0.5)] transition-colors"
-                 :class="activeContact.status === 'online' ? 'bg-emerald-500' : 'bg-slate-500'"
+                 :class="activeContact.status === 'online' ? 'bg-emerald-500' : 'bg-amber-500'"
                ></span>
              </div>
              <h2 class="font-bold text-slate-100">{{ activeContact.username }}</h2>

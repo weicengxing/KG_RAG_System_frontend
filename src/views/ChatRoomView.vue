@@ -1621,21 +1621,22 @@ async function joinGroupFromCard(groupData: any) {
 // WebRTC 配置
 const rtcConfiguration = {
   iceServers: [
+    // 1. 保留 Google 的基础 STUN 服务器（备用）
     { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' },
-    // 添加免费的 TURN 服务器用于 NAT 穿透
+    
+    // 2. Metered.ca 提供的专属 STUN 服务器
+    { urls: "stun:stun.relay.metered.ca:80" },
+
+    // 3. Metered.ca 提供的专属 TURN 服务器（核心：负责网络中转）
     {
-      urls: 'turn:openrelay.metered.ca:80',
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443',
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
+      urls: [
+        "turn:global.relay.metered.ca:80",
+        "turn:global.relay.metered.ca:80?transport=tcp",
+        "turn:global.relay.metered.ca:443",
+        "turns:global.relay.metered.ca:443?transport=tcp"
+      ],
+      username: "db0ef7796f0f3c71d437c75b",
+      credential: "9/LPasYwkwKr6+dg"
     }
   ],
   iceCandidatePoolSize: 10

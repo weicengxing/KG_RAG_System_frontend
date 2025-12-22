@@ -30,7 +30,7 @@ function extractUserInfoFromToken(): { userId: string | null, username: string |
 const userInfo = extractUserInfoFromToken()
 const CURRENT_USER_ID = userInfo.userId || userInfo.username 
 const CURRENT_USERNAME = userInfo.username
-const WS_URL = CURRENT_USER_ID ? `wss://4533a304.r24.cpolar.top/api/chat/ws/${CURRENT_USER_ID}` : ''
+const WS_URL = CURRENT_USER_ID ? `ws://localhost:8000/api/chat/ws/${CURRENT_USER_ID}` : ''
 
 // ==================== 类型定义 ====================
 interface MessageData {
@@ -155,6 +155,16 @@ const showInviteModal = ref(false)
 const myGroupsList = ref<any[]>([])
 const selectedGroupForInvite = ref<any>(null)
 const isLoadingInvite = ref(false)
+
+// ====== 群成员列表弹窗状态 ======
+const showMembersModal = ref(false)
+const groupMembers = ref<any[]>([])
+const isLoadingMembers = ref(false)
+const memberContextMenu = ref(false)
+const memberContextMenuX = ref(0)
+const memberContextMenuY = ref(0)
+const selectedMember = ref<any>(null)
+const memberLongPressTimer = ref<number | null>(null)
 
 // ====== 右上角菜单状态 ======
 const showHeaderMenu = ref(false)
@@ -1341,13 +1351,18 @@ async function loadContacts() {
 
     contacts.value = response.data.map((contact: any) => ({
       ...contact,
+      // 使用 formatTime 格式化后端返回的 lastTime 时间戳
+      // 如果时间戳为0或无效，显示空字符串；如果是 "Now" 则保持不变
+      lastTime: contact.lastTime === 'Now' || contact.lastTime === 0 || !contact.lastTime
+        ? (contact.lastTime || '')
+        : formatTime(contact.lastTime),
       active: false,
       messages: [],
       avatarBlobUrl: '',
       avatarLoading: false,
       avatarError: false
     }))
-    
+
     lazyLoadAvatars()
   } catch (error) {
     showToast('加载好友列表失败', 'error')
@@ -2337,6 +2352,136 @@ function handleCallHangup(payload: any) {
   hangupCall()
 }
 
+// 打开群成员列表弹窗
+async function openMembersModal() {
+  if (!activeContact.value || activeContact.value.type !== 'group') return
+
+  showMembersModal.value = true
+  await loadGroupMembers()
+  hideHeaderMenu()
+}
+
+// 关闭群成员列表弹窗
+function closeMembersModal() {
+  showMembersModal.value = false
+  groupMembers.value = []
+}
+
+// 加载群成员列表
+async function loadGroupMembers() {
+  if (!activeContact.value) return
+
+  isLoadingMembers.value = true
+  try {
+    const token = localStorage.getItem('token')
+    console.log('🔍 正在加载群成员列表, 群组ID:', activeContact.value.id)
+
+    const response = await request.get(`/api/group/${activeContact.value.id}/members`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+
+    console.log('✅ 群成员列表响应:', response.data)
+    groupMembers.value = response.data.members || []
+    console.log('👥 成员数量:', groupMembers.value.length)
+
+  } catch (error: any) {
+    console.error('❌ 加载群成员列表失败:', error)
+    showToast('❌ 加载群成员列表失败', 'error')
+  } finally {
+    isLoadingMembers.value = false
+  }
+}
+
+// 显示成员右键菜单
+function showMemberContextMenu(event: MouseEvent, member: any) {
+  // 只有群主才能移除其他成员（不能移除自己和群主）
+  if (!activeContact.value || activeContact.value.type !== 'group') return
+
+  // 找到群主
+  const owner = groupMembers.value.find(m => m.is_owner)
+  const isOwner = owner?.user_id === CURRENT_USER_ID
+
+  // 如果不是群主，不显示菜单
+  if (!isOwner) return
+
+  // 不能对群主和自己显示移除选项
+  if (member.is_owner || member.user_id === CURRENT_USER_ID) return
+
+  event.preventDefault()
+  selectedMember.value = member
+  memberContextMenuX.value = event.clientX - 100
+  memberContextMenuY.value = event.clientY
+  memberContextMenu.value = true
+}
+
+// 隐藏成员右键菜单
+function hideMemberContextMenu() {
+  memberContextMenu.value = false
+  selectedMember.value = null
+}
+
+// 长按开始
+function handleMemberLongPressStart(event: TouchEvent, member: any) {
+  // 只有群主才能移除其他成员
+  if (!activeContact.value || activeContact.value.type !== 'group') return
+
+  const owner = groupMembers.value.find(m => m.is_owner)
+  const isOwner = owner?.user_id === CURRENT_USER_ID
+
+  if (!isOwner) return
+  if (member.is_owner || member.user_id === CURRENT_USER_ID) return
+
+  memberLongPressTimer.value = window.setTimeout(() => {
+    const touch = event.touches[0]
+    selectedMember.value = member
+    memberContextMenuX.value = touch.clientX
+    memberContextMenuY.value = touch.clientY
+    memberContextMenu.value = true
+  }, 500)
+}
+
+// 长按结束
+function handleMemberLongPressEnd() {
+  if (memberLongPressTimer.value) {
+    clearTimeout(memberLongPressTimer.value)
+    memberLongPressTimer.value = null
+  }
+}
+
+// 移除群成员
+async function removeMember() {
+  if (!selectedMember.value || !activeContact.value) return
+
+  try {
+    const token = localStorage.getItem('token')
+    const response = await request.post('/api/group/remove_member', {
+      group_id: activeContact.value.id,
+      user_id: selectedMember.value.user_id
+    }, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+
+    showToast(`✅ 已移除 ${selectedMember.value.username}`, 'success')
+
+    // 重新加载群成员列表
+    await loadGroupMembers()
+
+    // 如果当前聊天窗口打开的是该群，更新成员数
+    if (activeContact.value.id === activeContact.value.id) {
+      await loadContacts()
+    }
+  } catch (error: any) {
+    console.error('移除群成员失败:', error)
+    showToast('❌ 移除群成员失败', 'error')
+  } finally {
+    hideMemberContextMenu()
+  }
+}
+
 // 退出群聊
 async function leaveGroup() {
   if (!activeContact.value || activeContact.value.type !== 'group') return
@@ -3261,6 +3406,141 @@ onUnmounted(() => {
       </Transition>
     </Teleport>
 
+    <!-- 群成员列表弹窗 -->
+    <Teleport to="body">
+      <Transition
+        enter-active-class="transition duration-300 ease-out"
+        enter-from-class="opacity-0"
+        enter-to-class="opacity-100"
+        leave-active-class="transition duration-200 ease-in"
+        leave-from-class="opacity-100"
+        leave-to-class="opacity-0"
+      >
+        <div v-if="showMembersModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" @click="closeMembersModal">
+          <div @click.stop class="w-full max-w-md p-6">
+            <Transition
+              appear
+              enter-active-class="transition duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)]"
+              enter-from-class="opacity-0 scale-90 translate-y-4"
+              enter-to-class="opacity-100 scale-100 translate-y-0"
+              leave-active-class="transition duration-200 ease-in"
+              leave-from-class="opacity-100 scale-100"
+              leave-to-class="opacity-0 scale-95"
+            >
+              <div v-if="showMembersModal" class="relative overflow-hidden rounded-3xl bg-slate-900 border border-white/10 shadow-2xl shadow-black/50 ring-1 ring-white/10 max-h-[80vh] flex flex-col">
+                <div class="absolute -top-10 -right-10 h-32 w-32 rounded-full bg-indigo-500/20 blur-[50px] pointer-events-none"></div>
+                <div class="absolute -bottom-10 -left-10 h-32 w-32 rounded-full bg-blue-500/20 blur-[50px] pointer-events-none"></div>
+
+                <div class="relative px-6 pt-6 pb-4 border-b border-white/5">
+                  <h3 class="text-xl font-bold text-white">群成员</h3>
+                  <p class="text-sm text-slate-400 mt-1">{{ groupMembers.length }} 位成员</p>
+                </div>
+
+                <div class="relative px-6 py-4 overflow-y-auto custom-scrollbar flex-1">
+                  <div v-if="isLoadingMembers" class="flex items-center justify-center py-8">
+                    <div class="h-8 w-8 animate-spin rounded-full border-4 border-slate-700 border-t-indigo-500"></div>
+                  </div>
+
+                  <div v-else-if="groupMembers.length === 0" class="flex flex-col items-center justify-center py-12">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-slate-600 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                      <circle cx="9" cy="7" r="4"></circle>
+                      <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                      <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                    <p class="text-slate-400 text-sm">暂无成员</p>
+                  </div>
+
+                  <div v-else class="space-y-2">
+                    <div
+                      v-for="member in groupMembers"
+                      :key="member.user_id"
+                      class="group cursor-pointer rounded-xl bg-slate-800/50 p-4 border border-white/5 hover:bg-slate-800 transition-all"
+                      @contextmenu="showMemberContextMenu($event, member)"
+                      @touchstart="handleMemberLongPressStart($event, member)"
+                      @touchend="handleMemberLongPressEnd"
+                      @touchcancel="handleMemberLongPressEnd"
+                    >
+                      <div class="flex items-center gap-3">
+                        <div class="relative shrink-0">
+                          <img
+                            v-if="member.avatar && member.avatar.startsWith('http')"
+                            :src="member.avatar"
+                            class="h-12 w-12 rounded-full object-cover shadow-md"
+                            :alt="member.username"
+                          />
+                          <div
+                            v-else
+                            class="h-12 w-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg shadow-md"
+                          >
+                            {{ (member.username || 'U')[0].toUpperCase() }}
+                          </div>
+                          <!-- 群主标识 -->
+                          <span
+                            v-if="member.is_owner"
+                            class="absolute -bottom-1 -right-1 bg-yellow-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-lg"
+                          >
+                            群主
+                          </span>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                          <h4 class="font-semibold text-slate-100 truncate">{{ member.username }}</h4>
+                          <p class="text-xs text-slate-400">ID: {{ member.user_id }}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="relative flex items-center justify-end gap-3 bg-slate-800/30 px-6 py-4 border-t border-white/5 backdrop-blur-md">
+                  <button @click="closeMembersModal" class="rounded-lg px-6 py-2 text-sm font-medium text-slate-400 transition hover:bg-white/5 hover:text-white">关闭</button>
+                </div>
+              </div>
+            </Transition>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- 成员右键菜单 -->
+    <Teleport to="body">
+      <Transition
+        enter-active-class="transition duration-200 ease-out"
+        enter-from-class="opacity-0 scale-95"
+        enter-to-class="opacity-100 scale-100"
+        leave-active-class="transition duration-150 ease-in"
+        leave-from-class="opacity-100 scale-100"
+        leave-to-class="opacity-0 scale-95"
+      >
+        <div
+          v-if="memberContextMenu"
+          class="fixed z-[200] bg-slate-800 border border-white/10 rounded-lg shadow-2xl overflow-hidden min-w-[150px]"
+          :style="{ left: `${memberContextMenuX}px`, top: `${memberContextMenuY}px` }"
+          @click.stop
+        >
+          <button
+            @click="removeMember"
+            class="w-full px-4 py-3 text-left text-sm text-red-400 hover:bg-slate-700 transition-colors flex items-center gap-2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="8.5" cy="7" r="4"></circle>
+              <line x1="18" y1="8" x2="23" y2="13"></line>
+              <line x1="23" y1="8" x2="18" y2="13"></line>
+            </svg>
+            <span>移除该成员</span>
+          </button>
+        </div>
+      </Transition>
+
+      <!-- 点击其他地方关闭菜单 -->
+      <div
+        v-if="memberContextMenu"
+        class="fixed inset-0 z-[199]"
+        @click="hideMemberContextMenu"
+      ></div>
+    </Teleport>
+
     <!-- 消息右键菜单 -->
     <Teleport to="body">
       <Transition
@@ -3314,6 +3594,21 @@ onUnmounted(() => {
           :style="{ left: `${headerMenuX}px`, top: `${headerMenuY}px` }"
           @click.stop
         >
+          <!-- 查看群成员（仅群聊） -->
+          <button
+            v-if="activeContact?.type === 'group'"
+            @click="openMembersModal"
+            class="w-full px-4 py-3 text-left text-sm text-slate-200 hover:bg-slate-700 transition-colors flex items-center gap-2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+            <span>查看群成员</span>
+          </button>
+
           <!-- 邀请进群（仅私聊） -->
           <button
             v-if="activeContact?.type === 'private'"

@@ -61,7 +61,9 @@ const navItems = [
   { name: '控制台', path: '/dashboard', icon: '📊' },
   { name: '文学殿堂', path: '/novel', icon: '📖' },
   { name: '音乐播放器', path: '/music', icon: '🎵' },
-  { name: '聊天室', path: '/chat-room', icon: '💬' }
+  { name: '聊天室', path: '/chat-room', icon: '💬' },
+  { name: '敬请期待', path: '/coming-soon', icon: '⏳' }
+
   // 可以在这里添加更多导航项
   // { name: '知识图谱', path: '/knowledge-graph', icon: '🔗' },
   // { name: '问答系统', path: '/qa', icon: '💬' },

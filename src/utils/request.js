@@ -4,7 +4,7 @@ import { useUserStore } from '../stores/user'
 
 // 创建 axios 实例
 const request = axios.create({
-  baseURL: 'https://28d27e6d.r9.cpolar.cn', // 替换为你的后端 API 地址
+  baseURL: 'https://4533a304.r24.cpolar.top', // 替换为你的后端 API 地址
   timeout: 30000
 })
 

@@ -2167,11 +2167,21 @@ async function handleCallAnswer(payload: any) {
   console.log('📞 收到通话应答:', {
     has_sdp: !!payload.sdp,
     sdp_type: payload.sdp?.type,
-    sdp_length: payload.sdp?.sdp?.length
+    sdp_length: payload.sdp?.sdp?.length,
+    current_call_status: callStatus.value,
+    has_peer_connection: !!peerConnection.value
   })
+
+  // 检查是否是发起方（只有发起方才应该收到 answer）
+  if (callStatus.value !== 'calling') {
+    console.warn('⚠️ 不是 calling 状态，忽略 answer。当前状态:', callStatus.value)
+    return
+  }
 
   if (!peerConnection.value) {
     console.error('❌ PeerConnection 不存在，无法处理 answer')
+    console.error('可能原因：发起通话流程失败或被中断')
+    showToast('通话连接异常，请重试', 'error')
     return
   }
 

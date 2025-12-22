@@ -1709,12 +1709,14 @@ async function startCall() {
                 remoteVideoRef.value.srcObject = remoteStream.value
                 console.log('✅ [发起方] 远程视频元素已设置（autoplay 将自动播放）')
 
-                // 主动触发播放（避免自动播放拦截）
+                // 主动触发播放（用户已交互，可以绕过自动播放限制）
                 try {
                   await remoteVideoRef.value.play()
-                  console.log('✅ [发起方] 远程视频开始播放')
-                } catch (e) {
-                  console.warn('⚠️ [发起方] 自动播放被拦截，但 video 元素已设置 autoplay，用户交互后会播放')
+                  console.log('✅ [发起方] 远程视频和音频开始播放')
+                } catch (e: any) {
+                  // 如果自动播放失败，提示用户点击屏幕
+                  console.warn('⚠️ [发起方] 自动播放被拦截:', e.message)
+                  showToast('请点击屏幕以开始播放音频', 'info')
                 }
                 return
               }
@@ -1921,12 +1923,14 @@ async function acceptCall() {
                 remoteVideoRef.value.srcObject = remoteStream.value
                 console.log('✅ [接听方] 远程视频元素已设置（autoplay 将自动播放）')
 
-                // 主动触发播放（避免自动播放拦截）
+                // 主动触发播放（用户已交互，可以绕过自动播放限制）
                 try {
                   await remoteVideoRef.value.play()
-                  console.log('✅ [接听方] 远程视频开始播放')
-                } catch (e) {
-                  console.warn('⚠️ [接听方] 自动播放被拦截，但 video 元素已设置 autoplay，用户交互后会播放')
+                  console.log('✅ [接听方] 远程视频和音频开始播放')
+                } catch (e: any) {
+                  // 如果自动播放失败，提示用户点击屏幕
+                  console.warn('⚠️ [接听方] 自动播放被拦截:', e.message)
+                  showToast('请点击屏幕以开始播放音频', 'info')
                 }
                 return
               }
@@ -3479,12 +3483,11 @@ onUnmounted(() => {
           v-if="callStatus === 'calling' || callStatus === 'connected'"
           class="fixed inset-0 z-[500] bg-slate-900"
         >
-          <!-- 远程视频 (全屏) -->
+          <!-- 远程视频 (全屏) - 不能 muted，需要听到对方声音 -->
           <video
             ref="remoteVideoRef"
             autoplay
             playsinline
-            muted
             class="absolute inset-0 w-full h-full object-cover"
           ></video>
 

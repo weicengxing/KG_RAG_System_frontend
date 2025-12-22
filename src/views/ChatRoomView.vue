@@ -1773,7 +1773,12 @@ async function startCall() {
     // 创建 offer
     const offer = await peerConnection.value.createOffer()
     await peerConnection.value.setLocalDescription(offer)
-    console.log('✅ Offer 已创建')
+    console.log('✅ Offer 已创建:', {
+      type: offer.type,
+      sdp_length: offer.sdp?.length,
+      has_video: offer.sdp?.includes('m=video'),
+      has_audio: offer.sdp?.includes('m=audio')
+    })
 
     console.log('4️⃣ 发送 offer 到对方...')
     console.log('目标用户ID:', activeContact.value.id)
@@ -1982,17 +1987,23 @@ async function acceptCall() {
     // 创建 answer
     const answer = await peerConnection.value.createAnswer()
     await peerConnection.value.setLocalDescription(answer)
-    console.log('✅ Answer 已创建')
+    console.log('✅ Answer 已创建:', {
+      type: answer.type,
+      sdp_length: answer.sdp?.length,
+      has_video: answer.sdp?.includes('m=video'),
+      has_audio: answer.sdp?.includes('m=audio')
+    })
 
     console.log('5️⃣ 发送 answer 到对方...')
     // 通过 WebSocket 发送 answer
     if (socket.value) {
-      socket.value.send(JSON.stringify({
+      const message = {
         type: 'call_answer',
         target_id: callerId,  // 使用保存的 callerId
         sdp: answer
-      }))
-      console.log('✅ Answer 已发送')
+      }
+      socket.value.send(JSON.stringify(message))
+      console.log('✅ Answer 已发送到:', callerId)
     }
 
     // 设置本地视频
@@ -2153,18 +2164,52 @@ function handleCallOffer(payload: any) {
 
 // 处理收到的通话 answer
 async function handleCallAnswer(payload: any) {
-  console.log('收到通话应答:', payload)
+  console.log('📞 收到通话应答:', {
+    has_sdp: !!payload.sdp,
+    sdp_type: payload.sdp?.type,
+    sdp_length: payload.sdp?.sdp?.length
+  })
 
-  if (peerConnection.value && payload.sdp) {
-    try {
-      await peerConnection.value.setRemoteDescription(new RTCSessionDescription(payload.sdp))
-      callStatus.value = 'connected'
-      showToast('通话已接通', 'success')
-    } catch (error) {
-      console.error('设置远程描述失败:', error)
-      showToast('通话连接失败', 'error')
-      hangupCall()
+  if (!peerConnection.value) {
+    console.error('❌ PeerConnection 不存在，无法处理 answer')
+    return
+  }
+
+  if (!payload.sdp) {
+    console.error('❌ Answer SDP 为空')
+    return
+  }
+
+  try {
+    console.log('⚙️ [发起方] 设置远程描述 (answer)...')
+    await peerConnection.value.setRemoteDescription(new RTCSessionDescription(payload.sdp))
+    console.log('✅ [发起方] 远程描述已设置:', {
+      has_video: payload.sdp.sdp?.includes('m=video'),
+      has_audio: payload.sdp.sdp?.includes('m=audio')
+    })
+
+    // 添加所有缓存的 ICE candidates（关键修复！）
+    if (pendingIceCandidates.value.length > 0) {
+      console.log(`📦 [发起方] 开始添加 ${pendingIceCandidates.value.length} 个缓存的 ICE candidates`)
+      for (const candidate of pendingIceCandidates.value) {
+        try {
+          await peerConnection.value.addIceCandidate(new RTCIceCandidate(candidate))
+          console.log('✅ [发起方] 缓存的 ICE candidate 添加成功')
+        } catch (error) {
+          console.error('❌ [发起方] 添加缓存的 ICE candidate 失败:', error)
+        }
+      }
+      // 清空缓存
+      pendingIceCandidates.value = []
+      console.log('✅ [发起方] 所有缓存的 ICE candidates 已处理完毕')
     }
+
+    callStatus.value = 'connected'
+    showToast('通话已接通', 'success')
+  } catch (error) {
+    console.error('❌ 设置远程描述失败:', error)
+    showToast('通话连接失败', 'error')
+    hangupCall()
   }
 }
 
@@ -2180,11 +2225,19 @@ async function handleIceCandidate(payload: any) {
     return
   }
 
-  // 如果 PeerConnection 不存在，缓存 ICE candidate
+  // 如果 PeerConnection 不存在，或者还没有设置远程描述，缓存 ICE candidate
   if (!peerConnection.value) {
     console.log('⚠️ PeerConnection 尚未创建，缓存 ICE candidate')
     pendingIceCandidates.value.push(payload.candidate)
     console.log(`📦 已缓存 ICE candidate，当前缓存数量: ${pendingIceCandidates.value.length}`)
+    return
+  }
+
+  // 关键修复：检查是否已设置远程描述
+  if (!peerConnection.value.remoteDescription) {
+    console.log('⚠️ 远程描述尚未设置，缓存 ICE candidate')
+    pendingIceCandidates.value.push(payload.candidate)
+    console.log(`📦 已缓存 ICE candidate（等待远程描述），当前缓存数量: ${pendingIceCandidates.value.length}`)
     return
   }
 

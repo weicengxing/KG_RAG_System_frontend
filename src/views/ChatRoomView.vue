@@ -1698,12 +1698,31 @@ async function startCall() {
         remoteStream.value = event.streams[0]
         console.log('✅ [发起方] 远程流已保存，轨道数:', remoteStream.value.getTracks().length)
 
-        // 只在收到视频轨道时设置视频元素（避免重复设置）
-        if (event.track.kind === 'video' && remoteVideoRef.value) {
-          remoteVideoRef.value.srcObject = remoteStream.value
-          console.log('✅ [发起方] 远程视频元素已设置（autoplay 将自动播放）')
-        } else if (!remoteVideoRef.value) {
-          console.warn('⚠️ [发起方] remoteVideoRef 不存在')
+        // 【关键修复】使用 nextTick + 重试机制确保 video 元素就绪
+        if (event.track.kind === 'video') {
+          const setRemoteVideo = async () => {
+            // 最多重试 10 次，每次间隔 100ms
+            for (let i = 0; i < 10; i++) {
+              await nextTick()
+              if (remoteVideoRef.value) {
+                remoteVideoRef.value.srcObject = remoteStream.value
+                console.log('✅ [发起方] 远程视频元素已设置（autoplay 将自动播放）')
+
+                // 主动触发播放（避免自动播放拦截）
+                try {
+                  await remoteVideoRef.value.play()
+                  console.log('✅ [发起方] 远程视频开始播放')
+                } catch (e) {
+                  console.warn('⚠️ [发起方] 自动播放被拦截，但 video 元素已设置 autoplay，用户交互后会播放')
+                }
+                return
+              }
+              // 等待 100ms 后重试
+              await new Promise(resolve => setTimeout(resolve, 100))
+            }
+            console.error('❌ [发起方] remoteVideoRef 在 1 秒后仍未就绪')
+          }
+          setRemoteVideo()
         }
       } else {
         console.warn('⚠️ [发起方] event.streams 为空')
@@ -1891,12 +1910,31 @@ async function acceptCall() {
         remoteStream.value = event.streams[0]
         console.log('✅ [接听方] 远程流已保存，轨道数:', remoteStream.value.getTracks().length)
 
-        // 只在收到视频轨道时设置视频元素（避免重复设置）
-        if (event.track.kind === 'video' && remoteVideoRef.value) {
-          remoteVideoRef.value.srcObject = remoteStream.value
-          console.log('✅ [接听方] 远程视频元素已设置（autoplay 将自动播放）')
-        } else if (!remoteVideoRef.value) {
-          console.warn('⚠️ [接听方] remoteVideoRef 不存在')
+        // 【关键修复】使用 nextTick + 重试机制确保 video 元素就绪
+        if (event.track.kind === 'video') {
+          const setRemoteVideo = async () => {
+            // 最多重试 10 次，每次间隔 100ms
+            for (let i = 0; i < 10; i++) {
+              await nextTick()
+              if (remoteVideoRef.value) {
+                remoteVideoRef.value.srcObject = remoteStream.value
+                console.log('✅ [接听方] 远程视频元素已设置（autoplay 将自动播放）')
+
+                // 主动触发播放（避免自动播放拦截）
+                try {
+                  await remoteVideoRef.value.play()
+                  console.log('✅ [接听方] 远程视频开始播放')
+                } catch (e) {
+                  console.warn('⚠️ [接听方] 自动播放被拦截，但 video 元素已设置 autoplay，用户交互后会播放')
+                }
+                return
+              }
+              // 等待 100ms 后重试
+              await new Promise(resolve => setTimeout(resolve, 100))
+            }
+            console.error('❌ [接听方] remoteVideoRef 在 1 秒后仍未就绪')
+          }
+          setRemoteVideo()
         }
       } else {
         console.warn('⚠️ [接听方] event.streams 为空')
@@ -2168,9 +2206,22 @@ async function handleCallAnswer(payload: any) {
     has_sdp: !!payload.sdp,
     sdp_type: payload.sdp?.type,
     sdp_length: payload.sdp?.sdp?.length,
+    caller_id: payload.caller_id,  // 应答者的 ID
     current_call_status: callStatus.value,
     has_peer_connection: !!peerConnection.value
   })
+
+  // 【关键修复】验证 answer 是否来自当前正在通话的联系人
+  if (!activeContact.value) {
+    console.warn('⚠️ 没有活跃的联系人，忽略 answer')
+    return
+  }
+
+  const answerId = payload.caller_id
+  if (answerId !== activeContact.value.id) {
+    console.warn(`⚠️ Answer 来自错误的联系人: ${answerId}, 当前通话对象: ${activeContact.value.id}`)
+    return
+  }
 
   // 检查是否是发起方（只有发起方才应该收到 answer）
   if (callStatus.value !== 'calling') {
@@ -2227,11 +2278,26 @@ async function handleCallAnswer(payload: any) {
 async function handleIceCandidate(payload: any) {
   console.log('📥 收到 ICE 候选:', {
     has_candidate: !!payload.candidate,
-    candidate_type: payload.candidate?.candidate ? payload.candidate.candidate.split(' ')[7] : 'unknown'
+    candidate_type: payload.candidate?.candidate ? payload.candidate.candidate.split(' ')[7] : 'unknown',
+    caller_id: payload.caller_id,  // 发送者 ID
+    target_id: payload.target_id   // 目标 ID（当前用户）
   })
 
   if (!payload.candidate) {
     console.warn('⚠️ ICE candidate 数据为空')
+    return
+  }
+
+  // 【关键修复】验证 ICE 候选者是否来自当前正在通话的联系人
+  if (!activeContact.value) {
+    console.warn('⚠️ 没有活跃的联系人，忽略 ICE candidate')
+    return
+  }
+
+  // 检查 ICE 候选者的发送者是否是当前活跃联系人
+  const senderId = payload.caller_id
+  if (senderId !== activeContact.value.id) {
+    console.warn(`⚠️ ICE candidate 来自错误的联系人: ${senderId}, 当前通话对象: ${activeContact.value.id}`)
     return
   }
 
@@ -3417,6 +3483,7 @@ onUnmounted(() => {
             ref="remoteVideoRef"
             autoplay
             playsinline
+            muted
             class="absolute inset-0 w-full h-full object-cover"
           ></video>
 

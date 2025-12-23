@@ -82,4 +82,20 @@ request.interceptors.response.use(
   }
 )
 
+// 添加流式请求方法
+export function createStreamRequest(url, data) {
+  const baseURL = 'http://localhost:8000'
+  const token = localStorage.getItem('token')
+  
+  return fetch(`${baseURL}${url}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token && { 'Authorization': `Bearer ${token}` }),
+      'ngrok-skip-browser-warning': 'true'
+    },
+    body: JSON.stringify(data)
+  })
+}
+
 export default request

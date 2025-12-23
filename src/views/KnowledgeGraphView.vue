@@ -319,7 +319,31 @@
                       <span class="emoji">💬</span>
                       <span>知识问答</span>
                     </div>
-                    <el-tag type="info" effect="light" round>RAG</el-tag>
+                    <div class="header-actions">
+                      <el-select
+                        v-model="selectedModel"
+                        placeholder="选择模型"
+                        size="default"
+                        style="width: 280px; margin-right: 10px;"
+                        popper-class="custom-model-popper" 
+                      >
+                        <el-option
+                          v-for="model in availableModels"
+                          :key="model.name"
+                          :label="model.name"
+                          :value="model.name"
+                        >
+                          <div class="model-option">
+                            <div class="model-name">{{ model.name }}</div>
+                            <div class="model-description">{{ model.description }}</div>
+                          </div>
+                        </el-option>
+                      </el-select>
+                      <el-button size="small" @click="newConversation" plain>
+                        <el-icon class="btn-icon"><Document /></el-icon>
+                        新建对话
+                      </el-button>
+                    </div>
                   </div>
                 </template>
 
@@ -335,7 +359,11 @@
                           <span class="avatar-emoji">{{ msg.role === 'user' ? '🧑' : '🤖' }}</span>
                         </div>
                         <div class="message-bubble" :class="msg.role">
-                          <div class="message-text">{{ msg.content }}</div>
+                          <div
+                            class="message-text"
+                            :class="{ 'gradient-text': msg.role === 'assistant' }"
+                            v-html="formatMessageContent(msg.content, msg.role)"
+                          ></div>
                           <div class="message-time">{{ msg.time }}</div>
                         </div>
                       </div>
@@ -399,6 +427,12 @@
                   <el-tab-pane label="引用片段" name="chunks">
                     <el-scrollbar height="calc(100% - 10px)">
                       <div class="source-chunks">
+                        <!-- 加载状态 -->
+                        <div v-if="loadingStatus.vectorSearch" class="loading-indicator">
+                          <el-icon class="is-loading"><Loading /></el-icon>
+                          <span>正在检索相关文档片段...</span>
+                        </div>
+
                         <el-card
                           v-for="(chunk, idx) in sourceChunks"
                           :key="idx"
@@ -412,7 +446,7 @@
                         </el-card>
 
                         <el-empty
-                          v-if="sourceChunks.length === 0"
+                          v-if="!loadingStatus.vectorSearch && sourceChunks.length === 0"
                           description="暂无引用片段"
                           :image-size="110"
                         />
@@ -421,11 +455,17 @@
                   </el-tab-pane>
 
                   <el-tab-pane label="局部图谱" name="graph">
-                    <div class="subgraph-stage">
+                    <!-- 加载状态 -->
+                    <div v-if="loadingStatus.graphSearch" class="loading-indicator">
+                      <el-icon class="is-loading"><Loading /></el-icon>
+                      <span>正在检索知识图谱...</span>
+                    </div>
+
+                    <div v-else class="subgraph-stage">
                       <div ref="subgraphContainer" class="subgraph-container"></div>
                     </div>
                     <el-empty
-                      v-if="!subgraphData || subgraphData.nodes?.length === 0"
+                      v-if="!loadingStatus.graphSearch && (!subgraphData || subgraphData.nodes?.length === 0)"
                       description="暂无关联图谱"
                       :image-size="110"
                     />
@@ -443,7 +483,7 @@
 <script setup>
 import { ref, nextTick, computed, watch, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Connection, Upload, UploadFilled, Document, Search, Share } from '@element-plus/icons-vue'
+import { Connection, Upload, UploadFilled, Document, Search, Share, Loading } from '@element-plus/icons-vue'
 import G6 from '@antv/g6'
 import request from '@/utils/request'
 
@@ -851,6 +891,59 @@ const sourceChunks = ref([])
 const subgraphData = ref(null)
 const explainTab = ref('chunks')
 const chatScroll = ref(null)
+const conversationId = ref('')  // 对话ID
+
+// AI模型相关
+const availableModels = ref([])  // 可用的AI模型列表
+const selectedModel = ref('')  // 当前选中的模型
+
+// 加载状态跟踪
+const loadingStatus = ref({
+  vectorSearch: false,
+  graphSearch: false,
+  answerGeneration: false
+})
+
+// 生成新的对话ID
+const generateConversationId = () => {
+  return 'conv_' + Date.now() + '_' + Math.random().toString(36).substring(2, 15)
+}
+
+// 加载可用的AI模型列表
+const loadAvailableModels = async () => {
+  try {
+    const res = await request.get('/api/kg/available-models')
+    availableModels.value = res.data.models
+    selectedModel.value = res.data.default  // 设置默认模型
+    console.log('可用模型列表:', availableModels.value)
+  } catch (error) {
+    console.error('加载模型列表失败:', error)
+    ElMessage.error('加载模型列表失败')
+  }
+}
+
+// 初始化对话ID
+if (!conversationId.value) {
+  conversationId.value = generateConversationId()
+  console.log('🆕 生成新对话ID:', conversationId.value)
+}
+
+// 加载模型列表
+loadAvailableModels()
+
+// 新建对话
+const newConversation = () => {
+  // 清空聊天记录
+  messages.value = []
+  sourceChunks.value = []
+  subgraphData.value = null
+
+  // 生成新的对话ID
+  conversationId.value = generateConversationId()
+  console.log('🆕 新建对话，ID:', conversationId.value)
+
+  ElMessage.success('已创建新对话')
+}
 
 // 发送问题
 const askQuestion = async () => {
@@ -867,33 +960,118 @@ const askQuestion = async () => {
   question.value = ''
   answering.value = true
 
+  // 重置加载状态
+  loadingStatus.value = {
+    vectorSearch: true,
+    graphSearch: true,
+    answerGeneration: true
+  }
+
+  // 创建一个临时的assistant消息用于流式更新
+  const assistantMessage = {
+    role: 'assistant',
+    content: '',
+    time: new Date().toLocaleTimeString()
+  }
+  messages.value.push(assistantMessage)
+  const assistantIndex = messages.value.length - 1
+
+  // 清空之前的数据
+  sourceChunks.value = []
+  subgraphData.value = null
+
   try {
-    const res = await request.post('/api/kg/ask', {
-      question: currentQuestion,
-      stream: false
+    // 获取token（从localStorage）
+    const token = localStorage.getItem('token')
+    if (!token) {
+      ElMessage.error('请先登录')
+      answering.value = false
+      messages.value.splice(assistantIndex, 1)
+      return
+    }
+
+    // 使用新的并行流式接口，携带conversation_id和model_name
+    const response = await fetch('http://localhost:8000/api/kg/ask-parallel-stream', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`  // 添加认证token
+      },
+      body: JSON.stringify({
+        question: currentQuestion,
+        stream: true,
+        conversation_id: conversationId.value,  // 携带对话ID
+        model_name: selectedModel.value  // 携带选中的模型
+      })
     })
 
-    if (isDisposed.value) return
-
-    const assistantMessage = {
-      role: 'assistant',
-      content: res.data.answer,
-      time: new Date().toLocaleTimeString()
+    if (!response.ok) {
+      if (response.status === 401) {
+        ElMessage.error('登录已过期，请重新登录')
+      } else {
+        throw new Error('请求失败')
+      }
+      return
     }
-    messages.value.push(assistantMessage)
 
-    sourceChunks.value = res.data.sources?.vector_chunks || []
-    subgraphData.value = res.data.sources?.graph_data || null
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
 
-    await nextTick()
-    if (isDisposed.value) return
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
 
-    renderSubgraph()
+      const chunk = decoder.decode(value, { stream: true })
+      const lines = chunk.split('\n').filter(line => line.trim())
+
+      for (const line of lines) {
+        try {
+          const data = JSON.parse(line)
+
+          if (data.type === 'vector_chunks') {
+            // 向量检索结果到达，立即更新
+            sourceChunks.value = data.data || []
+            loadingStatus.value.vectorSearch = false
+            console.log('✅ 向量检索完成:', data.data?.length, '个片段')
+          } else if (data.type === 'graph_data') {
+            // 图检索结果到达，立即更新
+            subgraphData.value = data.data || null
+            loadingStatus.value.graphSearch = false
+            console.log('✅ 图检索完成:', data.data?.nodes?.length, '个节点')
+            await nextTick()
+            if (!isDisposed.value) {
+              renderSubgraph()
+            }
+          } else if (data.type === 'answer') {
+            // 答案流式到达，逐字更新
+            assistantMessage.content += data.content
+            messages.value[assistantIndex] = { ...assistantMessage }
+            scrollToBottom()
+          } else if (data.type === 'answer_done') {
+            // 答案完成
+            loadingStatus.value.answerGeneration = false
+            console.log('✅ 答案生成完成')
+          }
+        } catch (e) {
+          console.error('解析数据失败:', e, line)
+        }
+      }
+    }
+
     scrollToBottom()
   } catch (error) {
-    ElMessage.error(error.response?.data?.detail || '问答失败')
+    console.error('问答失败:', error)
+    ElMessage.error(error.message || '问答失败')
+    // 移除临时的assistant消息
+    messages.value.splice(assistantIndex, 1)
   } finally {
     answering.value = false
+    // 确保所有加载状态都被重置
+    loadingStatus.value = {
+      vectorSearch: false,
+      graphSearch: false,
+      answerGeneration: false
+    }
   }
 }
 
@@ -976,6 +1154,53 @@ const scrollToBottom = () => {
       }
     }
   })
+}
+
+// 格式化消息内容：去除markdown标记，保留换行
+const formatMessageContent = (content, role) => {
+  if (!content) return ''
+
+  // 只对assistant的消息进行处理
+  if (role === 'assistant') {
+    let formatted = content
+
+    // 去除markdown标记
+    // 去除粗体标记 **text** 或 __text__
+    formatted = formatted.replace(/\*\*(.+?)\*\*/g, '$1')
+    formatted = formatted.replace(/__(.+?)__/g, '$1')
+
+    // 去除斜体标记 *text* 或 _text_
+    formatted = formatted.replace(/\*(.+?)\*/g, '$1')
+    formatted = formatted.replace(/_(.+?)_/g, '$1')
+
+    // 去除标题标记 # ## ### 等
+    formatted = formatted.replace(/^#{1,6}\s+/gm, '')
+
+    // 去除列表标记（* 或 -）并保留内容
+    formatted = formatted.replace(/^[\*\-]\s+/gm, '')
+
+    // 去除代码块标记
+    formatted = formatted.replace(/```[\s\S]*?```/g, (match) => {
+      return match.replace(/```\w*\n?/g, '')
+    })
+
+    // 去除行内代码标记 `code`
+    formatted = formatted.replace(/`(.+?)`/g, '$1')
+
+    // 将换行符转换为HTML换行
+    formatted = formatted.split('\n').map(line => {
+      // 如果是空行，返回一个段落间距
+      if (line.trim() === '') {
+        return '<div class="paragraph-space"></div>'
+      }
+      return `<p class="text-line">${line}</p>`
+    }).join('')
+
+    return formatted
+  }
+
+  // 用户消息保持原样，只处理换行
+  return content.replace(/\n/g, '<br>')
 }
 
 // 关键修复：离开图谱步骤时，DOM 会被 v-if 移除，必须先 destroy（否则 parentNode null）
@@ -1973,6 +2198,51 @@ onUnmounted(() => {
   font-size: 13px;
 }
 
+/* AI回答渐变色和行草字体样式 */
+.message-text.gradient-text {
+  font-family: 'KaiTi', 'STKaiti', 'KaiTi_GB2312', 'FangSong', 'STFangsong', cursive, serif;
+  font-size: 15px;
+  line-height: 2;
+  background: linear-gradient(
+    135deg,
+    #667eea 0%,
+    #764ba2 25%,
+    #f093fb 50%,
+    #4facfe 75%,
+    #00f2fe 100%
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  background-size: 200% 200%;
+  animation: gradientFlow 3s ease infinite;
+}
+
+/* 渐变色流动动画 */
+@keyframes gradientFlow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* 文本行样式 */
+.message-text :deep(.text-line) {
+  margin: 0;
+  padding: 4px 0;
+  text-align: left;
+}
+
+/* 段落间距 */
+.message-text :deep(.paragraph-space) {
+  height: 12px;
+}
+
 .message-time {
   font-size: 11px;
   margin-top: 6px;
@@ -2113,6 +2383,50 @@ onUnmounted(() => {
   border-radius: 12px !important;
 }
 
+/* 加载指示器样式 */
+.loading-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 20px;
+  color: rgba(15, 23, 42, 0.65);
+  font-size: 14px;
+}
+
+.loading-indicator .el-icon {
+  font-size: 20px;
+  color: rgba(59, 130, 246, 0.85);
+}
+
+/* 模型选择器样式 */
+.model-option {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 16px;              /* 在这里设置内边距，把间距撑开 */
+  gap: 4px;                        /* 名称和描述之间的间距 */
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.model-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.4;
+}
+
+.model-description {
+  display: block !important;       /* 强制显示 */
+  font-size: 12px;
+  color: #64748b;                  /* 灰蓝色 */
+  line-height: 1.5;
+  white-space: normal;             /* 允许换行 */
+  word-break: break-all;           /* 允许长单词断句 */
+}
+
+/*  */
+
 @media (max-width: 992px) {
   .header-inner {
     flex-direction: column;
@@ -2151,5 +2465,48 @@ onUnmounted(() => {
   .brand-text .title {
     font-size: 20px;
   }
+}
+</style>
+<!-- 新增这个标签，注意没有 scoped -->
+<style>
+/* 1. 强制覆盖 Element Plus 下拉项的高度限制 */
+.custom-model-popper .el-select-dropdown__item {
+  height: auto !important;          /* 解除 34px 高度限制 */
+  padding: 0 !important;            /* 清除默认内边距 */
+  line-height: normal !important;   /* 重置行高 */
+  overflow: visible !important;     /* 防止内容被裁切 */
+}
+
+/* 2. 选中状态样式修正 */
+.custom-model-popper .el-select-dropdown__item.selected {
+  font-weight: normal;
+}
+
+/* 3. 自定义内容的容器布局 */
+.custom-model-popper .model-option {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 10px 16px;       /* 上下左右内边距 */
+  min-height: 60px;         /* 给个最小高度 */
+  box-sizing: border-box;
+}
+
+/* 4. 标题样式 */
+.custom-model-popper .model-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 4px;
+  line-height: 1.3;
+}
+
+/* 5. 描述样式 */
+.custom-model-popper .model-description {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.4;
+  white-space: normal;      /* 允许换行 */
+  word-wrap: break-word;    /* 长单词换行 */
 }
 </style>

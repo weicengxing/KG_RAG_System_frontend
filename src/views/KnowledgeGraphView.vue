@@ -39,21 +39,28 @@
       <!-- 图谱构建标签页 -->
       <el-tab-pane label="图谱构建" name="build">
         <div class="build-pipeline">
-          <!-- 步骤指示器 -->
-          <el-steps :active="currentStep" finish-status="success" align-center class="steps-container">
-            <el-step title="上传文档" icon="Upload" />
-            <el-step title="文本分块" icon="Document" />
-            <el-step title="实体抽取" icon="Search" />
-            <el-step title="图谱生成" icon="Share" />
-          </el-steps>
+          <!-- 步骤指示器（按方案1：外层包一层真实DOM容器，steps-container 放到 div 上） -->
+          <div class="steps-container">
+            <el-steps :active="currentStep" finish-status="success" align-center>
+              <el-step title="上传文档" :icon="Upload" />
+              <el-step title="文本分块" :icon="Document" />
+              <el-step title="实体抽取" :icon="Search" />
+              <el-step title="图谱生成" :icon="Share" />
+            </el-steps>
+          </div>
 
           <!-- 步骤1: 文档上传 -->
           <div v-if="currentStep === 0" class="step-content">
-            <el-card class="panel-card upload-card" shadow="never">
+            <el-card class="panel-card upload-card step-upload-theme" shadow="never">
+              <div class="step-decoration upload-decoration">
+                <div class="deco-circle deco-circle-1"></div>
+                <div class="deco-circle deco-circle-2"></div>
+                <div class="deco-pattern"></div>
+              </div>
               <template #header>
                 <div class="card-header">
                   <div class="card-title">
-                    <span class="emoji">📄</span>
+                    <span class="emoji emoji-large upload-emoji">📄</span>
                     <span>文档上传</span>
                   </div>
                   <el-tag type="info" effect="light" round>PDF · ≤ 20MB</el-tag>
@@ -106,11 +113,16 @@
 
           <!-- 步骤2: 文本分块 -->
           <div v-if="currentStep === 1" class="step-content">
-            <el-card class="panel-card" shadow="never">
+            <el-card class="panel-card step-chunk-theme" shadow="never">
+              <div class="step-decoration chunk-decoration">
+                <div class="deco-circle deco-circle-1"></div>
+                <div class="deco-circle deco-circle-2"></div>
+                <div class="deco-grid"></div>
+              </div>
               <template #header>
                 <div class="card-header">
                   <div class="card-title">
-                    <span class="emoji">📝</span>
+                    <span class="emoji emoji-large chunk-emoji">📝</span>
                     <span>文本分块</span>
                   </div>
                   <el-tag v-if="chunks.length > 0" type="success" effect="light" round>
@@ -181,11 +193,16 @@
 
           <!-- 步骤3: 实体抽取 -->
           <div v-if="currentStep === 2" class="step-content">
-            <el-card class="panel-card" shadow="never">
+            <el-card class="panel-card step-extract-theme" shadow="never">
+              <div class="step-decoration extract-decoration">
+                <div class="deco-circle deco-circle-1"></div>
+                <div class="deco-circle deco-circle-2"></div>
+                <div class="deco-wave"></div>
+              </div>
               <template #header>
                 <div class="card-header">
                   <div class="card-title">
-                    <span class="emoji">🔍</span>
+                    <span class="emoji emoji-large extract-emoji">🔍</span>
                     <span>实体关系抽取</span>
                   </div>
                   <el-tag v-if="triplets.length > 0" type="success" effect="light" round>
@@ -242,11 +259,16 @@
 
           <!-- 步骤4: 图谱可视化 -->
           <div v-if="currentStep === 3" class="step-content">
-            <el-card class="panel-card" shadow="never">
+            <el-card class="panel-card step-graph-theme" shadow="never">
+              <div class="step-decoration graph-decoration">
+                <div class="deco-circle deco-circle-1"></div>
+                <div class="deco-circle deco-circle-2"></div>
+                <div class="deco-network"></div>
+              </div>
               <template #header>
                 <div class="card-header">
                   <div class="card-title">
-                    <span class="emoji">🕸️</span>
+                    <span class="emoji emoji-large graph-emoji">🕸️</span>
                     <span>知识图谱</span>
                   </div>
                   <div class="header-actions">
@@ -1152,10 +1174,14 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.75);
   border-top-left-radius: calc(var(--radius) + 2px);
   border-top-right-radius: calc(var(--radius) + 2px);
+  position: relative;
+  z-index: 1;
 }
 
 :deep(.el-card__body) {
   padding: 16px !important;
+  position: relative;
+  z-index: 1;
 }
 
 .build-pipeline {
@@ -1164,10 +1190,201 @@ onUnmounted(() => {
 
 .steps-container {
   margin: 6px 0 18px 0;
-  padding: 14px 12px;
+  padding: 20px 16px;
   border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.10);
   border: 1px solid rgba(255, 255, 255, 0.18);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Steps 装饰背景 */
+.steps-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background:
+    linear-gradient(90deg,
+      rgba(59, 130, 246, 0.08) 0%,
+      rgba(34, 197, 94, 0.08) 33%,
+      rgba(168, 85, 247, 0.08) 66%,
+      rgba(245, 158, 11, 0.08) 100%);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* 每个步骤项的样式 */
+.steps-container :deep(.el-step) {
+  position: relative;
+}
+
+/* 步骤图标容器 */
+.steps-container :deep(.el-step__icon) {
+  width: 52px !important;
+  height: 52px !important;
+  border-radius: 16px !important;
+  transition: all 0.3s ease !important;
+  position: relative !important;
+  overflow: visible !important;
+  border: 2px solid transparent !important;
+}
+
+/* 步骤图标内部 */
+.steps-container :deep(.el-step__icon-inner) {
+  font-size: 24px !important;
+  font-weight: bold !important;
+  position: relative !important;
+  z-index: 2 !important;
+}
+
+/* 未完成状态 - 默认白色背景需要覆盖 */
+.steps-container :deep(.el-step__icon.is-text) {
+  background: rgba(255, 255, 255, 0.85) !important;
+  border-color: rgba(148, 163, 184, 0.30) !important;
+  box-shadow: 0 4px 12px rgba(2, 6, 23, 0.08) !important;
+}
+
+/* 进行中状态 */
+.steps-container :deep(.el-step.is-process .el-step__icon) {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(99, 102, 241, 0.95)) !important;
+  border-color: rgba(59, 130, 246, 0.50) !important;
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.35) !important;
+  animation: pulseGlow 2s ease-in-out infinite !important;
+}
+
+.steps-container :deep(.el-step.is-process .el-step__icon-inner) {
+  color: #ffffff !important;
+}
+
+/* 已完成状态 */
+.steps-container :deep(.el-step.is-success .el-step__icon) {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.95), rgba(16, 185, 129, 0.95)) !important;
+  border-color: rgba(34, 197, 94, 0.50) !important;
+  box-shadow: 0 6px 18px rgba(34, 197, 94, 0.28) !important;
+}
+
+.steps-container :deep(.el-step.is-success .el-step__icon-inner) {
+  color: #ffffff !important;
+}
+
+/* 每个步骤的独特主题色 - 第1步：上传文档（蓝色）*/
+.steps-container :deep(.el-step:nth-child(1) .el-step__icon.is-text) {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(99, 102, 241, 0.10)) !important;
+  border-color: rgba(59, 130, 246, 0.35) !important;
+  position: relative !important;
+}
+
+.steps-container :deep(.el-step:nth-child(1) .el-step__icon.is-text::before) {
+  content: '📄' !important;
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  font-size: 28px !important;
+  opacity: 0.3 !important;
+  z-index: 1 !important;
+}
+
+/* 第2步：文本分块（绿色）*/
+.steps-container :deep(.el-step:nth-child(2) .el-step__icon.is-text) {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(16, 185, 129, 0.10)) !important;
+  border-color: rgba(34, 197, 94, 0.35) !important;
+  position: relative !important;
+}
+
+.steps-container :deep(.el-step:nth-child(2) .el-step__icon.is-text::before) {
+  content: '📝' !important;
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  font-size: 28px !important;
+  opacity: 0.3 !important;
+  z-index: 1 !important;
+}
+
+/* 第3步：实体抽取（紫色）*/
+.steps-container :deep(.el-step:nth-child(3) .el-step__icon.is-text) {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(147, 51, 234, 0.10)) !important;
+  border-color: rgba(168, 85, 247, 0.35) !important;
+  position: relative !important;
+}
+
+.steps-container :deep(.el-step:nth-child(3) .el-step__icon.is-text::before) {
+  content: '🔍' !important;
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  font-size: 28px !important;
+  opacity: 0.3 !important;
+  z-index: 1 !important;
+}
+
+/* 第4步：图谱生成（橙色）*/
+.steps-container :deep(.el-step:nth-child(4) .el-step__icon.is-text) {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(251, 146, 60, 0.10)) !important;
+  border-color: rgba(245, 158, 11, 0.35) !important;
+  position: relative !important;
+}
+
+.steps-container :deep(.el-step:nth-child(4) .el-step__icon.is-text::before) {
+  content: '🕸️' !important;
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  font-size: 28px !important;
+  opacity: 0.3 !important;
+  z-index: 1 !important;
+}
+
+/* 步骤标题样式 */
+.steps-container :deep(.el-step__title) {
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+  margin-top: 8px !important;
+  text-shadow: 0 2px 4px rgba(2, 6, 23, 0.15) !important;
+}
+
+.steps-container :deep(.el-step.is-process .el-step__title) {
+  color: rgba(255, 255, 255, 0.98) !important;
+  font-weight: 800 !important;
+}
+
+.steps-container :deep(.el-step.is-success .el-step__title) {
+  color: rgba(255, 255, 255, 0.90) !important;
+}
+
+/* 连接线样式 */
+.steps-container :deep(.el-step__line) {
+  background: rgba(255, 255, 255, 0.20) !important;
+  height: 3px !important;
+  border-radius: 99px !important;
+}
+
+.steps-container :deep(.el-step.is-success .el-step__line) {
+  background: linear-gradient(90deg, rgba(34, 197, 94, 0.50), rgba(255, 255, 255, 0.20)) !important;
+}
+
+.steps-container :deep(.el-step.is-process .el-step__line) {
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.50), rgba(255, 255, 255, 0.20)) !important;
+}
+
+/* 脉冲发光动画 */
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 8px 24px rgba(59, 130, 246, 0.35);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 8px 32px rgba(59, 130, 246, 0.50);
+    transform: scale(1.05);
+  }
 }
 
 .step-content {
@@ -1198,6 +1415,217 @@ onUnmounted(() => {
   place-items: center;
   background: rgba(59, 130, 246, 0.12);
   border: 1px solid rgba(59, 130, 246, 0.18);
+}
+
+.emoji-large {
+  width: 48px !important;
+  height: 48px !important;
+  font-size: 26px;
+  box-shadow: 0 8px 20px rgba(2, 6, 23, 0.10);
+  transition: transform 0.3s ease;
+}
+
+.emoji-large:hover {
+  transform: scale(1.1) rotate(5deg);
+}
+
+/* 步骤主题样式 */
+.step-upload-theme {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(99, 102, 241, 0.05) 100%) !important;
+  border: 2px solid rgba(59, 130, 246, 0.25) !important;
+}
+
+.step-chunk-theme {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.08) 0%, rgba(16, 185, 129, 0.05) 100%) !important;
+  border: 2px solid rgba(34, 197, 94, 0.25) !important;
+}
+
+.step-extract-theme {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.08) 0%, rgba(147, 51, 234, 0.05) 100%) !important;
+  border: 2px solid rgba(168, 85, 247, 0.25) !important;
+}
+
+.step-graph-theme {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(251, 146, 60, 0.05) 100%) !important;
+  border: 2px solid rgba(245, 158, 11, 0.25) !important;
+}
+
+/* 装饰元素 */
+.step-decoration {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+  opacity: 0.4;
+}
+
+.deco-circle {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.35) 0%, transparent 70%);
+  animation: float 6s ease-in-out infinite;
+}
+
+.deco-circle-1 {
+  width: 240px;
+  height: 240px;
+  top: -80px;
+  right: -80px;
+  animation-delay: 0s;
+}
+
+.deco-circle-2 {
+  width: 180px;
+  height: 180px;
+  bottom: -60px;
+  right: 120px;
+  animation-delay: 1.5s;
+}
+
+/* 上传步骤装饰 - 文档图案 */
+.upload-decoration .deco-pattern {
+  position: absolute;
+  top: 20%;
+  right: 8%;
+  width: 160px;
+  height: 200px;
+  background:
+    linear-gradient(to bottom, rgba(59, 130, 246, 0.18) 2px, transparent 2px),
+    linear-gradient(to right, rgba(59, 130, 246, 0.18) 2px, transparent 2px);
+  background-size: 20px 20px;
+  border-radius: 12px;
+  transform: rotate(-15deg);
+  opacity: 0.5;
+  animation: slideDown 4s ease-in-out infinite;
+}
+
+/* 分块步骤装饰 - 网格图案 */
+.chunk-decoration .deco-grid {
+  position: absolute;
+  top: 15%;
+  right: 5%;
+  width: 200px;
+  height: 200px;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(34, 197, 94, 0.22) 0px, rgba(34, 197, 94, 0.22) 1px, transparent 1px, transparent 25px),
+    repeating-linear-gradient(90deg, rgba(34, 197, 94, 0.22) 0px, rgba(34, 197, 94, 0.22) 1px, transparent 1px, transparent 25px);
+  border-radius: 12px;
+  transform: rotate(12deg);
+  animation: pulse 3s ease-in-out infinite;
+}
+
+/* 抽取步骤装饰 - 波浪图案 */
+.extract-decoration .deco-wave {
+  position: absolute;
+  top: 25%;
+  right: 10%;
+  width: 180px;
+  height: 120px;
+  background:
+    radial-gradient(circle at 20% 50%, rgba(168, 85, 247, 0.25) 0%, transparent 50%),
+    radial-gradient(circle at 50% 50%, rgba(168, 85, 247, 0.25) 0%, transparent 50%),
+    radial-gradient(circle at 80% 50%, rgba(168, 85, 247, 0.25) 0%, transparent 50%);
+  background-size: 60px 60px;
+  border-radius: 12px;
+  animation: wave 4s ease-in-out infinite;
+}
+
+/* 图谱步骤装饰 - 网络图案 */
+.graph-decoration .deco-network {
+  position: absolute;
+  top: 20%;
+  right: 8%;
+  width: 180px;
+  height: 180px;
+  background-image:
+    radial-gradient(circle at 30% 30%, rgba(245, 158, 11, 0.35) 3px, transparent 3px),
+    radial-gradient(circle at 70% 30%, rgba(245, 158, 11, 0.35) 3px, transparent 3px),
+    radial-gradient(circle at 50% 70%, rgba(245, 158, 11, 0.35) 3px, transparent 3px),
+    linear-gradient(135deg, rgba(245, 158, 11, 0.22) 2px, transparent 2px);
+  background-size: 100% 100%, 100% 100%, 100% 100%, 80px 80px;
+  border-radius: 12px;
+  animation: rotate360 8s linear infinite;
+}
+
+/* Emoji主题色 */
+.upload-emoji {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.18) 0%, rgba(99, 102, 241, 0.15) 100%) !important;
+  border-color: rgba(59, 130, 246, 0.30) !important;
+}
+
+.chunk-emoji {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.18) 0%, rgba(16, 185, 129, 0.15) 100%) !important;
+  border-color: rgba(34, 197, 94, 0.30) !important;
+}
+
+.extract-emoji {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.18) 0%, rgba(147, 51, 234, 0.15) 100%) !important;
+  border-color: rgba(168, 85, 247, 0.30) !important;
+}
+
+.graph-emoji {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.18) 0%, rgba(251, 146, 60, 0.15) 100%) !important;
+  border-color: rgba(245, 158, 11, 0.30) !important;
+}
+
+/* 动画效果 */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-20px) scale(1.05);
+  }
+}
+
+@keyframes slideDown {
+  0%, 100% {
+    transform: rotate(-15deg) translateY(0);
+  }
+  50% {
+    transform: rotate(-15deg) translateY(15px);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: rotate(12deg) scale(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: rotate(12deg) scale(1.1);
+    opacity: 0.7;
+  }
+}
+
+@keyframes wave {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(10px);
+  }
+}
+
+@keyframes rotate360 {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .header-actions {

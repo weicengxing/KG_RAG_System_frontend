@@ -2,10 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 加上这句，确保 html 和 body 是全屏深色的，防止有白边 */
+/* 修改后的样式 */
 html, body, #app {
-  height: 100%;
+  min-height: 100%; /* 使用最小高度，确保内容多时可以撑开 */
   margin: 0;
   padding: 0;
-  overflow: hidden; /* 防止此时出现滚动条 */
+  overflow: auto !important; /* 允许滚动 */
+  background: #764ba2; /* 设置一个和背景色相近的底色，防止滚动露白 */
 }

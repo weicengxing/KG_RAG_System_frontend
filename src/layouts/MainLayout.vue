@@ -59,6 +59,7 @@ const globalAudioPlayer = ref(null)
 // 导航项配置
 const navItems = [
   { name: '控制台', path: '/dashboard', icon: '📊' },
+  { name: '知识图谱', path: '/knowledge-graph', icon: '🔗' },
   { name: '文学殿堂', path: '/novel', icon: '📖' },
   { name: '音乐播放器', path: '/music', icon: '🎵' },
   { name: '聊天室', path: '/chat-room', icon: '💬' },

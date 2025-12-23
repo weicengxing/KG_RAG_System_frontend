@@ -63,6 +63,8 @@ const navItems = [
   { name: '文学殿堂', path: '/novel', icon: '📖' },
   { name: '音乐播放器', path: '/music', icon: '🎵' },
   { name: '聊天室', path: '/chat-room', icon: '💬' },
+  
+  
   { name: '敬请期待', path: '/coming-soon', icon: '⏳' }
 
   // 可以在这里添加更多导航项

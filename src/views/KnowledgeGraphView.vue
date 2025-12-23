@@ -1,489 +1,516 @@
 <template>
   <div class="knowledge-graph-container">
+    <!-- 修复：星光背景调整为 fixed 定位，并提高 z-index 确保可见但位于内容之下 -->
     <div class="bg-aurora" aria-hidden="true"></div>
 
-    <el-card class="page-header" shadow="never">
-      <div class="header-inner">
-        <div class="brand">
-          <div class="brand-icon">
-            <el-icon><Connection /></el-icon>
-          </div>
-          <div class="brand-text">
-            <h1 class="title">知识图谱RAG系统</h1>
-            <p class="subtitle">智能文档解析 · 图谱构建 · 知识问答</p>
-          </div>
-        </div>
-
-        <div class="header-meta">
-          <div class="meta-chip">
-            <span class="dot" :class="{ on: currentStep >= 0 }"></span>
-            <span class="label">上传</span>
-          </div>
-          <div class="meta-chip">
-            <span class="dot" :class="{ on: currentStep >= 1 }"></span>
-            <span class="label">分块</span>
-          </div>
-          <div class="meta-chip">
-            <span class="dot" :class="{ on: currentStep >= 2 }"></span>
-            <span class="label">抽取</span>
-          </div>
-          <div class="meta-chip">
-            <span class="dot" :class="{ on: currentStep >= 3 }"></span>
-            <span class="label">图谱</span>
-          </div>
-        </div>
-      </div>
-    </el-card>
-
-    <el-tabs v-model="activeTab" class="main-tabs">
-      <!-- 图谱构建标签页 -->
-      <el-tab-pane label="图谱构建" name="build">
-        <div class="build-pipeline">
-          <!-- 步骤指示器（按方案1：外层包一层真实DOM容器，steps-container 放到 div 上） -->
-          <div class="steps-container">
-            <el-steps :active="currentStep" finish-status="success" align-center>
-              <el-step title="上传文档" :icon="Upload" />
-              <el-step title="文本分块" :icon="Document" />
-              <el-step title="实体抽取" :icon="Search" />
-              <el-step title="图谱生成" :icon="Share" />
-            </el-steps>
+    <div class="content-wrapper">
+      <el-card class="page-header" shadow="never">
+        <div class="header-inner">
+          <div class="brand">
+            <div class="brand-icon">
+              <el-icon><Connection /></el-icon>
+            </div>
+            <div class="brand-text">
+              <h1 class="title">知识图谱RAG系统</h1>
+              <p class="subtitle">智能文档解析 · 图谱构建 · 知识问答</p>
+            </div>
           </div>
 
-          <!-- 步骤1: 文档上传 -->
-          <div v-if="currentStep === 0" class="step-content">
-            <el-card class="panel-card upload-card step-upload-theme" shadow="never">
-              <div class="step-decoration upload-decoration">
-                <div class="deco-circle deco-circle-1"></div>
-                <div class="deco-circle deco-circle-2"></div>
-                <div class="deco-pattern"></div>
-              </div>
-              <template #header>
-                <div class="card-header">
-                  <div class="card-title">
-                    <span class="emoji emoji-large upload-emoji">📄</span>
-                    <span>文档上传</span>
-                  </div>
-                  <el-tag type="info" effect="light" round>PDF · ≤ 20MB</el-tag>
-                </div>
-              </template>
-
-              <div class="upload-section">
-                <el-upload
-                  class="upload-demo"
-                  drag
-                  :auto-upload="false"
-                  :on-change="handleFileChange"
-                  accept=".pdf"
-                  :limit="1"
-                >
-                  <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-                  <div class="el-upload__text">
-                    拖拽 PDF 文件到此处或 <em>点击上传</em>
-                  </div>
-                  <template #tip>
-                    <div class="el-upload__tip">
-                      建议选择结构清晰的 PDF（可复制文本），提升抽取质量
-                    </div>
-                  </template>
-                </el-upload>
-
-                <div class="primary-actions">
-                  <el-button
-                    type="primary"
-                    size="large"
-                    :disabled="!selectedFile"
-                    @click="uploadDocument"
-                    :loading="uploading"
-                    class="action-button"
-                  >
-                    <el-icon class="btn-icon"><Upload /></el-icon>
-                    开始解析文档
-                  </el-button>
-
-                  <div class="hint-row">
-                    <span class="hint" v-if="selectedFile">
-                      已选择：<strong>{{ selectedFileName }}</strong>
-                    </span>
-                    <span class="hint" v-else>未选择文件</span>
-                  </div>
-                </div>
-              </div>
-            </el-card>
-          </div>
-
-          <!-- 步骤2: 文本分块 -->
-          <div v-if="currentStep === 1" class="step-content">
-            <el-card class="panel-card step-chunk-theme" shadow="never">
-              <div class="step-decoration chunk-decoration">
-                <div class="deco-circle deco-circle-1"></div>
-                <div class="deco-circle deco-circle-2"></div>
-                <div class="deco-grid"></div>
-              </div>
-              <template #header>
-                <div class="card-header">
-                  <div class="card-title">
-                    <span class="emoji emoji-large chunk-emoji">📝</span>
-                    <span>文本分块</span>
-                  </div>
-                  <el-tag v-if="chunks.length > 0" type="success" effect="light" round>
-                    共 {{ chunks.length }} 个分块
-                  </el-tag>
-                </div>
-              </template>
-
-              <el-row :gutter="20" class="split-grid">
-                <el-col :span="12">
-                  <div class="panel-head">
-                    <h4 class="panel-title">原始文本预览</h4>
-                    <el-tag type="info" effect="plain" round size="small">Preview</el-tag>
-                  </div>
-                  <el-scrollbar height="420px">
-                    <div class="text-preview">
-                      {{ documentText || '加载中...' }}
-                    </div>
-                  </el-scrollbar>
-                </el-col>
-
-                <el-col :span="12">
-                  <div class="panel-head">
-                    <h4 class="panel-title">分块结果</h4>
-                    <el-tag type="warning" effect="plain" round size="small">Chunks</el-tag>
-                  </div>
-                  <el-scrollbar height="420px">
-                    <div class="chunks-list">
-                      <el-card
-                        v-for="chunk in chunks"
-                        :key="chunk.index"
-                        class="chunk-item"
-                        shadow="never"
-                      >
-                        <div class="chunk-header">
-                          <el-tag size="small" type="info" effect="light" round>块 {{ chunk.index + 1 }}</el-tag>
-                          <span class="chunk-length">{{ chunk.length }} 字符</span>
-                        </div>
-                        <div class="chunk-content">
-                          {{ (chunk.content || '').substring(0, 120) }}{{ (chunk.content || '').length > 120 ? '…' : '' }}
-                        </div>
-                      </el-card>
-
-                      <el-empty
-                        v-if="chunks.length === 0"
-                        description="暂无分块结果"
-                        :image-size="100"
-                      />
-                    </div>
-                  </el-scrollbar>
-                </el-col>
-              </el-row>
-
-              <div class="footer-actions">
-                <el-button
-                  type="primary"
-                  size="large"
-                  @click="extractEntities"
-                  :loading="extracting"
-                  class="action-button"
-                >
-                  <el-icon class="btn-icon"><Search /></el-icon>
-                  提取实体关系
-                </el-button>
-              </div>
-            </el-card>
-          </div>
-
-          <!-- 步骤3: 实体抽取 -->
-          <div v-if="currentStep === 2" class="step-content">
-            <el-card class="panel-card step-extract-theme" shadow="never">
-              <div class="step-decoration extract-decoration">
-                <div class="deco-circle deco-circle-1"></div>
-                <div class="deco-circle deco-circle-2"></div>
-                <div class="deco-wave"></div>
-              </div>
-              <template #header>
-                <div class="card-header">
-                  <div class="card-title">
-                    <span class="emoji emoji-large extract-emoji">🔍</span>
-                    <span>实体关系抽取</span>
-                  </div>
-                  <el-tag v-if="triplets.length > 0" type="success" effect="light" round>
-                    共 {{ triplets.length }} 个三元组
-                  </el-tag>
-                </div>
-              </template>
-
-              <el-scrollbar height="520px">
-                <div class="triplets-list">
-                  <el-card
-                    v-for="(triplet, idx) in triplets"
-                    :key="idx"
-                    class="triplet-item"
-                    shadow="never"
-                  >
-                    <div class="triplet-content">
-                      <el-tag type="success" effect="light" round>{{ triplet.head }}</el-tag>
-                      <span class="relation-arrow">
-                        <span class="arrow-line"></span>
-                        <span class="rel">{{ triplet.relation }}</span>
-                        <span class="arrow-line"></span>
-                      </span>
-                      <el-tag type="warning" effect="light" round>{{ triplet.tail }}</el-tag>
-                    </div>
-                    <div class="triplet-meta">
-                      <el-tag size="small" type="info" effect="plain" round>{{ triplet.head_type }}</el-tag>
-                      <el-tag size="small" type="info" effect="plain" round>{{ triplet.tail_type }}</el-tag>
-                    </div>
-                  </el-card>
-
-                  <el-empty
-                    v-if="triplets.length === 0"
-                    description="暂无三元组结果"
-                    :image-size="110"
-                  />
-                </div>
-              </el-scrollbar>
-
-              <div class="footer-actions">
-                <el-button
-                  type="primary"
-                  size="large"
-                  @click="buildGraph"
-                  :loading="building"
-                  class="action-button"
-                >
-                  <el-icon class="btn-icon"><Share /></el-icon>
-                  构建知识图谱
-                </el-button>
-              </div>
-            </el-card>
-          </div>
-
-          <!-- 步骤4: 图谱可视化 -->
-          <div v-if="currentStep === 3" class="step-content">
-            <el-card class="panel-card step-graph-theme" shadow="never">
-              <div class="step-decoration graph-decoration">
-                <div class="deco-circle deco-circle-1"></div>
-                <div class="deco-circle deco-circle-2"></div>
-                <div class="deco-network"></div>
-              </div>
-              <template #header>
-                <div class="card-header">
-                  <div class="card-title">
-                    <span class="emoji emoji-large graph-emoji">🕸️</span>
-                    <span>知识图谱</span>
-                  </div>
-                  <div class="header-actions">
-                    <el-button size="small" @click="loadGraphData" plain>
-                      <el-icon class="btn-icon"><Document /></el-icon>
-                      刷新
-                    </el-button>
-                    <el-button size="small" @click="resetPipeline" plain>
-                      重新开始
-                    </el-button>
-                  </div>
-                </div>
-              </template>
-
-              <div class="graph-stage">
-                <div ref="graphContainer" class="graph-container"></div>
-              </div>
-
-              <div class="graph-stats">
-                <div class="stat-card">
-                  <div class="stat-title">节点数</div>
-                  <div class="stat-value">{{ graphData.nodes?.length || 0 }}</div>
-                </div>
-                <div class="stat-card">
-                  <div class="stat-title">边数</div>
-                  <div class="stat-value">{{ graphData.edges?.length || 0 }}</div>
-                </div>
-                <div class="stat-card">
-                  <div class="stat-title">耗时</div>
-                  <div class="stat-value">{{ buildTime }}<span class="stat-suffix">秒</span></div>
-                </div>
-              </div>
-            </el-card>
+          <div class="header-meta">
+            <div class="meta-chip">
+              <span class="dot" :class="{ on: currentStep >= 0 }"></span>
+              <span class="label">上传</span>
+            </div>
+            <div class="meta-chip">
+              <span class="dot" :class="{ on: currentStep >= 1 }"></span>
+              <span class="label">分块</span>
+            </div>
+            <div class="meta-chip">
+              <span class="dot" :class="{ on: currentStep >= 2 }"></span>
+              <span class="label">抽取</span>
+            </div>
+            <div class="meta-chip">
+              <span class="dot" :class="{ on: currentStep >= 3 }"></span>
+              <span class="label">图谱</span>
+            </div>
           </div>
         </div>
-      </el-tab-pane>
+      </el-card>
 
-      <!-- RAG问答标签页 -->
-      <el-tab-pane label="智能问答" name="qa">
-        <div class="qa-container">
-          <el-row :gutter="20" class="qa-grid">
-            <!-- 左侧：问答界面 -->
-            <el-col :span="12" class="qa-col">
-              <el-card class="panel-card chat-card" shadow="never">
+      <el-tabs v-model="activeTab" class="main-tabs">
+        <!-- 图谱构建标签页 -->
+        <el-tab-pane label="图谱构建" name="build">
+          <div class="build-pipeline">
+            <!-- 步骤指示器 -->
+            <div class="steps-container">
+              <el-steps :active="currentStep" finish-status="success" align-center>
+                <el-step title="上传文档" :icon="Upload" />
+                <el-step title="文本分块" :icon="Document" />
+                <el-step title="实体抽取" :icon="Search" />
+                <el-step title="图谱生成" :icon="Share" />
+              </el-steps>
+            </div>
+
+            <!-- 步骤1: 文档上传 -->
+            <div v-if="currentStep === 0" class="step-content">
+              <el-card class="panel-card upload-card step-upload-theme" shadow="never">
+                <div class="step-decoration upload-decoration">
+                  <div class="deco-circle deco-circle-1"></div>
+                  <div class="deco-circle deco-circle-2"></div>
+                  <div class="deco-pattern"></div>
+                </div>
                 <template #header>
                   <div class="card-header">
                     <div class="card-title">
-                      <span class="emoji">💬</span>
-                      <span>知识问答</span>
+                      <span class="emoji emoji-large upload-emoji">📄</span>
+                      <span>文档上传</span>
+                    </div>
+                    <el-tag type="info" effect="light" round>PDF · ≤ 20MB</el-tag>
+                  </div>
+                </template>
+
+                <div class="upload-section">
+                  <el-upload
+                    class="upload-demo"
+                    drag
+                    :auto-upload="false"
+                    :on-change="handleFileChange"
+                    accept=".pdf"
+                    :limit="1"
+                  >
+                    <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+                    <div class="el-upload__text">
+                      拖拽 PDF 文件到此处或 <em>点击上传</em>
+                    </div>
+                    <template #tip>
+                      <div class="el-upload__tip">
+                        建议选择结构清晰的 PDF（可复制文本），提升抽取质量
+                      </div>
+                    </template>
+                  </el-upload>
+
+                  <div class="primary-actions">
+                    <el-button
+                      type="primary"
+                      size="large"
+                      :disabled="!selectedFile"
+                      @click="uploadDocument"
+                      :loading="uploading"
+                      class="action-button"
+                    >
+                      <el-icon class="btn-icon"><Upload /></el-icon>
+                      开始解析文档
+                    </el-button>
+
+                    <div class="hint-row">
+                      <span class="hint" v-if="selectedFile">
+                        已选择：<strong>{{ selectedFileName }}</strong>
+                      </span>
+                      <span class="hint" v-else>未选择文件</span>
+                    </div>
+                  </div>
+                </div>
+              </el-card>
+            </div>
+
+            <!-- 步骤2: 文本分块 -->
+            <div v-if="currentStep === 1" class="step-content">
+              <el-card class="panel-card step-chunk-theme" shadow="never">
+                <div class="step-decoration chunk-decoration">
+                  <div class="deco-circle deco-circle-1"></div>
+                  <div class="deco-circle deco-circle-2"></div>
+                  <div class="deco-grid"></div>
+                </div>
+                <template #header>
+                  <div class="card-header">
+                    <div class="card-title">
+                      <span class="emoji emoji-large chunk-emoji">📝</span>
+                      <span>文本分块</span>
+                    </div>
+                    <el-tag v-if="chunks.length > 0" type="success" effect="light" round>
+                      共 {{ chunks.length }} 个分块
+                    </el-tag>
+                  </div>
+                </template>
+
+                <el-row :gutter="20" class="split-grid">
+                  <el-col :span="12">
+                    <div class="panel-head">
+                      <h4 class="panel-title">原始文本预览</h4>
+                      <el-tag type="info" effect="plain" round size="small">Preview</el-tag>
+                    </div>
+                    <el-scrollbar height="420px">
+                      <div class="text-preview">
+                        {{ documentText || '加载中...' }}
+                      </div>
+                    </el-scrollbar>
+                  </el-col>
+
+                  <el-col :span="12">
+                    <div class="panel-head">
+                      <h4 class="panel-title">分块结果</h4>
+                      <el-tag type="warning" effect="plain" round size="small">Chunks</el-tag>
+                    </div>
+                    <el-scrollbar height="420px">
+                      <div class="chunks-list">
+                        <el-card
+                          v-for="chunk in chunks"
+                          :key="chunk.index"
+                          class="chunk-item"
+                          shadow="never"
+                        >
+                          <div class="chunk-header">
+                            <el-tag size="small" type="info" effect="light" round>块 {{ chunk.index + 1 }}</el-tag>
+                            <span class="chunk-length">{{ chunk.length }} 字符</span>
+                          </div>
+                          <div class="chunk-content">
+                            {{ (chunk.content || '').substring(0, 120) }}{{ (chunk.content || '').length > 120 ? '…' : '' }}
+                          </div>
+                        </el-card>
+
+                        <el-empty
+                          v-if="chunks.length === 0"
+                          description="暂无分块结果"
+                          :image-size="100"
+                        />
+                      </div>
+                    </el-scrollbar>
+                  </el-col>
+                </el-row>
+
+                <div class="footer-actions">
+                  <el-button
+                    type="primary"
+                    size="large"
+                    @click="extractEntities"
+                    :loading="extracting"
+                    class="action-button"
+                  >
+                    <el-icon class="btn-icon"><Search /></el-icon>
+                    提取实体关系
+                  </el-button>
+                </div>
+              </el-card>
+            </div>
+
+            <!-- 步骤3: 实体抽取 -->
+            <div v-if="currentStep === 2" class="step-content">
+              <el-card class="panel-card step-extract-theme" shadow="never">
+                <div class="step-decoration extract-decoration">
+                  <div class="deco-circle deco-circle-1"></div>
+                  <div class="deco-circle deco-circle-2"></div>
+                  <div class="deco-wave"></div>
+                </div>
+                <template #header>
+                  <div class="card-header">
+                    <div class="card-title">
+                      <span class="emoji emoji-large extract-emoji">🔍</span>
+                      <span>实体关系抽取</span>
+                    </div>
+                    <el-tag v-if="triplets.length > 0" type="success" effect="light" round>
+                      共 {{ triplets.length }} 个三元组
+                    </el-tag>
+                  </div>
+                </template>
+
+                <el-scrollbar height="520px">
+                  <div class="triplets-list">
+                    <el-card
+                      v-for="(triplet, idx) in triplets"
+                      :key="idx"
+                      class="triplet-item"
+                      shadow="never"
+                    >
+                      <div class="triplet-content">
+                        <el-tag type="success" effect="light" round>{{ triplet.head }}</el-tag>
+                        <span class="relation-arrow">
+                          <span class="arrow-line"></span>
+                          <span class="rel">{{ triplet.relation }}</span>
+                          <span class="arrow-line"></span>
+                        </span>
+                        <el-tag type="warning" effect="light" round>{{ triplet.tail }}</el-tag>
+                      </div>
+                      <div class="triplet-meta">
+                        <el-tag size="small" type="info" effect="plain" round>{{ triplet.head_type }}</el-tag>
+                        <el-tag size="small" type="info" effect="plain" round>{{ triplet.tail_type }}</el-tag>
+                      </div>
+                    </el-card>
+
+                    <el-empty
+                      v-if="triplets.length === 0"
+                      description="暂无三元组结果"
+                      :image-size="110"
+                    />
+                  </div>
+                </el-scrollbar>
+
+                <div class="footer-actions">
+                  <el-button
+                    type="primary"
+                    size="large"
+                    @click="buildGraph"
+                    :loading="building"
+                    class="action-button"
+                  >
+                    <el-icon class="btn-icon"><Share /></el-icon>
+                    构建知识图谱
+                  </el-button>
+                </div>
+              </el-card>
+            </div>
+
+            <!-- 步骤4: 图谱可视化 -->
+            <div v-if="currentStep === 3" class="step-content">
+              <el-card class="panel-card step-graph-theme" shadow="never">
+                <div class="step-decoration graph-decoration">
+                  <div class="deco-circle deco-circle-1"></div>
+                  <div class="deco-circle deco-circle-2"></div>
+                  <div class="deco-network"></div>
+                </div>
+                <template #header>
+                  <div class="card-header">
+                    <div class="card-title">
+                      <span class="emoji emoji-large graph-emoji">🕸️</span>
+                      <span>知识图谱</span>
                     </div>
                     <div class="header-actions">
-                      <el-select
-                        v-model="selectedModel"
-                        placeholder="选择模型"
-                        size="default"
-                        style="width: 280px; margin-right: 10px;"
-                        popper-class="custom-model-popper" 
-                      >
-                        <el-option
-                          v-for="model in availableModels"
-                          :key="model.name"
-                          :label="model.name"
-                          :value="model.name"
-                        >
-                          <div class="model-option">
-                            <div class="model-name">{{ model.name }}</div>
-                            <div class="model-description">{{ model.description }}</div>
-                          </div>
-                        </el-option>
-                      </el-select>
-                      <el-button size="small" @click="newConversation" plain>
+                      <el-button size="small" @click="loadGraphData" plain>
                         <el-icon class="btn-icon"><Document /></el-icon>
-                        新建对话
+                        刷新
+                      </el-button>
+                      <el-button size="small" @click="resetPipeline" plain>
+                        重新开始
                       </el-button>
                     </div>
                   </div>
                 </template>
 
-                <div class="chat-wrapper">
-                  <el-scrollbar class="chat-scroll-area" ref="chatScroll">
-                    <div class="chat-messages">
-                      <div
-                        v-for="(msg, idx) in messages"
-                        :key="idx"
-                        :class="['message', msg.role]"
-                      >
-                        <div class="message-avatar" :class="msg.role">
-                          <span class="avatar-emoji">{{ msg.role === 'user' ? '🧑' : '🤖' }}</span>
-                        </div>
-                        <div class="message-bubble" :class="msg.role">
-                          <div
-                            class="message-text"
-                            :class="{ 'gradient-text': msg.role === 'assistant' }"
-                            v-html="formatMessageContent(msg.content, msg.role)"
-                          ></div>
-                          <div class="message-time">{{ msg.time }}</div>
-                        </div>
-                      </div>
+                <div class="graph-stage">
+                  <div ref="graphContainer" class="graph-container"></div>
+                </div>
 
-                      <div v-if="answering" class="message assistant">
-                        <div class="message-avatar assistant">
-                          <span class="avatar-emoji">🤖</span>
-                        </div>
-                        <div class="message-bubble assistant">
-                          <div class="message-text typing">
-                            <span class="typing-dot"></span>
-                            <span class="typing-dot"></span>
-                            <span class="typing-dot"></span>
-                            <span class="typing-text">思考中</span>
-                          </div>
-                        </div>
+                <div class="graph-stats">
+                  <div class="stat-card">
+                    <div class="stat-title">节点数</div>
+                    <div class="stat-value">{{ graphData.nodes?.length || 0 }}</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-title">边数</div>
+                    <div class="stat-value">{{ graphData.edges?.length || 0 }}</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-title">耗时</div>
+                    <div class="stat-value">{{ buildTime }}<span class="stat-suffix">秒</span></div>
+                  </div>
+                </div>
+              </el-card>
+            </div>
+          </div>
+        </el-tab-pane>
+
+        <!-- RAG问答标签页 -->
+        <el-tab-pane label="智能问答" name="qa">
+          <div class="qa-container">
+            <el-row :gutter="20" class="qa-grid">
+              <!-- 左侧：问答界面 -->
+              <el-col :span="12" class="qa-col">
+                <el-card class="panel-card chat-card" shadow="never">
+                  <template #header>
+                    <div class="card-header">
+                      <div class="card-title">
+                        <span class="emoji">💬</span>
+                        <span>知识问答</span>
+                      </div>
+                      <div class="header-actions">
+                        <el-select
+                          v-model="selectedModel"
+                          placeholder="选择模型"
+                          size="default"
+                          style="width: 280px; margin-right: 10px;"
+                          popper-class="custom-model-popper" 
+                        >
+                          <el-option
+                            v-for="model in availableModels"
+                            :key="model.name"
+                            :label="model.name"
+                            :value="model.name"
+                          >
+                            <div class="model-option">
+                              <div class="model-name">{{ model.name }}</div>
+                              <div class="model-description">{{ model.description }}</div>
+                            </div>
+                          </el-option>
+                        </el-select>
+                        <el-button size="small" @click="newConversation" plain>
+                          <el-icon class="btn-icon"><Document /></el-icon>
+                          新建对话
+                        </el-button>
                       </div>
                     </div>
-                  </el-scrollbar>
+                  </template>
 
-                  <div class="chat-input">
-                    <el-input
-                      v-model="question"
-                      placeholder="请输入您的问题..."
-                      @keyup.enter="askQuestion"
-                      :disabled="answering"
-                      clearable
-                    >
-                      <template #append>
+                  <!-- 聊天区域 Wrapper -->
+                  <div class="chat-wrapper">
+                    <el-scrollbar class="chat-scroll-area" ref="chatScroll" wrap-class="chat-scroll-wrap">
+                      <div class="chat-messages">
+                        <div class="chat-start-placeholder" v-if="messages.length === 0">
+                          <div class="placeholder-icon">🤖</div>
+                          <h3>欢迎使用 RAG 智能问答</h3>
+                          <p>我可以根据您上传的知识图谱回答相关问题。</p>
+                        </div>
+
+                        <div
+                          v-for="(msg, idx) in messages"
+                          :key="idx"
+                          :class="['message', msg.role]"
+                        >
+                          <!-- 头像 -->
+                          <div class="message-avatar" :class="msg.role">
+                            <img v-if="msg.role === 'user'" src="https://cdn-icons-png.flaticon.com/512/9308/9308304.png" alt="User" />
+                            <div v-else class="ai-avatar-inner">
+                              <span class="ai-icon">✨</span>
+                            </div>
+                          </div>
+
+                          <!-- 气泡 -->
+                          <div class="message-bubble" :class="msg.role">
+                            <div
+                              class="message-text"
+                              v-html="formatMessageContent(msg.content, msg.role)"
+                            ></div>
+                            <div class="message-time">{{ msg.time }}</div>
+                          </div>
+                        </div>
+
+                        <div v-if="answering" class="message assistant">
+                          <div class="message-avatar assistant">
+                            <div class="ai-avatar-inner typing-state">
+                              <span class="ai-icon">⏳</span>
+                            </div>
+                          </div>
+                          <div class="message-bubble assistant">
+                            <div class="message-text typing">
+                              <span class="typing-dot"></span>
+                              <span class="typing-dot"></span>
+                              <span class="typing-dot"></span>
+                              <span class="typing-text">AI 正在思考中...</span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <!-- 修复：占位符高度增加，防止最后一条消息被输入框遮挡 -->
+                        <div class="chat-bottom-spacer"></div>
+                      </div>
+                    </el-scrollbar>
+
+                    <!-- 悬浮输入框：绝对定位在Wrapper底部 -->
+                    <div class="chat-input-container">
+                      <div class="chat-input-wrapper">
+                        <el-input
+                          v-model="question"
+                          placeholder="请输入关于知识图谱的问题..."
+                          @keyup.enter="askQuestion"
+                          :disabled="answering"
+                          class="floating-input"
+                        >
+                        </el-input>
                         <el-button
                           @click="askQuestion"
                           :loading="answering"
                           type="primary"
+                          circle
+                          class="send-btn"
+                          :disabled="!question.trim()"
                         >
-                          发送
+                          <template #icon>
+                            <el-icon v-if="!answering"><position /></el-icon>
+                          </template>
                         </el-button>
-                      </template>
-                    </el-input>
-                    <div class="input-hint">
-                      提示：先在「图谱构建」完成流程，再来提问效果更好
-                    </div>
-                  </div>
-                </div>
-              </el-card>
-            </el-col>
-
-            <!-- 右侧：解释面板 -->
-            <el-col :span="12" class="qa-col">
-              <el-card class="panel-card explain-card" shadow="never">
-                <template #header>
-                  <div class="card-header">
-                    <div class="card-title">
-                      <span class="emoji">🔎</span>
-                      <span>答案溯源</span>
-                    </div>
-                    <el-tag type="success" effect="light" round>可解释</el-tag>
-                  </div>
-                </template>
-
-                <el-tabs v-model="explainTab" class="explain-tabs">
-                  <el-tab-pane label="引用片段" name="chunks">
-                    <el-scrollbar height="calc(100% - 10px)">
-                      <div class="source-chunks">
-                        <!-- 加载状态 -->
-                        <div v-if="loadingStatus.vectorSearch" class="loading-indicator">
-                          <el-icon class="is-loading"><Loading /></el-icon>
-                          <span>正在检索相关文档片段...</span>
-                        </div>
-
-                        <el-card
-                          v-for="(chunk, idx) in sourceChunks"
-                          :key="idx"
-                          class="source-chunk-item"
-                          shadow="never"
-                        >
-                          <div class="source-chunk-head">
-                            <el-tag size="small" type="info" effect="light" round>片段 {{ idx + 1 }}</el-tag>
-                          </div>
-                          <div class="chunk-text">{{ chunk.content }}</div>
-                        </el-card>
-
-                        <el-empty
-                          v-if="!loadingStatus.vectorSearch && sourceChunks.length === 0"
-                          description="暂无引用片段"
-                          :image-size="110"
-                        />
                       </div>
-                    </el-scrollbar>
-                  </el-tab-pane>
-
-                  <el-tab-pane label="局部图谱" name="graph">
-                    <!-- 加载状态 -->
-                    <div v-if="loadingStatus.graphSearch" class="loading-indicator">
-                      <el-icon class="is-loading"><Loading /></el-icon>
-                      <span>正在检索知识图谱...</span>
+                      <div class="input-hint">
+                        <span class="hint-badge">Tips</span>
+                        <span class="hint-text">支持上下文多轮对话，按 Enter 发送</span>
+                      </div>
                     </div>
+                  </div>
+                </el-card>
+              </el-col>
 
-                    <div v-else class="subgraph-stage">
-                      <div ref="subgraphContainer" class="subgraph-container"></div>
+              <!-- 右侧：解释面板 -->
+              <el-col :span="12" class="qa-col">
+                <el-card class="panel-card explain-card" shadow="never">
+                  <template #header>
+                    <div class="card-header">
+                      <div class="card-title">
+                        <span class="emoji">🔎</span>
+                        <span>答案溯源</span>
+                      </div>
+                      <el-tag type="success" effect="light" round>可解释</el-tag>
                     </div>
-                    <el-empty
-                      v-if="!loadingStatus.graphSearch && (!subgraphData || subgraphData.nodes?.length === 0)"
-                      description="暂无关联图谱"
-                      :image-size="110"
-                    />
-                  </el-tab-pane>
-                </el-tabs>
-              </el-card>
-            </el-col>
-          </el-row>
-        </div>
-      </el-tab-pane>
-    </el-tabs>
+                  </template>
+
+                  <el-tabs v-model="explainTab" class="explain-tabs">
+                    <el-tab-pane label="引用片段" name="chunks">
+                      <el-scrollbar height="calc(100% - 10px)">
+                        <div class="source-chunks">
+                          <!-- 加载状态 -->
+                          <div v-if="loadingStatus.vectorSearch" class="loading-indicator">
+                            <el-icon class="is-loading"><Loading /></el-icon>
+                            <span>正在检索相关文档片段...</span>
+                          </div>
+
+                          <el-card
+                            v-for="(chunk, idx) in sourceChunks"
+                            :key="idx"
+                            class="source-chunk-item"
+                            shadow="never"
+                          >
+                            <div class="source-chunk-head">
+                              <el-tag size="small" type="info" effect="light" round>片段 {{ idx + 1 }}</el-tag>
+                            </div>
+                            <div class="chunk-text">{{ chunk.content }}</div>
+                          </el-card>
+
+                          <el-empty
+                            v-if="!loadingStatus.vectorSearch && sourceChunks.length === 0"
+                            description="暂无引用片段"
+                            :image-size="110"
+                          />
+                        </div>
+                      </el-scrollbar>
+                    </el-tab-pane>
+
+                    <el-tab-pane label="局部图谱" name="graph">
+                      <!-- 加载状态 -->
+                      <div v-if="loadingStatus.graphSearch" class="loading-indicator">
+                        <el-icon class="is-loading"><Loading /></el-icon>
+                        <span>正在检索知识图谱...</span>
+                      </div>
+
+                      <div v-else class="subgraph-stage">
+                        <div ref="subgraphContainer" class="subgraph-container"></div>
+                      </div>
+                      <el-empty
+                        v-if="!loadingStatus.graphSearch && (!subgraphData || subgraphData.nodes?.length === 0)"
+                        description="暂无关联图谱"
+                        :image-size="110"
+                      />
+                    </el-tab-pane>
+                  </el-tabs>
+                </el-card>
+              </el-col>
+            </el-row>
+          </div>
+        </el-tab-pane>
+      </el-tabs>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, nextTick, computed, watch, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Connection, Upload, UploadFilled, Document, Search, Share, Loading } from '@element-plus/icons-vue'
+import { Connection, Upload, UploadFilled, Document, Search, Share, Loading, Position } from '@element-plus/icons-vue'
 import G6 from '@antv/g6'
 import request from '@/utils/request'
 
@@ -952,7 +979,7 @@ const askQuestion = async () => {
   const userMessage = {
     role: 'user',
     content: question.value,
-    time: new Date().toLocaleTimeString()
+    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
   messages.value.push(userMessage)
 
@@ -967,11 +994,13 @@ const askQuestion = async () => {
     answerGeneration: true
   }
 
+  scrollToBottom()
+
   // 创建一个临时的assistant消息用于流式更新
   const assistantMessage = {
     role: 'assistant',
     content: '',
-    time: new Date().toLocaleTimeString()
+    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
   messages.value.push(assistantMessage)
   const assistantIndex = messages.value.length - 1
@@ -1072,6 +1101,8 @@ const askQuestion = async () => {
       graphSearch: false,
       answerGeneration: false
     }
+    // 再次滚动到底部确保显示完全
+    setTimeout(scrollToBottom, 100)
   }
 }
 
@@ -1150,7 +1181,7 @@ const scrollToBottom = () => {
     if (chatScroll.value) {
       const scrollbar = chatScroll.value.$el.querySelector('.el-scrollbar__wrap')
       if (scrollbar) {
-        scrollbar.scrollTop = scrollbar.scrollHeight
+        scrollbar.scrollTo({ top: scrollbar.scrollHeight, behavior: 'smooth' })
       }
     }
   })
@@ -1165,19 +1196,18 @@ const formatMessageContent = (content, role) => {
     let formatted = content
 
     // 去除markdown标记
-    // 去除粗体标记 **text** 或 __text__
-    formatted = formatted.replace(/\*\*(.+?)\*\*/g, '$1')
-    formatted = formatted.replace(/__(.+?)__/g, '$1')
+    formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    formatted = formatted.replace(/__(.+?)__/g, '<b>$1</b>')
 
     // 去除斜体标记 *text* 或 _text_
-    formatted = formatted.replace(/\*(.+?)\*/g, '$1')
-    formatted = formatted.replace(/_(.+?)_/g, '$1')
+    formatted = formatted.replace(/\*(.+?)\*/g, '<i>$1</i>')
+    formatted = formatted.replace(/_(.+?)_/g, '<i>$1</i>')
 
     // 去除标题标记 # ## ### 等
     formatted = formatted.replace(/^#{1,6}\s+/gm, '')
 
     // 去除列表标记（* 或 -）并保留内容
-    formatted = formatted.replace(/^[\*\-]\s+/gm, '')
+    formatted = formatted.replace(/^[\*\-]\s+/gm, '• ')
 
     // 去除代码块标记
     formatted = formatted.replace(/```[\s\S]*?```/g, (match) => {
@@ -1185,7 +1215,7 @@ const formatMessageContent = (content, role) => {
     })
 
     // 去除行内代码标记 `code`
-    formatted = formatted.replace(/`(.+?)`/g, '$1')
+    formatted = formatted.replace(/`(.+?)`/g, '<code class="inline-code">$1</code>')
 
     // 将换行符转换为HTML换行
     formatted = formatted.split('\n').map(line => {
@@ -1195,6 +1225,12 @@ const formatMessageContent = (content, role) => {
       }
       return `<p class="text-line">${line}</p>`
     }).join('')
+
+    // 关键：识别并保护emoji，防止被渐变色影响
+    // emoji正则：匹配各种emoji字符
+    const emojiRegex = /([\u{1F000}-\u{1FFFF}]|[\u{2600}-\u{27BF}]|[\u{E000}-\u{F8FF}]|[\u{FE00}-\u{FE0F}]|[\u{1F900}-\u{1F9FF}]|[\u{2300}-\u{23FF}]|[\u{2B50}]|[\u{203C}-\u{3299}])/gu
+
+    formatted = formatted.replace(emojiRegex, '<span class="emoji-char">$1</span>')
 
     return formatted
   }
@@ -1242,29 +1278,42 @@ onUnmounted(() => {
   --shadow: 0 10px 30px rgba(2, 6, 23, 0.18);
   --shadow-soft: 0 8px 22px rgba(2, 6, 23, 0.12);
   --radius: 14px;
+  /* Chat Specific Variables */
+  --chat-bg-user: linear-gradient(135deg, #6366f1, #8b5cf6);
+  --chat-bg-ai: #ffffff;
+  --chat-text-ai: #1e293b;
 
-  padding: 20px;
   min-height: 100vh;
   position: relative;
-  background: radial-gradient(1100px 700px at 15% 15%, rgba(99, 102, 241, 0.55), transparent 55%),
-    radial-gradient(900px 650px at 85% 20%, rgba(168, 85, 247, 0.45), transparent 55%),
-    radial-gradient(900px 650px at 60% 90%, rgba(34, 197, 94, 0.35), transparent 55%),
+  /* 修复：使用更低不透明度的背景，让下层星光透出来 */
+  background: radial-gradient(1100px 700px at 15% 15%, rgba(99, 102, 241, 0.35), transparent 55%),
+    radial-gradient(900px 650px at 85% 20%, rgba(168, 85, 247, 0.25), transparent 55%),
+    radial-gradient(900px 650px at 60% 90%, rgba(34, 197, 94, 0.15), transparent 55%),
     linear-gradient(135deg, #0b1020 0%, #111a33 40%, #0b1020 100%);
   box-sizing: border-box;
   overflow-y: visible;
-  padding-bottom: 64px;
+  padding-bottom: 20px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
+/* 修复：使用 fixed 定位，确保全屏覆盖 */
 .bg-aurora {
-  position: absolute;
+  position: fixed;
   inset: 0;
   pointer-events: none;
-  opacity: 0.55;
+  z-index: 0;
+  opacity: 0.65;
   background:
-    radial-gradient(900px 500px at 20% 10%, rgba(56, 189, 248, 0.22), transparent 60%),
-    radial-gradient(900px 520px at 85% 30%, rgba(251, 113, 133, 0.16), transparent 60%),
-    radial-gradient(900px 520px at 50% 95%, rgba(34, 197, 94, 0.12), transparent 60%);
-  filter: blur(10px);
+    radial-gradient(900px 500px at 20% 10%, rgba(56, 189, 248, 0.32), transparent 60%),
+    radial-gradient(900px 520px at 85% 30%, rgba(251, 113, 133, 0.26), transparent 60%),
+    radial-gradient(900px 520px at 50% 95%, rgba(34, 197, 94, 0.22), transparent 60%);
+  filter: blur(20px);
+}
+
+.content-wrapper {
+  position: relative;
+  z-index: 1; /* 确保内容在星光之上 */
+  padding: 20px;
 }
 
 .page-header {
@@ -1408,6 +1457,387 @@ onUnmounted(() => {
   position: relative;
   z-index: 1;
 }
+
+/* 覆盖聊天卡片的 padding，实现全屏背景 */
+.chat-card :deep(.el-card__body) {
+  padding: 0 !important;
+  height: 100% !important; /* 关键：确保卡片body占满高度 */
+  overflow: hidden; /* 防止内部溢出导致外层滚动 */
+}
+
+/* =========================================
+   Chat Interface Beautification (Main Logic)
+   ========================================= */
+
+/* 修复：Chat Wrapper 使用 Flex 布局，不再依赖 absolute 导致的脱离文档流问题 */
+.chat-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  /* 背景纹理 */
+  background-color: rgba(246, 249, 252, 0.5);
+  background-image: 
+    radial-gradient(rgba(148, 163, 184, 0.2) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,255,255,0.4), rgba(255,255,255,0.1));
+  background-size: 20px 20px, 100% 100%;
+}
+
+.chat-scroll-area {
+  flex: 1; /* 占据剩余空间 */
+  height: 0; /* 关键：配合flex使用，允许缩小 */
+  width: 100%;
+}
+
+/* 自定义滚动条样式 */
+:deep(.chat-scroll-wrap) {
+  scroll-behavior: smooth;
+  height: 100%; /* 确保高度传递 */
+}
+:deep(.el-scrollbar__bar.is-vertical) {
+  width: 4px;
+}
+:deep(.el-scrollbar__thumb) {
+  background-color: rgba(148, 163, 184, 0.3);
+}
+
+.chat-messages {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px 16px;
+}
+
+/* 修复：增加底部占位高度，等于或略大于输入框的高度 */
+.chat-bottom-spacer {
+  height: 140px; 
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.chat-start-placeholder {
+  text-align: center;
+  padding: 60px 20px;
+  color: #64748b;
+  opacity: 0.8;
+  animation: fadeIn 0.8s ease;
+}
+
+.placeholder-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1));
+}
+
+.chat-start-placeholder h3 {
+  font-size: 18px;
+  margin-bottom: 8px;
+  color: #1e293b;
+}
+
+.message {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+  align-items: flex-start;
+  animation: slideIn 0.3s ease;
+}
+
+.message.user {
+  flex-direction: row-reverse;
+}
+
+.message-avatar {
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+}
+
+.message-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+}
+
+.ai-avatar-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+  border: 1px solid #bbf7d0;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.15);
+  position: relative;
+  overflow: hidden;
+}
+
+.ai-icon {
+  font-size: 20px;
+  z-index: 2;
+}
+
+.typing-state {
+  animation: pulse-avatar 2s infinite;
+}
+
+@keyframes pulse-avatar {
+  0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+
+.message-bubble {
+  max-width: 75%;
+  padding: 14px 18px;
+  position: relative;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+  line-height: 1.6;
+}
+
+.message-bubble.user {
+  background: var(--chat-bg-user);
+  color: #fff;
+  border-radius: 20px 20px 4px 20px;
+  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.25);
+}
+
+.message-bubble.assistant {
+  background: var(--chat-bg-ai);
+  color: var(--chat-text-ai);
+  border-radius: 20px 20px 20px 4px;
+  border: 1px solid rgba(226, 232, 240, 0.6);
+}
+
+.message-text {
+  font-size: 14px;
+  word-wrap: break-word;
+}
+
+/* User text styling */
+.message.user .message-text {
+  font-weight: 500;
+}
+
+/* AI text styling - 行草字体 + 渐变色 */
+.message.assistant .message-text {
+  /* 使用中文行草字体，emoji会自动回退到系统默认字体 */
+  font-family: 'STKaiti', 'KaiTi', 'STXingkai', '华文行楷', '华文楷体', 'FangSong',
+               'Noto Sans SC', 'Microsoft YaHei', serif;
+  font-size: 15px;
+  line-height: 1.8;
+  letter-spacing: 0.5px;
+
+  /* 渐变色文字效果 */
+  background: linear-gradient(135deg,
+    #667eea 0%,
+    #764ba2 25%,
+    #f093fb 50%,
+    #4facfe 75%,
+    #00f2fe 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+
+  /* 渐变动画效果 */
+  animation: gradient-flow 6s ease infinite;
+}
+
+@keyframes gradient-flow {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+/* 确保代码块、加粗、斜体等特殊元素不受渐变色影响 */
+.message.assistant .message-text :deep(b),
+.message.assistant .message-text :deep(strong),
+.message.assistant .message-text :deep(i),
+.message.assistant .message-text :deep(em),
+.message.assistant .message-text :deep(.inline-code) {
+  -webkit-text-fill-color: currentColor;
+  background: none;
+}
+
+/* 关键：保护emoji，让其显示为正常颜色 */
+.message.assistant .message-text :deep(.emoji-char) {
+  -webkit-text-fill-color: initial;
+  background: none;
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji',
+               'Segoe UI Symbol', 'Android Emoji', 'EmojiSymbols', sans-serif;
+  display: inline-block;
+}
+
+/* Inline Code Style */
+.message-text :deep(.inline-code) {
+  background: rgba(0,0,0,0.06);
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-family: 'Menlo', monospace;
+  font-size: 0.9em;
+  color: #d946ef;
+}
+.message.user .message-text :deep(.inline-code) {
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+}
+
+.message-time {
+  font-size: 10px;
+  margin-top: 6px;
+  opacity: 0.6;
+  text-align: right;
+}
+.message.user .message-time { color: rgba(255,255,255,0.9); }
+
+/* Typing animation */
+.typing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #64748b;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.typing-dot {
+  width: 5px;
+  height: 5px;
+  background: #64748b;
+  border-radius: 50%;
+  animation: typing-bounce 1.4s infinite ease-in-out both;
+}
+.typing-dot:nth-child(1) { animation-delay: -0.32s; }
+.typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes typing-bounce {
+  0%, 80%, 100% { transform: scale(0); }
+  40% { transform: scale(1); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 0.8; }
+}
+
+/* =========================================
+   Floating Input Area (Beautiful!)
+   ========================================= */
+
+.chat-input-container {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 20px;
+  background: linear-gradient(to top, #ffffff 70%, rgba(255,255,255,0.8) 90%, rgba(255,255,255,0));
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  /* 确保此容器不阻挡点击，但内部元素可以点击 */
+  pointer-events: none; 
+}
+
+.chat-input-wrapper {
+  pointer-events: auto; /* 恢复输入框的点击事件 */
+  position: relative;
+  width: 100%;
+  max-width: 600px;
+  background: rgba(255, 255, 255, 0.95); /* 提高不透明度 */
+  backdrop-filter: blur(12px);
+  border-radius: 30px;
+  box-shadow: 
+    0 4px 6px -1px rgba(0, 0, 0, 0.1), 
+    0 2px 4px -1px rgba(0, 0, 0, 0.06),
+    0 0 0 1px rgba(0,0,0,0.05);
+  padding: 4px;
+  transition: box-shadow 0.2s;
+  display: flex;
+  align-items: center;
+}
+
+.chat-input-wrapper:focus-within {
+  box-shadow: 
+    0 10px 15px -3px rgba(99, 102, 241, 0.15), 
+    0 4px 6px -2px rgba(99, 102, 241, 0.1),
+    0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+.floating-input :deep(.el-input__wrapper) {
+  box-shadow: none !important;
+  background: transparent !important;
+  padding-left: 16px;
+  padding-right: 48px; /* Space for button */
+  height: 48px;
+}
+
+.floating-input :deep(.el-input__inner) {
+  font-size: 15px;
+  color: #1e293b;
+}
+.floating-input :deep(.el-input__inner::placeholder) {
+  color: #94a3b8;
+}
+
+.send-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  border: none;
+  color: white;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.send-btn:hover:not(:disabled) {
+  transform: translateY(-50%) scale(1.05);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
+}
+.send-btn:disabled {
+  background: #cbd5e1;
+  cursor: not-allowed;
+}
+
+.input-hint {
+  font-size: 11px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: auto; /* 恢复提示文字的事件响应 */
+  background: rgba(255,255,255,0.6);
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+
+.hint-badge {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  color: #475569;
+}
+
+/* =========================================
+   End Chat Styles
+   ========================================= */
 
 .build-pipeline {
   padding: 6px 0;
@@ -2092,196 +2522,13 @@ onUnmounted(() => {
   margin-bottom: 14px;
 }
 
+/* 修复：使用 calc(100vh - XX) 限制高度，防止页面滚动 */
 .chat-card,
 .explain-card {
-  height: calc(100vh - 320px);
+  height: calc(100vh - 220px); 
   min-height: 560px;
   display: flex;
   flex-direction: column;
-}
-
-:deep(.el-card__body) {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  padding: 14px !important;
-}
-
-.chat-wrapper {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.chat-scroll-area {
-  flex: 1;
-  padding: 6px 2px;
-}
-
-.chat-messages {
-  padding: 6px 8px;
-}
-
-.chat-input {
-  padding-top: 12px;
-  border-top: 1px solid rgba(148, 163, 184, 0.22);
-}
-
-.input-hint {
-  margin-top: 8px;
-  font-size: 12px;
-  color: rgba(15, 23, 42, 0.55);
-}
-
-.message {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 16px;
-  align-items: flex-end;
-}
-
-.message.user {
-  flex-direction: row-reverse;
-}
-
-.message-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 14px;
-  display: grid;
-  place-items: center;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 10px 20px rgba(2, 6, 23, 0.08);
-}
-
-.message-avatar.user {
-  background: rgba(59, 130, 246, 0.12);
-  border-color: rgba(59, 130, 246, 0.22);
-}
-
-.message-avatar.assistant {
-  background: rgba(34, 197, 94, 0.12);
-  border-color: rgba(34, 197, 94, 0.22);
-}
-
-.avatar-emoji {
-  font-size: 20px;
-}
-
-.message-bubble {
-  max-width: 80%;
-  padding: 10px 12px;
-  border-radius: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 10px 22px rgba(2, 6, 23, 0.08);
-}
-
-.message-bubble.user {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.92), rgba(99, 102, 241, 0.92));
-  border-color: rgba(59, 130, 246, 0.35);
-  color: rgba(255, 255, 255, 0.98);
-  border-bottom-right-radius: 6px;
-}
-
-.message-bubble.assistant {
-  background: rgba(255, 255, 255, 0.92);
-  border-bottom-left-radius: 6px;
-  color: rgba(15, 23, 42, 0.92);
-}
-
-.message-text {
-  line-height: 1.7;
-  word-break: break-word;
-  font-size: 13px;
-}
-
-/* AI回答渐变色和行草字体样式 */
-.message-text.gradient-text {
-  font-family: 'KaiTi', 'STKaiti', 'KaiTi_GB2312', 'FangSong', 'STFangsong', cursive, serif;
-  font-size: 15px;
-  line-height: 2;
-  background: linear-gradient(
-    135deg,
-    #667eea 0%,
-    #764ba2 25%,
-    #f093fb 50%,
-    #4facfe 75%,
-    #00f2fe 100%
-  );
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  background-size: 200% 200%;
-  animation: gradientFlow 3s ease infinite;
-}
-
-/* 渐变色流动动画 */
-@keyframes gradientFlow {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-/* 文本行样式 */
-.message-text :deep(.text-line) {
-  margin: 0;
-  padding: 4px 0;
-  text-align: left;
-}
-
-/* 段落间距 */
-.message-text :deep(.paragraph-space) {
-  height: 12px;
-}
-
-.message-time {
-  font-size: 11px;
-  margin-top: 6px;
-  opacity: 0.75;
-}
-
-.typing {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.typing-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: rgba(15, 23, 42, 0.45);
-  animation: typing-bounce 1.05s infinite ease-in-out;
-}
-
-.typing-dot:nth-child(1) { animation-delay: 0s; }
-.typing-dot:nth-child(2) { animation-delay: 0.12s; }
-.typing-dot:nth-child(3) { animation-delay: 0.24s; }
-
-.typing-text {
-  margin-left: 6px;
-  font-weight: 800;
-  color: rgba(15, 23, 42, 0.68);
-}
-
-@keyframes typing-bounce {
-  0%, 100% {
-    transform: translateY(0);
-    opacity: 0.55;
-  }
-  50% {
-    transform: translateY(-4px);
-    opacity: 1;
-  }
 }
 
 .explain-tabs {
@@ -2375,14 +2622,6 @@ onUnmounted(() => {
   border-radius: 12px !important;
 }
 
-:deep(.el-input-group__append .el-button) {
-  border-radius: 0 12px 12px 0 !important;
-}
-
-:deep(.el-input__wrapper) {
-  border-radius: 12px !important;
-}
-
 /* 加载指示器样式 */
 .loading-indicator {
   display: flex;
@@ -2425,8 +2664,6 @@ onUnmounted(() => {
   word-break: break-all;           /* 允许长单词断句 */
 }
 
-/*  */
-
 @media (max-width: 992px) {
   .header-inner {
     flex-direction: column;
@@ -2467,7 +2704,6 @@ onUnmounted(() => {
   }
 }
 </style>
-<!-- 新增这个标签，注意没有 scoped -->
 <style>
 /* 1. 强制覆盖 Element Plus 下拉项的高度限制 */
 .custom-model-popper .el-select-dropdown__item {

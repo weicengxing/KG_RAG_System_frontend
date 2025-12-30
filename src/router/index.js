@@ -12,6 +12,7 @@ import MusicPlayerView_simple from '../views/MusicPlayerView_simple.vue'
 import NovelUploadView from '../views/NovelUploadView.vue'
 import ChatRoomView from '../views/ChatRoomView.vue'
 import KnowledgeGraphView from '../views/KnowledgeGraphView.vue'
+import GameView from '../views/GameView.vue'
 
 const routes = [
   // 无需登录的页面
@@ -32,7 +33,8 @@ const routes = [
       { path: 'security-privacy', name: 'SecurityPrivacy', component: SecurityPrivacyView },
       { path: 'novel-upload', name: 'NovelUpload', component: NovelUploadView },
       { path: 'chat-room', name: 'ChatRoom', component: ChatRoomView },
-      { path: 'knowledge-graph', name: 'KnowledgeGraph', component: KnowledgeGraphView }
+      { path: 'knowledge-graph', name: 'KnowledgeGraph', component: KnowledgeGraphView },
+      { path: 'game', name: 'Game', component: GameView }
     ]
   }
 ]

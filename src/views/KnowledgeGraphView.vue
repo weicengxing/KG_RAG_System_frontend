@@ -65,7 +65,7 @@
                       <span class="emoji emoji-large upload-emoji">📄</span>
                       <span>文档上传</span>
                     </div>
-                    <el-tag type="info" effect="light" round>PDF · ≤ 20MB</el-tag>
+                    <el-tag type="info" effect="light" round>PDF/TXT/DOCX/PPTX · ≤ 100MB</el-tag>
                   </div>
                 </template>
 
@@ -75,16 +75,16 @@
                     drag
                     :auto-upload="false"
                     :on-change="handleFileChange"
-                    accept=".pdf"
+                    accept=".pdf,.txt,.docx,.pptx"
                     :limit="1"
                   >
                     <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
                     <div class="el-upload__text">
-                      拖拽 PDF 文件到此处或 <em>点击上传</em>
+                      拖拽文档到此处或 <em>点击上传</em>
                     </div>
                     <template #tip>
                       <div class="el-upload__tip">
-                        建议选择结构清晰的 PDF（可复制文本），提升抽取质量
+                        支持 PDF、TXT、DOCX、PPTX 格式
                       </div>
                     </template>
                   </el-upload>

@@ -1,6 +1,6 @@
 <template>
   <div class="knowledge-graph-container">
-    <!-- 修复：星光背景调整为 fixed 定位，并提高 z-index 确保可见但位于内容之下 -->
+    <!-- 背景层：星光背景调整为 fixed 定位，并提高 z-index 确保可见但位于内容之下 -->
     <div class="bg-aurora" aria-hidden="true"></div>
 
     <div class="content-wrapper">
@@ -398,12 +398,12 @@
                           </div>
                         </div>
                         
-                        <!-- 修复：占位符高度增加，防止最后一条消息被输入框遮挡 -->
+                        <!-- 底部占位 -->
                         <div class="chat-bottom-spacer"></div>
                       </div>
                     </el-scrollbar>
 
-                    <!-- 悬浮输入框：绝对定位在Wrapper底部 -->
+                    <!-- 悬浮输入框 -->
                     <div class="chat-input-container">
                       <div class="chat-input-wrapper">
                         <el-input
@@ -460,15 +460,51 @@
                           </div>
 
                           <el-card
-                            v-for="(chunk, idx) in sourceChunks"
+                            v-for="(chunk, idx) in displayedChunks"
                             :key="idx"
                             class="source-chunk-item"
+                            :class="{ 'chunk-animating': chunk.isTyping, 'chunk-complete': chunk.isComplete }"
                             shadow="never"
                           >
                             <div class="source-chunk-head">
-                              <el-tag size="small" type="info" effect="light" round>片段 {{ idx + 1 }}</el-tag>
+                              <div class="chunk-badge">
+                                <!-- 装饰性边角 -->
+                                <span class="badge-corner badge-corner-tl"></span>
+                                <span class="badge-corner badge-corner-tr"></span>
+                                <span class="badge-corner badge-corner-bl"></span>
+                                <span class="badge-corner badge-corner-br"></span>
+                                
+                                <!-- 左侧图标区域 -->
+                                <div class="badge-icon-area">
+                                  <span class="badge-icon">📄</span>
+                                  <div class="badge-icon-glow"></div>
+                                </div>
+                                
+                                <!-- 中间内容区域 -->
+                                <div class="badge-content">
+                                  <div class="badge-number-row">
+                                    <span class="badge-prefix">FRAGMENT</span>
+                                    <span class="badge-number">{{ idx + 1 }}</span>
+                                  </div>
+                                  <div class="badge-meta">
+                                    <span class="badge-label-source">文档片段</span>
+                                    <span class="badge-separator">·</span>
+                                    <span class="badge-label-index">第{{ idx + 1 }}部分</span>
+                                  </div>
+                                </div>
+                                
+                                <!-- 右侧装饰星星 -->
+                                <div class="badge-stars">
+                                  <span class="star star-1">✦</span>
+                                  <span class="star star-2">✨</span>
+                                  <span class="star star-3">✦</span>
+                                </div>
+                                
+                                <!-- 流光效果层 -->
+                                <div class="badge-shine"></div>
+                              </div>
                             </div>
-                            <div class="chunk-text">{{ chunk.content }}</div>
+                            <div class="chunk-text" v-html="chunk.content + (chunk.isTyping ? '<span class=\'typing-cursor\'>|</span>' : '')"></div>
                           </el-card>
 
                           <el-empty
@@ -915,10 +951,12 @@ const question = ref('')
 const answering = ref(false)
 const messages = ref([])
 const sourceChunks = ref([])
+const displayedChunks = ref([])  // 用于打字机效果的显示文本
 const subgraphData = ref(null)
 const explainTab = ref('chunks')
 const chatScroll = ref(null)
 const conversationId = ref('')  // 对话ID
+const typewriterTimers = ref([])  // 存储打字机定时器
 
 // AI模型相关
 const availableModels = ref([])  // 可用的AI模型列表
@@ -963,7 +1001,11 @@ const newConversation = () => {
   // 清空聊天记录
   messages.value = []
   sourceChunks.value = []
+  displayedChunks.value = []
   subgraphData.value = null
+  // 清除打字机定时器
+  typewriterTimers.value.forEach(timer => clearInterval(timer))
+  typewriterTimers.value = []
 
   // 生成新的对话ID
   conversationId.value = generateConversationId()
@@ -1007,7 +1049,11 @@ const askQuestion = async () => {
 
   // 清空之前的数据
   sourceChunks.value = []
+  displayedChunks.value = []
   subgraphData.value = null
+  // 清除之前的打字机定时器
+  typewriterTimers.value.forEach(timer => clearInterval(timer))
+  typewriterTimers.value = []
 
   try {
     // 获取token（从localStorage）
@@ -1062,6 +1108,8 @@ const askQuestion = async () => {
             sourceChunks.value = data.data || []
             loadingStatus.value.vectorSearch = false
             console.log('✅ 向量检索完成:', data.data?.length, '个片段')
+            // 启动打字机动画
+            startTypewriterEffect()
           } else if (data.type === 'graph_data') {
             // 图检索结果到达，立即更新
             subgraphData.value = data.data || null
@@ -1187,6 +1235,52 @@ const scrollToBottom = () => {
   })
 }
 
+// 打字机效果函数
+const startTypewriterEffect = () => {
+  // 清除之前的定时器
+  typewriterTimers.value.forEach(timer => clearInterval(timer))
+  typewriterTimers.value = []
+
+  // 初始化显示数组
+  displayedChunks.value = sourceChunks.value.map(() => ({ content: '', isTyping: false, isComplete: false }))
+
+  // 依次启动每个卡片的打字机效果
+  sourceChunks.value.forEach((chunk, index) => {
+    setTimeout(() => {
+      typewriterForChunk(chunk.content, index)
+    }, index * 200) // 每个卡片延迟200ms开始
+  })
+}
+
+const typewriterForChunk = (text, index) => {
+  if (!text) return
+
+  displayedChunks.value[index].isTyping = true
+  let currentIndex = 0
+
+  const timer = setInterval(() => {
+    if (currentIndex < text.length) {
+      const char = text[currentIndex]
+      // 转义HTML特殊字符
+      const escapedChar = char
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;')
+      // 给每个字符包裹荧光效果
+      displayedChunks.value[index].content += `<span class="glow-char">${escapedChar}</span>`
+      currentIndex++
+    } else {
+      clearInterval(timer)
+      displayedChunks.value[index].isTyping = false
+      displayedChunks.value[index].isComplete = true
+    }
+  }, 25) // 每25ms打印一个字符
+
+  typewriterTimers.value.push(timer)
+}
+
 // 格式化消息内容：去除markdown标记，保留换行
 const formatMessageContent = (content, role) => {
   if (!content) return ''
@@ -1267,6 +1361,9 @@ onUnmounted(() => {
   isDisposed.value = true
   destroyGraphs()
   unbindResize()
+  // 清除打字机定时器
+  typewriterTimers.value.forEach(timer => clearInterval(timer))
+  typewriterTimers.value = []
 })
 </script>
 
@@ -2553,21 +2650,486 @@ onUnmounted(() => {
 .source-chunk-item {
   margin-bottom: 12px;
   border-radius: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
   background: rgba(255, 255, 255, 0.92);
+  position: relative;
+  overflow: visible; /* 改为visible以允许外部阴影 */
+  opacity: 0;
+  transform: translateY(20px);
+  animation: slideInUp 0.6s ease forwards;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
+/* 卡片入场动画 - 依次延迟（跳过加载指示器） */
+.source-chunk-item:nth-child(2) { animation-delay: 0s; }
+.source-chunk-item:nth-child(3) { animation-delay: 0.15s; }
+.source-chunk-item:nth-child(4) { animation-delay: 0.3s; }
+.source-chunk-item:nth-child(5) { animation-delay: 0.45s; }
+.source-chunk-item:nth-child(6) { animation-delay: 0.6s; }
+
+/* 流光边框效果 - 基础 */
+.source-chunk-item::before {
+  content: '';
+  position: absolute;
+  inset: -4px; /* 默认厚度 */
+  border-radius: 18px;
+  padding: 4px;
+  /* 修复：使用更高饱和度和对比度的彩虹渐变，确保流动感明显 */
+  background: linear-gradient(
+    60deg,
+    #6366f1,
+    #8b5cf6,
+    #d946ef,
+    #f43f5e,
+    #f59e0b,
+    #10b981,
+    #3b82f6,
+    #6366f1
+  );
+  /* 修复：缩小 background-size，增加条纹密度，让流动感更强 */
+  background-size: 300% 300%;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: borderFlow 3s linear infinite;
+  opacity: 1;
+  box-shadow: 0 0 25px rgba(102, 126, 234, 0.5);
+  pointer-events: none;
+}
+
+/* 1. 渲染中：边框更粗更亮，且流动更快 */
+.source-chunk-item.chunk-animating::before {
+  inset: -2px; /* 加粗 */
+  padding: 2px;
+  filter: blur(2px); /* 增加光晕感 */
+  animation: borderFlow 2s linear infinite; /* 加速流动 */
+  box-shadow: 0 0 35px rgba(102, 126, 234, 0.8);
+}
+
+/* 3. 完成后：极淡的紫光边框 */
+.source-chunk-item.chunk-complete::before {
+  inset: -3px; /* 变细 */
+  padding: 3px;
+  background: linear-gradient(
+    90deg,
+    #a855f7 0%,
+    #9333ea 25%,
+    #7e22ce 50%,
+    #9333ea 75%,
+    #a855f7 100%
+  );
+  background-size: 200% 100%;
+  animation: borderFlow 5s linear infinite; /* 减速 */
+  opacity: 0.3; /* 降低透明度 */
+  box-shadow: none;
+}
+
 .source-chunk-item:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 14px 26px rgba(2, 6, 23, 0.10);
+  transform: translateY(-3px);
+  box-shadow: 0 20px 40px rgba(99, 102, 241, 0.25);
+}
+
+/* 卡片入场动画 - 从下往上滑入 */
+@keyframes slideInUp {
+  0% {
+    opacity: 0;
+    transform: translateY(60px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 流光边框动画 - 调整移动距离适配 background-size */
+@keyframes borderFlow {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 100% 50%;
+  }
 }
 
 .source-chunk-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
+}
+
+/* 超豪华精致徽章样式 */
+.chunk-badge {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 8px 14px;
+  border-radius: 16px;
+  position: relative;
+  overflow: hidden;
+  /* 多层渐变背景 */
+  background: 
+    /* 底层 - 深色渐变 */
+    linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%),
+    /* 中层 - 彩虹流光 */
+    linear-gradient(
+      90deg,
+      #667eea 0%,
+      #764ba2 14%,
+      #f093fb 28%,
+      #f5576c 42%,
+      #4facfe 57%,
+      #00f2fe 71%,
+      #43e97b 85%,
+      #38f9d7 100%
+    ),
+    /* 顶层 - 金色渐变 */
+    linear-gradient(135deg, 
+      rgba(251, 191, 36, 0.9) 0%,
+      rgba(245, 158, 11, 0.95) 25%,
+      rgba(251, 191, 36, 0.9) 50%,
+      rgba(217, 119, 6, 0.95) 75%,
+      rgba(245, 158, 11, 0.9) 100%
+    );
+  background-size: 100% 100%, 300% 300%, 200% 200%;
+  animation: 
+    badgeRainbow 8s linear infinite,
+    badgeGoldFlow 4s ease infinite;
+  border: 2px solid rgba(251, 191, 36, 0.6);
+  box-shadow: 
+    /* 外发光 */
+    0 6px 20px rgba(251, 191, 36, 0.4),
+    0 3px 10px rgba(102, 126, 234, 0.3),
+    /* 内阴影 */
+    inset 0 2px 4px rgba(255, 255, 255, 0.4),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 1;
+}
+
+/* 徽章流光效果层 */
+.chunk-badge::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.5),
+    transparent
+  );
+  background-size: 200% 100%;
+  animation: badgeShine 2.5s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* 徽章颗粒纹理 */
+.chunk-badge::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  background-image: 
+    radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.3) 1px, transparent 1px),
+    radial-gradient(circle at 80% 70%, rgba(255, 255, 255, 0.3) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* 装饰性边角 */
+.badge-corner {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  z-index: 4;
+  animation: cornerGlow 2s ease-in-out infinite alternate;
+}
+
+.badge-corner-tl {
+  top: 4px;
+  left: 4px;
+  border-right: none;
+  border-bottom: none;
+  border-top-left-radius: 8px;
+  animation-delay: 0s;
+}
+
+.badge-corner-tr {
+  top: 4px;
+  right: 4px;
+  border-left: none;
+  border-bottom: none;
+  border-top-right-radius: 8px;
+  animation-delay: 0.5s;
+}
+
+.badge-corner-bl {
+  bottom: 4px;
+  left: 4px;
+  border-right: none;
+  border-top: none;
+  border-bottom-left-radius: 8px;
+  animation-delay: 1s;
+}
+
+.badge-corner-br {
+  bottom: 4px;
+  right: 4px;
+  border-left: none;
+  border-top: none;
+  border-bottom-right-radius: 8px;
+  animation-delay: 1.5s;
+}
+
+/* 左侧图标区域 */
+.badge-icon-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.05));
+  border-radius: 12px;
+  margin-right: 10px;
+  backdrop-filter: blur(4px);
+  flex-shrink: 0;
+  z-index: 5;
+}
+
+.badge-icon-area::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 14px;
+  background: linear-gradient(90deg, #667eea, #764ba2, #f093fb, #667eea);
+  background-size: 200% 200%;
+  animation: iconBorderGlow 3s linear infinite;
+  opacity: 0.8;
+  z-index: -1;
+}
+
+/* 图标发光光晕 */
+.badge-icon-glow {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  background: radial-gradient(circle, rgba(102, 126, 234, 0.6) 0%, transparent 70%);
+  animation: glowPulse 2s ease-in-out infinite;
+  z-index: -1;
+}
+
+.badge-icon-area .badge-icon {
+  font-size: 18px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+  animation: iconFloat 3s ease-in-out infinite;
+  position: relative;
+  z-index: 1;
+}
+
+/* 中间内容区域 */
+.badge-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-right: 12px;
+  z-index: 5;
+  min-width: 90px;
+}
+
+.badge-number-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.badge-prefix {
+  font-size: 9px;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.9);
+  letter-spacing: 1.5px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.badge-number {
+  font-size: 18px;
+  font-weight: 900;
+  color: #ffffff;
+  text-shadow: 
+    0 0 10px rgba(102, 126, 234, 0.8),
+    0 0 20px rgba(118, 75, 162, 0.6),
+    0 2px 4px rgba(0, 0, 0, 0.4);
+  background: linear-gradient(135deg, #fff 0%, #e0e7ff 50%, #fff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: numberGlow 2s ease-in-out infinite alternate;
+}
+
+.badge-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.badge-label-source {
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.85);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge-separator {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10px;
+}
+
+.badge-label-index {
+  font-size: 9px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* 右侧装饰星星 */
+.badge-stars {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  z-index: 5;
+}
+
+.badge-stars .star {
+  font-size: 12px;
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.6));
+  animation: starTwinkle 1.5s ease-in-out infinite;
+}
+
+.badge-stars .star-1 {
+  animation-delay: 0s;
+  color: rgba(255, 215, 0, 0.9);
+}
+
+.badge-stars .star-2 {
+  animation-delay: 0.5s;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.badge-stars .star-3 {
+  animation-delay: 1s;
+  color: rgba(255, 215, 0, 0.9);
+}
+
+/* ==================== 徽章动画定义 ==================== */
+
+/* 彩虹流光背景动画 */
+@keyframes badgeRainbow {
+  0% {
+    background-position: 0% 50%, 0% 50%, 0% 50%;
+  }
+  100% {
+    background-position: 0% 50%, 100% 50%, 100% 50%;
+  }
+}
+
+/* 金色流动动画 */
+@keyframes badgeGoldFlow {
+  0%, 100% {
+    background-position: 0% 50%, 0% 50%, 0% 50%;
+  }
+  50% {
+    background-position: 0% 50%, 100% 50%, 100% 50%;
+  }
+}
+
+/* 徽章流光扫过动画 */
+@keyframes badgeShine {
+  0%, 100% {
+    background-position: -200% 0;
+  }
+  50% {
+    background-position: 200% 0;
+  }
+}
+
+/* 边角发光动画 */
+@keyframes cornerGlow {
+  0% {
+    opacity: 0.6;
+    box-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+  }
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.8);
+  }
+}
+
+/* 图标边框发光动画 */
+@keyframes iconBorderGlow {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+/* 图标浮动动画 */
+@keyframes iconFloat {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  25% {
+    transform: translateY(-2px) rotate(3deg);
+  }
+  75% {
+    transform: translateY(-2px) rotate(-3deg);
+  }
+}
+
+/* 发光脉冲动画 */
+@keyframes glowPulse {
+  0%, 100% {
+    transform: scale(0.8);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
+
+/* 数字发光动画 */
+@keyframes numberGlow {
+  0% {
+    filter: brightness(1);
+  }
+  100% {
+    filter: brightness(1.3);
+  }
+}
+
+/* 星星闪烁动画 */
+@keyframes starTwinkle {
+  0%, 100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 0.8;
+  }
+  25% {
+    transform: scale(1.3) rotate(10deg);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1) rotate(0deg);
+    opacity: 0.6;
+  }
+  75% {
+    transform: scale(1.3) rotate(-10deg);
+    opacity: 1;
+  }
 }
 
 .chunk-text {
@@ -2575,6 +3137,70 @@ onUnmounted(() => {
   color: rgba(15, 23, 42, 0.86);
   line-height: 1.75;
   white-space: pre-wrap;
+  position: relative;
+  z-index: 1;
+}
+
+/* Source Chunk Card Styles - Fixed Visibility */
+
+/* 2. 渲染中文字：打字机效果 */
+.chunk-animating .chunk-text :deep(.glow-char) {
+  display: inline;  /* 必须使用 inline，否则长文本会排版错乱 */
+  color: #b45309;   /* 基础文字颜色 */
+  font-weight: 700;
+  animation: goldReveal 0.3s ease-out; /* 使用修复后的动画 */
+}
+
+/* 3. 完成后文字：保持原有淡淡流光 */
+.chunk-complete .chunk-text :deep(.glow-char) {
+  display: inline;
+  color: #334155;
+  text-shadow: none;
+  animation: purpleFlow 3s ease-in-out infinite;
+}
+
+/* 修复后的动画：去除 opacity:0 和 transform */
+@keyframes goldReveal {
+  0% {
+    background-color: rgba(251, 191, 36, 0.2); /* 模拟光标扫过的背景色 */
+    color: #d97706;
+  }
+  100% {
+    background-color: transparent;
+    color: #b45309;
+  }
+}
+
+/* 紫光流动动画 - 极淡呼吸感 */
+@keyframes purpleFlow {
+  0%, 100% {
+    text-shadow: 0 0 0 rgba(168, 85, 247, 0);
+  }
+  50% {
+    text-shadow: 0 0 5px rgba(168, 85, 247, 0.4); /* 非常淡的光晕 */
+    color: #475569; /* 稍微变浅一点点 */
+  }
+}
+
+/* 打字光标效果 */
+.typing-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  margin-left: 2px;
+  animation: cursorBlink 1s infinite;
+  box-shadow: 0 0 8px rgba(102, 126, 234, 0.6);
+}
+
+/* 光标闪烁动画 */
+@keyframes cursorBlink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
 }
 
 .subgraph-stage {

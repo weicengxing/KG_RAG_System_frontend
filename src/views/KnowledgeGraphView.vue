@@ -517,21 +517,58 @@
                     </el-tab-pane>
 
                     <el-tab-pane label="局部图谱" name="graph">
-                      <!-- 加载状态 -->
-                      <div v-if="loadingStatus.graphSearch" class="loading-indicator">
-                        <el-icon class="is-loading"><Loading /></el-icon>
-                        <span>正在检索知识图谱...</span>
-                      </div>
+  <!-- 加载状态 -->
+  <div v-if="loadingStatus.graphSearch" class="loading-indicator">
+    <el-icon class="is-loading"><Loading /></el-icon>
+    <span>正在检索知识图谱...</span>
+  </div>
 
-                      <div v-else class="subgraph-stage">
-                        <div ref="subgraphContainer" class="subgraph-container"></div>
-                      </div>
-                      <el-empty
-                        v-if="!loadingStatus.graphSearch && (!subgraphData || subgraphData.nodes?.length === 0)"
-                        description="暂无关联图谱"
-                        :image-size="110"
-                      />
-                    </el-tab-pane>
+  <div v-else class="subgraph-stage">
+    <!-- 
+       1. 添加 @dblclick 双击事件 
+       2. 添加 cursor: zoom-in 提示用户可点击 
+    -->
+    <div 
+      ref="subgraphContainer" 
+      class="subgraph-container" 
+      @dblclick="handleOpenExpand"
+      title="双击全屏查看"
+      style="cursor: zoom-in;"
+    ></div>
+  </div>
+  
+  <el-empty
+    v-if="!loadingStatus.graphSearch && (!subgraphData || subgraphData.nodes?.length === 0)"
+    description="暂无关联图谱"
+    :image-size="110"
+  />
+
+  <!-- 🆕 新增：全屏图谱弹窗 -->
+  <el-dialog
+    v-model="expandVisible"
+    fullscreen
+    :show-close="true"
+    class="expand-graph-modal"
+    @opened="renderExpandedGraph"
+    @closed="destroyExpandedGraph"
+    destroy-on-close
+  >
+    <!-- 弹窗内容容器 -->
+    <div class="expanded-wrapper">
+      <!-- 这里的背景图将通过 CSS 设置 -->
+      <div class="expanded-bg"></div>
+      
+      <!-- 大图谱挂载点 -->
+      <div ref="expandedContainer" class="expanded-container"></div>
+      
+      <!-- 简单的关闭按钮/提示 -->
+      <div class="expanded-header">
+        <h2>知识图谱详情视图</h2>
+        <p>按 ESC 或点击关闭按钮退出</p>
+      </div>
+    </div>
+  </el-dialog>
+</el-tab-pane>
                   </el-tabs>
                 </el-card>
               </el-col>
@@ -566,11 +603,286 @@ const documentText = ref('')
 const chunks = ref([])
 const triplets = ref([])
 const graphData = ref({ nodes: [], edges: [] })
+const expandVisible = ref(false)
+const expandedContainer = ref(null)
+let expandedInstance = null
 
 // G6容器与实例
 const graphContainer = ref(null)
 const subgraphContainer = ref(null)
+// ==================== G6 自定义图形注册 (节点与边全同步摇摆版) ====================
 
+// [1] 定义公共的摇摆算法
+// 根据 ID 和 当前时间，计算出确定的偏移量 (x, y)
+// 这样 Edge 就能知道 Node 跑到哪里去了
+const getWobble = (id, timestamp) => {
+  if (!id) return { x: 0, y: 0 };
+  
+  // A. 将字符串 ID 转化为一个数字哈希值，确保同一个 ID 永远得到相同的参数
+  // 这样就不需要 Math.random() 了，因为 random 无法在 Node 和 Edge 之间同步
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = id.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  
+  // B. 设定参数 (根据 hash 稍微打散，让每个节点动的节奏不一样)
+  // 这里的幅度要和你代码里设定的一致
+  const rangeX = 25; 
+  const rangeY = 30; 
+  const speed = 3000 + (Math.abs(hash) % 2000); // 速度 3000~5000
+  const phase = (Math.abs(hash) % 100) / 100 * Math.PI * 2; // 随机相位
+  
+  // C. 计算偏移
+  const t = (timestamp / speed) * Math.PI * 2 + phase;
+  const dx = Math.sin(t) * rangeX;
+  const dy = Math.cos(t * 1.5) * rangeY;
+  
+  return { x: dx, y: dy };
+};
+
+const registerCustomTheme = () => {
+  
+  // ==================== 1. 注册节点 ====================
+  G6.registerNode('breathing-node', {
+    draw(cfg, group) {
+      const r = (cfg.size || 32) / 2;
+      const color = cfg.style.fill || '#409EFF';
+
+      // 创建容器
+      const container = group.addGroup();
+
+      // A. 七彩光环
+      const halo = container.addShape('circle', {
+        zIndex: -10,
+        attrs: {
+          x: 0, y: 0, r: r + 4, 
+          stroke: 'red', lineWidth: 2, opacity: 0.6, 
+          shadowColor: '#fff', shadowBlur: 15
+        },
+        name: 'halo-shape'
+      });
+
+      // B. 呼吸背景
+      const back1 = container.addShape('circle', {
+        zIndex: -5,
+        attrs: { x: 0, y: 0, r: r, fill: color, opacity: 0.4 },
+        name: 'back-shape'
+      });
+
+      // C. 核心节点
+      const keyShape = container.addShape('circle', {
+        zIndex: 0,
+        attrs: {
+          x: 0, y: 0, r: r, fill: color, cursor: 'pointer',
+          shadowColor: 'rgba(0,0,0,0.3)', shadowBlur: 5
+        },
+        name: 'key-shape',
+        draggable: true
+      });
+
+      // --- 🚀 核心修复：寄生动画策略 🚀 ---
+      // 我们不再单独给 container 开动画，而是利用 halo 的动画回调
+      // 顺便把 container 的位置也更新了。Shape 的动画机制在 G6 中最稳定。
+      
+      halo.animate(
+        (ratio) => {
+          // 1. 自身的变色逻辑
+          const hue = ratio * 360;
+          const hsl = `hsl(${hue}, 100%, 70%)`;
+          
+          // 2. 【核心】借机更新父容器的矩阵，实现摇摆
+          // 只要光环在变色，节点就会摇摆，永不停止
+          const now = performance.now();
+          const pos = getWobble(cfg.id, now);
+          
+          // 直接操作矩阵，不依赖动画系统的补间，稳如老狗
+          container.setMatrix([1, 0, 0, 0, 1, 0, pos.x, pos.y, 1]);
+
+          // 返回光环需要的属性
+          return { stroke: hsl, shadowColor: hsl };
+        },
+        { repeat: true, duration: 3000, easing: 'easeLinear' }
+      );
+
+      // 背景呼吸 (独立动画)
+      back1.animate(
+        { r: r + 8, opacity: 0.05 },
+        { repeat: true, duration: 2500, easing: 'easeLinear' }
+      );
+
+      // Label
+      if (cfg.label) {
+        group.addShape('text', {
+          attrs: {
+            x: 0, y: r + 14, textAlign: 'center', textBaseline: 'middle',
+            text: cfg.label, fill: '#333', fontSize: 12, fontWeight: 600,
+            stroke: '#fff', lineWidth: 2
+          },
+          name: 'text-shape',
+          capture: false
+        });
+      }
+
+      return keyShape;
+    }
+  }, 'single-node');
+
+
+  // ==================== 2. 注册动态边 (保持不变) ====================
+  G6.registerEdge('dynamic-edge', {
+    draw(cfg, group) {
+      const startPoint = cfg.startPoint;
+      const endPoint = cfg.endPoint;
+      
+      const shape = group.addShape('path', {
+        attrs: {
+          stroke: '#6366f1', lineWidth: 2,
+          path: [['M', startPoint.x, startPoint.y], ['L', endPoint.x, endPoint.y]],
+          lineDash: [4, 4], lineDashOffset: 0,
+          endArrow: { path: G6.Arrow.triangle(6, 8, 6), fill: '#6366f1', d: 6 }
+        },
+        name: 'edge-shape'
+      });
+
+      shape.animate(
+        (ratio) => {
+          const now = performance.now();
+          
+          // 获取同步的偏移量
+          const sourceId = typeof cfg.source === 'string' ? cfg.source : cfg.source.id;
+          const targetId = typeof cfg.target === 'string' ? cfg.target : cfg.target.id;
+          
+          const sOffset = getWobble(sourceId, now);
+          const tOffset = getWobble(targetId, now);
+          
+          const newSx = startPoint.x + sOffset.x;
+          const newSy = startPoint.y + sOffset.y;
+          const newTx = endPoint.x + tOffset.x;
+          const newTy = endPoint.y + tOffset.y;
+          
+          const dashOffset = -ratio * 500; 
+
+          return {
+            path: [['M', newSx, newSy], ['L', newTx, newTy]],
+            lineDashOffset: dashOffset
+          };
+        },
+        { repeat: true, duration: 2000, easing: 'easeLinear' }
+      );
+
+      return shape;
+    }
+  });
+}
+
+// ==================== 大图谱弹窗相关逻辑 ====================
+// 1. 打开弹窗
+const handleOpenExpand = () => {
+  if (!subgraphData.value || !subgraphData.value.nodes?.length) return
+  expandVisible.value = true
+}
+
+// 2. 销毁大图谱（关闭弹窗时）
+const destroyExpandedGraph = () => {
+  if (expandedInstance) {
+    expandedInstance.destroy()
+    expandedInstance = null
+  }
+}
+
+// 3. 渲染大图谱 (在弹窗打开动画结束后调用)
+const renderExpandedGraph = async () => {
+  if (!expandedContainer.value) return
+  if (!subgraphData.value) return
+
+  // 销毁旧实例
+  destroyExpandedGraph()
+
+  // 确保自定义图形已注册
+  if (!isThemeRegistered) {
+    registerCustomTheme()
+    isThemeRegistered = true
+  }
+
+  // 获取屏幕尺寸
+  const width = window.innerWidth
+  const height = window.innerHeight
+
+  // 初始化大图谱
+  expandedInstance = new G6.Graph({
+    container: expandedContainer.value,
+    width,
+    height,
+    localRefresh: false, // 【必须】防止残影
+    // 布局参数调整：全屏了，斥力大一点，距离远一点，看起来更爽
+    layout: {
+      type: 'force',
+      preventOverlap: true,
+      nodeSize: 60,         // 节点占位更大
+      linkDistance: 250,    // 连线更长
+      nodeStrength: -1000,  // 斥力更强
+      edgeStrength: 0.4,
+      damping: 0.9,
+      alphaDecay: 0.02,     // 动得更久一点
+      center: [width / 2, height / 2]
+    },
+    modes: {
+      default: ['drag-canvas', 'zoom-canvas', 'drag-node']
+    },
+    defaultNode: {
+      type: 'breathing-node', // 使用同样的七彩节点
+      size: 45,               // 节点本身画大一点
+      style: {
+        fill: '#409EFF',
+      },
+      labelCfg: {
+        position: 'bottom',
+        offset: 12,
+        style: {
+          fontSize: 14,       // 字体变大
+          fill: '#fff',       // 全屏背景可能是深色，文字用白色
+          fontWeight: 700,
+          stroke: '#000',     // 加个黑色描边防止背景太花看不清
+          lineWidth: 2
+        }
+      }
+    },
+    defaultEdge: {
+      type: 'dynamic-edge',   // 使用同样的动态边
+      style: {
+        stroke: '#a5b4fc',    // 稍微亮一点的颜色
+        lineWidth: 3          // 线条变粗
+      }
+    }
+  })
+
+  // 渲染数据
+  // 此时数据已经在内存中，直接渲染即可，不需要像小图那样逐个添加的动画（如果想加也可以）
+  // 这里我们直接 read，让它迅速铺开
+  const nodes = subgraphData.value.nodes.map(n => ({
+    ...n,
+    id: String(n.id),
+    label: String(n.label ?? n.name ?? n.id),
+    // 初始位置随机打散
+    x: width / 2 + (Math.random() - 0.5) * 200,
+    y: height / 2 + (Math.random() - 0.5) * 200
+  }))
+
+  const edges = subgraphData.value.edges.map((e, i) => ({
+    ...e,
+    id: `exp-edge-${i}`,
+    source: String(e.source),
+    target: String(e.target)
+  }))
+
+  expandedInstance.data({ nodes, edges })
+  expandedInstance.render()
+}
+
+
+
+// 确保只注册一次
+let isThemeRegistered = false;
 let graphInstance = null
 let subgraphInstance = null
 
@@ -1154,12 +1466,19 @@ const askQuestion = async () => {
   }
 }
 
-// 渲染子图（关键：container 用 ref DOM）
-const renderSubgraph = () => {
+// 渲染动态子图
+const renderSubgraph = async () => {
   if (!subgraphContainer.value) return
   if (!subgraphData.value) return
   if (isDisposed.value) return
 
+  // 注册自定义皮肤（仅一次）
+  if (!isThemeRegistered) {
+    registerCustomTheme();
+    isThemeRegistered = true;
+  }
+
+  // 销毁旧实例
   if (subgraphInstance) {
     subgraphInstance.destroy()
     subgraphInstance = null
@@ -1169,58 +1488,120 @@ const renderSubgraph = () => {
   const { width } = getContainerSize(containerEl, 520, 420)
   const height = 420
 
+  // 配置图谱实例
   subgraphInstance = new G6.Graph({
     container: containerEl,
     width,
     height,
+    // 保持关闭局部刷新以防止残影
+    localRefresh: false, 
+    
+    layout: {
+      type: 'force',
+      preventOverlap: true,
+      nodeSize: 40,
+      linkDistance: 100,
+      nodeStrength: -400,
+      edgeStrength: 0.5,
+      damping: 0.9,
+      alphaDecay: 0.03,
+      center: [width / 2, height / 2]
+    },
     modes: {
-      default: ['drag-canvas', 'zoom-canvas']
+      default: ['drag-canvas', 'zoom-canvas', 'drag-node']
     },
     defaultNode: {
-      size: 28,
+      type: 'breathing-node',
+      size: 32,
       style: {
-        fill: 'rgba(34, 197, 94, 0.95)',
-        stroke: 'rgba(255,255,255,0.95)',
-        lineWidth: 2,
-        shadowColor: 'rgba(15, 23, 42, 0.15)',
+        lineWidth: 0,
+        shadowColor: 'rgba(255, 255, 255, 0.6)',
         shadowBlur: 10
       },
       labelCfg: {
         position: 'bottom',
-        offset: 6,
+        offset: 8,
         style: {
-          fontSize: 11,
-          fill: '#0f172a',
-          fontWeight: 600
+          fontSize: 12,
+          fill: '#1e293b',
+          fontWeight: 700,
+          background: { fill: 'rgba(255,255,255,0.7)', padding: [2, 4], radius: 4 }
         }
       }
     },
     defaultEdge: {
+      type: 'dynamic-edge',
       style: {
-        stroke: 'rgba(59, 130, 246, 0.45)',
-        lineWidth: 2
+        stroke: '#6366f1',
+        lineWidth: 2,
+        shadowColor: '#6366f1',
+        shadowBlur: 5,
+        endArrow: { path: G6.Arrow.triangle(6, 8, 6), fill: '#6366f1', d: 6 }
+      },
+      labelCfg: {
+        autoRotate: true,
+        style: {
+          fontSize: 10, fill: '#64748b', background: { fill: '#ffffff', padding: [2, 4], radius: 2 }
+        }
       }
-    },
-    layout: {
-      type: 'circular',
-      radius: Math.min(width, height) / 2.6
     }
-  })
+  });
 
-  const nodes = (subgraphData.value.nodes || []).map((node) => ({
+  subgraphInstance.on('node:mouseenter', (e) => subgraphInstance.setItemState(e.item, 'hover', true));
+  subgraphInstance.on('node:mouseleave', (e) => subgraphInstance.setItemState(e.item, 'hover', false));
+
+  subgraphInstance.data({ nodes: [], edges: [] });
+  subgraphInstance.render();
+
+  // ==================== 动态生成逻辑 ====================
+  const rawNodes = subgraphData.value.nodes || [];
+  const rawEdges = subgraphData.value.edges || [];
+  const palette = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#6366f1'];
+
+  const processedNodes = rawNodes.map((node, i) => ({
     id: String(node.id),
-    label: String(node.label ?? node.name ?? node.id)
-  }))
+    label: String(node.label ?? node.name ?? node.id),
+    style: { fill: palette[i % palette.length] },
+    x: width / 2 + (Math.random() - 0.5) * 50,
+    y: height / 2 + (Math.random() - 0.5) * 50
+  }));
 
-  const edges = (subgraphData.value.edges || []).map((edge, idx) => ({
-    id: `subedge-${idx}`,
+  const processedEdges = rawEdges.map((edge, i) => ({
+    id: `subedge-${i}`,
     source: String(edge.source),
-    target: String(edge.target)
-  }))
+    target: String(edge.target),
+    label: edge.label || ''
+  }));
 
-  subgraphInstance.data({ nodes, edges })
-  subgraphInstance.render()
-  subgraphInstance.fitView(20)
+  const addNodeDelay = 100;
+  const addEdgeDelay = 200;
+
+  const addNodesOneByOne = async () => {
+    for (const node of processedNodes) {
+      if (isDisposed.value || !subgraphInstance) return;
+      subgraphInstance.addItem('node', node);
+      subgraphInstance.layout();
+      await new Promise(r => setTimeout(r, addNodeDelay));
+    }
+    addEdgesOneByOne();
+  };
+
+  const addEdgesOneByOne = async () => {
+    for (const edge of processedEdges) {
+      if (isDisposed.value || !subgraphInstance) return;
+      const s = subgraphInstance.findById(edge.source);
+      const t = subgraphInstance.findById(edge.target);
+      if (s && t) subgraphInstance.addItem('edge', edge);
+      await new Promise(r => setTimeout(r, addEdgeDelay));
+    }
+    
+    // 【关键修改】使用默认参数，移除可能导致报错的动画配置对象
+    if (subgraphInstance) {
+      subgraphInstance.fitView(40); 
+    }
+  };
+
+  addNodesOneByOne();
 }
 
 // 滚动到底部
@@ -3211,15 +3592,12 @@ onUnmounted(() => {
   margin-bottom: 10px;
 }
 
+/* 局部图谱容器样式微调 */
 .subgraph-container {
-  width: 100%;
-  height: 420px;
-  border-radius: 14px;
-  background: radial-gradient(900px 360px at 20% 10%, rgba(34, 197, 94, 0.10), transparent 60%),
-    radial-gradient(900px 360px at 80% 20%, rgba(59, 130, 246, 0.10), transparent 60%),
-    #ffffff;
-  border: 1px solid rgba(148, 163, 184, 0.20);
-  overflow: hidden;
+  /* 使用稍深的背景，突出节点的光晕效果 */
+  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.8) 0%, rgba(240, 245, 255, 0.6) 100%);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  box-shadow: inset 0 0 20px rgba(99, 102, 241, 0.05);
 }
 
 :deep(.el-upload-dragger) {
@@ -3328,6 +3706,94 @@ onUnmounted(() => {
   .brand-text .title {
     font-size: 20px;
   }
+}
+/* ================= 全屏弹窗样式 ================= */
+
+/* 覆盖 Element Plus Dialog 的默认样式，使其背景透明 */
+.expand-graph-modal {
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: hidden !important;
+}
+
+.expand-graph-modal .el-dialog__body,
+.expand-graph-modal .el-dialog__header {
+  padding: 0 !important;
+  margin: 0 !important;
+  background: transparent !important;
+}
+
+/* 关闭按钮样式美化 */
+.expand-graph-modal .el-dialog__headerbtn {
+  top: 20px;
+  right: 20px;
+  z-index: 100;
+  font-size: 24px;
+}
+.expand-graph-modal .el-dialog__headerbtn .el-dialog__close {
+  color: #fff !important;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+}
+
+.expanded-wrapper {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* 🚀 核心：背景图片设置 🚀 */
+.expanded-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  
+  /* 设置背景图路径 */
+  background-image: url('/background/OIP.jpg');
+  
+  /* 确保图片覆盖全屏 */
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  
+  /* 可选：加一层黑色遮罩，让图谱更清晰 */
+  filter: brightness(0.6); /* 稍微变暗，突出前景图谱 */
+  transform: scale(1.05); /* 放大一点防止模糊边缘 */
+}
+
+.expanded-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1; /* 在背景之上 */
+}
+
+.expanded-header {
+  position: absolute;
+  top: 30px;
+  left: 40px;
+  z-index: 2;
+  pointer-events: none; /* 允许点击穿透 */
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+}
+
+.expanded-header h2 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.expanded-header p {
+  margin: 8px 0 0 0;
+  font-size: 14px;
+  opacity: 0.7;
 }
 </style>
 <style>

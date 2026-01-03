@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>3D Particle Firework</title>
+    <link rel="stylesheet" href="./style.css">
+    <!-- 引入 FontAwesome 图标模拟APP界面 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- Import Map 方便引入 Three.js 模块 -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <!-- 渲染容器 -->
+    <div id="canvas-container"></div>
+
+    <!-- 模拟 APP UI 遮罩 -->
+    <div class="ui-layer">
+        <div class="header">
+            <!-- <span>推荐</span> | <span class="active">关注</span> -->
+        </div>
+        
+        <!-- <div class="right-sidebar">
+            <div class="icon-item avatar"><img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="avatar"></div>
+            <div class="icon-item"><i class="fas fa-heart" style="color: #ff2d55;"></i><span>1.4w</span></div>
+            <div class="icon-item"><i class="fas fa-comment-dots"></i><span>2743</span></div>
+            <div class="icon-item"><i class="fas fa-share"></i><span>7920</span></div>
+        </div> -->
+
+        <div class="bottom-info">
+            <!-- <div class="user-name">@多放香菜 🍟</div>
+            <div class="description">跨年代码来喽 #跨年 #Python #程序员的浪漫 <span class="more">展开</span></div>
+            <div class="music-ticker">
+                <i class="fas fa-music"></i> <span>原本的实现太丑了 - GPT Remake版</span>
+            </div>
+        </div> -->
+    </div>
+
+    <!-- 启动脚本 -->
+    <script type="module" src="./src/Main.js"></script>
+</body>
+</html>

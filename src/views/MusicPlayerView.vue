@@ -527,7 +527,7 @@ const fetchSongsStream = () => {
 
     const token = localStorage.getItem('token')
     const eventSource = new EventSource(
-      `https://1248b715.r9.cpolar.cn/music/songs/stream?token=${encodeURIComponent(token)}`
+      `http://localhost:8000/music/songs/stream?token=${encodeURIComponent(token)}`
     )
 
     // 临时存储歌曲

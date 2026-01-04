@@ -102,6 +102,19 @@
                       开始解析文档
                     </el-button>
 
+                    <!-- 一键上传按钮 -->
+                    <el-button
+                      type="success"
+                      size="large"
+                      :disabled="!selectedFile || uploading"
+                      @click="asyncUploadDocument"
+                      :loading="uploadingAsync"
+                      class="action-button one-click-btn"
+                    >
+                      <el-icon class="btn-icon"><Promotion /></el-icon>
+                      一键上传（自动处理）
+                    </el-button>
+
                     <div class="hint-row">
                       <span class="hint" v-if="selectedFile">
                         已选择：<strong>{{ selectedFileName }}</strong>
@@ -109,6 +122,21 @@
                       <span class="hint" v-else>未选择文件</span>
                     </div>
                   </div>
+
+                  <!-- 异步上传进度显示 -->
+                  <el-collapse-transition>
+                    <div v-if="uploadProgress > 0 || uploadingAsync" class="async-upload-progress">
+                      <el-progress 
+                        :percentage="uploadProgress" 
+                        :status="uploadProgress === 100 ? 'success' : undefined"
+                        :format="(percentage) => `${percentage}% ${getStageLabel(uploadStage)}`"
+                      />
+                      <div class="progress-description">
+                        <el-icon class="is-loading" v-if="uploadProgress < 100 && uploadingAsync"><Loading /></el-icon>
+                        <span>{{ uploadMessage }}</span>
+                      </div>
+                    </div>
+                  </el-collapse-transition>
                 </div>
               </el-card>
             </div>
@@ -583,9 +611,10 @@
 <script setup>
 import { ref, nextTick, computed, watch, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Connection, Upload, UploadFilled, Document, Search, Share, Loading, Position } from '@element-plus/icons-vue'
+import { Connection, Upload, UploadFilled, Document, Search, Share, Loading, Position, Promotion } from '@element-plus/icons-vue'
 import G6 from '@antv/g6'
 import request from '@/utils/request'
+import { watchTaskProgress, uploadDocumentAsync } from '@/utils/kafkaSSE'
 
 // 标签页状态
 const activeTab = ref('build')
@@ -603,6 +632,13 @@ const documentText = ref('')
 const chunks = ref([])
 const triplets = ref([])
 const graphData = ref({ nodes: [], edges: [] })
+
+// ==================== 一键上传相关（Kafka + SSE）====================
+const uploadingAsync = ref(false)  // 是否正在异步上传
+const uploadProgress = ref(0)      // 上传进度 (0-100)
+const uploadStage = ref('')        // 当前处理阶段
+const uploadMessage = ref('')      // 当前处理消息
+const sseConnection = ref(null)    // SSE 连接实例
 const expandVisible = ref(false)
 const expandedContainer = ref(null)
 let expandedInstance = null
@@ -1020,6 +1056,74 @@ const buildGraph = async () => {
     ElMessage.error(error.response?.data?.detail || '图谱构建失败')
   } finally {
     building.value = false
+  }
+}
+
+// ==================== 一键上传（Kafka + SSE）====================
+
+// 辅助方法：将英文阶段转换为中文
+const getStageLabel = (stage) => {
+  const stageMap = {
+    'initialized': '初始化',
+    'parsing': '文档解析',
+    'chunking': '文本分块',
+    'extracting': '实体抽取',
+    'building_graph': '图谱构建',
+    'completed': '已完成'
+  }
+  return stageMap[stage] || stage
+}
+
+const asyncUploadDocument = async () => {
+  if (!selectedFile.value) return
+
+  uploadingAsync.value = true
+  uploadProgress.value = 0
+  uploadStage.value = 'initializing'
+  uploadMessage.value = '正在初始化...'
+
+  try {
+    // 1. 上传文件并获取 task_id
+    const result = await uploadDocumentAsync(selectedFile.value)
+    console.log('✓ 异步上传成功:', result)
+    
+    const { task_id, doc_id } = result
+    
+    ElMessage.success('文档已上传，正在后台处理中...')
+    
+    // 保存 doc_id
+    docId.value = doc_id
+    
+    // 2. 使用 SSE 监听进度
+    sseConnection.value = watchTaskProgress(task_id, {
+      onProgress: (progress, stage, message) => {
+        uploadProgress.value = progress
+        uploadStage.value = stage
+        uploadMessage.value = message
+        console.log(`📊 进度: ${progress}% | 阶段: ${stage} | ${message}`)
+      },
+      onCompleted: async (data) => {
+        console.log('✓ 处理完成:', data)
+        uploadProgress.value = 100
+        uploadMessage.value = '知识图谱构建完成！'
+        
+        // 跳转到图谱步骤
+        currentStep.value = 3
+        
+        // 加载图谱数据
+        await nextTick()
+        await loadGraphData()
+      },
+      onError: (errorMessage) => {
+        console.error('✗ 处理失败:', errorMessage)
+        ElMessage.error(errorMessage || '处理失败')
+      }
+    })
+  } catch (error) {
+    console.error('✗ 异步上传失败:', error)
+    ElMessage.error('上传失败，请重试')
+  } finally {
+    uploadingAsync.value = false
   }
 }
 
@@ -1745,6 +1849,11 @@ onUnmounted(() => {
   // 清除打字机定时器
   typewriterTimers.value.forEach(timer => clearInterval(timer))
   typewriterTimers.value = []
+  // 关闭 SSE 连接
+  if (sseConnection.value) {
+    sseConnection.value.close()
+    sseConnection.value = null
+  }
 })
 </script>
 
@@ -2807,6 +2916,60 @@ onUnmounted(() => {
   font-weight: 800;
   border-radius: 12px;
   box-shadow: 0 12px 22px rgba(59, 130, 246, 0.18);
+}
+
+/* 一键上传按钮样式 */
+.one-click-btn {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border: none;
+  box-shadow: 0 12px 22px rgba(16, 185, 129, 0.18);
+  margin-top: 4px;
+}
+
+.one-click-btn:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  box-shadow: 0 14px 26px rgba(16, 185, 129, 0.25);
+}
+
+.one-click-btn:disabled {
+  background: #94a3b8;
+  box-shadow: none;
+}
+
+/* 异步上传进度显示样式 */
+.async-upload-progress {
+  margin-top: 16px;
+  padding: 16px;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.20);
+  border-radius: 14px;
+  animation: fadeInUp 0.4s ease;
+}
+
+.async-upload-progress .progress-description {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #475569;
+  font-weight: 600;
+}
+
+.async-upload-progress .el-icon {
+  font-size: 16px;
+  color: #10b981;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .btn-icon {

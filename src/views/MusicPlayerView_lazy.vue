@@ -495,6 +495,7 @@ const selectSong = async (song, autoPlay = true) => {
     musicStore.audioPlayer.src = blobUrl
     musicStore.audioPlayer.volume = musicStore.volume / 100
     musicStore.audioPlayer.load()
+    
 
     if (autoPlay) {
       musicStore.audioPlayer.play()

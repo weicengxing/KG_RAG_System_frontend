@@ -436,7 +436,7 @@ const getCoverBlobUrl = async (filename, songId) => {
   }
 
   try {
-    const response = await request.get(`/music/image/${encodeURIComponent(filename)}`, {
+    const response = await request.get(`/api/music/image/${encodeURIComponent(filename)}`, {
       responseType: 'blob'
     })
     const blobUrl = URL.createObjectURL(response.data)
@@ -495,7 +495,7 @@ const queueSongForPreload = (song) => {
       }
 
       // 开始下载
-      const response = await request.get(`/music/play/${song.id}`, {
+      const response = await request.get(`/api/music/play/${song.id}`, {
         responseType: 'blob'
       })
       const blobUrl = URL.createObjectURL(response.data)
@@ -527,7 +527,7 @@ const fetchSongsStream = () => {
 
     const token = localStorage.getItem('token')
     const eventSource = new EventSource(
-      `http://localhost:8000/music/songs/stream?token=${encodeURIComponent(token)}`
+      `http://localhost:8000/api/music/songs/stream?token=${encodeURIComponent(token)}`
     )
 
     // 临时存储歌曲
@@ -588,7 +588,7 @@ const fetchSongsStream = () => {
 const fetchSongsPaginated = async () => {
   try {
     isLoadingSongs.value = true
-    const response = await request.get('/music/songs', {
+    const response = await request.get('/api/music/songs', {
       params: { limit: 50, offset: 0 }
     })
 
@@ -757,7 +757,7 @@ const selectSong = async (song, autoPlay = true) => {
       // 即使后台正在预加载这首歌，或者在排队，我们这里直接发起一个新的高优先级请求
       // 由于浏览器的缓存机制，如果 URL 一样，实际上可能复用 TCP 连接，或者仅仅是多发一次请求，问题不大
       
-      const response = await request.get(`/music/play/${song.id}`, {
+      const response = await request.get(`/api/music/play/${song.id}`, {
         responseType: 'blob'
       })
       
@@ -1100,7 +1100,7 @@ const fetchLyrics = async () => {
   lyricsError.value = false
   
   try {
-    const response = await request.get(`/music/lyrics/${currentSong.value.id}`)
+    const response = await request.get(`/api/music/lyrics/${currentSong.value.id}`)
     if (response.data && response.data.success && response.data.lyrics) {
       lyricsText.value = response.data.lyrics
       parsedLyrics.value = parseLRC(response.data.lyrics)

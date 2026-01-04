@@ -354,7 +354,7 @@ const flushImageBatch = async () => {
   batchTimeout = null
 
   try {
-    const res = await request.post('/music/images/batch', {
+    const res = await request.post('/api/music/images/batch', {
       filenames: filenames
     })
 
@@ -436,7 +436,7 @@ const fetchSongs = async () => {
   try {
     // 这里调用原来的简单列表接口 (不带Base64的那个，或者新写的 /songs/list)
     // 假设 /songs/all 已经改回只返回轻量数据
-    const response = await request.get('/music/songs/all')
+    const response = await request.get('/api/music/songs/all')
     
     if (response.data && response.data.success) {
       const rawSongs = response.data.songs
@@ -486,7 +486,7 @@ const selectSong = async (song, autoPlay = true) => {
       blobUrl = audioBlobCache.get(song.id)
       addBlobToCache(song.id, blobUrl)
     } else {
-      const response = await request.get(`/music/play/${song.id}`, { responseType: 'blob' })
+      const response = await request.get(`/api/music/play/${song.id}`, { responseType: 'blob' })
       blobUrl = URL.createObjectURL(response.data)
       addBlobToCache(song.id, blobUrl)
     }
@@ -601,7 +601,7 @@ const updateLyricsHighlight = () => {
 const handleImageError = (e) => e.target.style.display='none'
 const formatTime = (s) => !s||isNaN(s)?'0:00':`${Math.floor(s/60)}:${Math.floor(s%60).toString().padStart(2,'0')}`
 const formatDuration = formatTime
-const downloadSong = async(s) => { try{const r=await request.get(`/music/play/${s.id}`,{responseType:'blob'});const u=URL.createObjectURL(r.data);const a=document.createElement('a');a.href=u;a.download=`${s.title}.mp3`;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(u)}catch{}}
+const downloadSong = async(s) => { try{const r=await request.get(`/api/music/play/${s.id}`,{responseType:'blob'});const u=URL.createObjectURL(r.data);const a=document.createElement('a');a.href=u;a.download=`${s.title}.mp3`;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(u)}catch{}}
 const handleSearch = () => { /* computed handled */ nextTick(observeSongItems) /* 搜索后重新绑定 */ }
 const playFromTime = (t) => { if(audioPlayer.value){audioPlayer.value.currentTime=t;if(!isPlaying.value)audioPlayer.value.play().then(()=>musicStore.setIsPlaying(true))} }
 const handleLyricsScroll = () => { isUserScrolling.value=true; clearTimeout(scrollTimeout.value); scrollTimeout.value=setTimeout(()=>isUserScrolling.value=false,2000) }

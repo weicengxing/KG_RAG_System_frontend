@@ -21,6 +21,12 @@
           class="search-input"
           @input="handleSearch"
         />
+        <button class="rankings-btn" @click="goToRankings" title="查看排行榜">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/>
+          </svg>
+          排行榜
+        </button>
       </div>
     </div>
 
@@ -402,7 +408,7 @@ const fetchSongs = async () => {
   isLoadingSongs.value = true
   try {
     // 依然请求后端获取 JSON 数据，知道有哪些歌，对应的图片文件名是什么
-    const response = await request.get('/music/songs/all')
+    const response = await request.get('/api/music/songs/all')
     
     if (response.data && response.data.success) {
       const rawSongs = response.data.songs
@@ -440,8 +446,22 @@ const fetchSongs = async () => {
 }
 
 // ==========================================
-// 核心逻辑 4：播放控制 (静态链接版)
+// 核心逻辑 4：播放控制 (静态链接版 + 事件上报)
 // ==========================================
+
+// 发送播放事件到后端（不阻塞播放体验）
+const sendPlayEvent = async (songId) => {
+  try {
+    await request.post('/api/music/play-event', {
+      song_id: songId,
+      timestamp: Date.now()
+    })
+    console.log(`✅ 播放事件已发送: song_id=${songId}`)
+  } catch (error) {
+    console.error('❌ 发送播放事件失败:', error)
+    // 不影响播放体验，静默失败
+  }
+}
 
 const selectSong = async (song, autoPlay = true) => {
   if (!musicStore.audioPlayer) return
@@ -468,12 +488,19 @@ const selectSong = async (song, autoPlay = true) => {
       const playPromise = musicStore.audioPlayer.play()
       if (playPromise) {
         playPromise
-          .then(() => musicStore.setIsPlaying(true))
+          .then(() => {
+            // 播放成功时发送播放事件（非阻塞）
+            sendPlayEvent(song.id)
+            musicStore.setIsPlaying(true)
+          })
           .catch(e => {
             console.warn('自动播放受阻(可能是浏览器策略):', e)
             musicStore.setIsPlaying(false)
           })
       }
+    } else {
+      // 不自动播放时也发送事件（记录用户选择）
+      sendPlayEvent(song.id)
     }
     
     // 5. 加载歌词
@@ -561,7 +588,7 @@ const toggleLyrics = () => { showLyrics.value=!showLyrics.value; if(showLyrics.v
 const fetchLyrics = async () => {
   if(!currentSong.value) return; lyricsLoading.value=true
   try {
-    const r = await request.get(`/music/lyrics/${currentSong.value.id}`)
+    const r = await request.get(`/api/music/lyrics/${currentSong.value.id}`)
     if(r.data.success) { lyricsText.value=r.data.lyrics; parsedLyrics.value=parseLRC(r.data.lyrics) }
     else lyricsError.value=true
   } catch { lyricsError.value=true } finally { lyricsLoading.value=false }
@@ -600,6 +627,12 @@ const downloadSong = (song) => {
 }
 
 const handleSearch = () => { nextTick(observeSongItems) }
+
+// 跳转到排行榜页面
+const goToRankings = () => {
+  // 使用 Vue Router 进行跳转
+  window.location.href = '/music-rankings'
+}
 const playFromTime = (t) => { if(audioPlayer.value){audioPlayer.value.currentTime=t;if(!isPlaying.value)audioPlayer.value.play().then(()=>musicStore.setIsPlaying(true))} }
 const handleLyricsScroll = () => { isUserScrolling.value=true; clearTimeout(scrollTimeout.value); scrollTimeout.value=setTimeout(()=>isUserScrolling.value=false,2000) }
 const handleLyricsAreaClick = (e) => { if(!e.target.closest('.lyrics-line')) toggleLyrics() }
@@ -749,6 +782,12 @@ onUnmounted(() => {
   }
 }
 
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
 .search-input {
   width: 350px;
 }
@@ -765,6 +804,38 @@ onUnmounted(() => {
 
 .search-input :deep(.el-input__inner)::placeholder {
   color: rgba(255, 255, 255, 0.5);
+}
+
+/* 排行榜按钮 */
+.rankings-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 50px;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+  white-space: nowrap;
+}
+
+.rankings-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+}
+
+.rankings-btn:active {
+  transform: translateY(0);
+}
+
+.rankings-btn svg {
+  width: 18px;
+  height: 18px;
 }
 
 .music-content {

@@ -9,6 +9,7 @@ import SecurityPrivacyView from '../views/SecurityPrivacyView.vue'
 import NovelSimpleView from '../views/NovelSimple.vue'
 import MusicPlayerView from '../views/MusicPlayerView.vue'
 import MusicPlayerView_simple from '../views/MusicPlayerView_simple.vue'
+import MusicRankingsView from '../views/MusicRankingsView.vue'
 import NovelUploadView from '../views/NovelUploadView.vue'
 import ChatRoomView from '../views/ChatRoomView.vue'
 import KnowledgeGraphView from '../views/KnowledgeGraphView.vue'
@@ -28,6 +29,7 @@ const routes = [
       { path: 'dashboard', name: 'Dashboard', component: DashboardView },
       { path: 'novel', name: 'NovelSimple', component: NovelSimpleView },
       { path: 'music', name: 'MusicPlayer', component: MusicPlayerView_simple },
+      { path: 'music-rankings', name: 'MusicRankings', component: MusicRankingsView },
       { path: 'profile', name: 'Profile', component: ProfileView },
       { path: 'account-settings', name: 'AccountSettings', component: AccountSettingsView },
       { path: 'security-privacy', name: 'SecurityPrivacy', component: SecurityPrivacyView },

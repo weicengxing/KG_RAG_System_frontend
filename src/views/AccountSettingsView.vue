@@ -786,3 +786,4 @@ onMounted(async () => {
   .progress-section { text-align: center; width: 100%; }
 }
 </style>
+

@@ -1,180 +1,178 @@
 <template>
-  <div class="music-rankings">
-    <!-- 动态背景 -->
-    <div class="bg" aria-hidden="true"></div>
-
-    <!-- 头部标题区域 -->
-    <div class="rankings-header reveal">
-      <div class="header-badge">
-        <span class="pulse-dot"></span>
-        实时热度排行
-      </div>
-      <h1 class="rankings-title">
-        <span class="title-main">音乐</span>
-        <span class="title-gradient">排行榜</span>
-      </h1>
-      <p class="rankings-subtitle">探索最受欢迎的音乐，发现新的声音</p>
-
-      <!-- 统计数据 -->
-      <div class="stats-row">
-        <div class="stat-item">
-          <div class="stat-value">{{ totalSongs }}</div>
-          <div class="stat-label">总歌曲</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value">{{ totalPlays }}</div>
-          <div class="stat-label">总播放</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-value">{{ updateCount }}</div>
-          <div class="stat-label">今日更新</div>
-        </div>
-      </div>
+  <div class="music-leaderboard">
+    <!-- 沉浸式动态背景 -->
+    <div class="ambient-bg">
+      <div class="blob blob-1"></div>
+      <div class="blob blob-2"></div>
+      <div class="blob blob-3"></div>
+      <div class="grid-overlay"></div>
     </div>
 
-    <!-- 筛选区域 -->
-    <div class="filter-section reveal">
-      <div class="time-range-selector">
-        <button
-          v-for="range in timeRanges"
-          :key="range.value"
-          :class="['time-btn', { active: timeRange === range.value }]"
-          @click="changeTimeRange(range.value)"
-        >
-          {{ range.label }}
-        </button>
-      </div>
-
-      <div class="compare-type-selector">
-        <button
-          v-for="type in compareTypes"
-          :key="type.value"
-          :class="['compare-btn', { active: compareType === type.value }]"
-          @click="changeCompareType(type.value)"
-        >
-          {{ type.label }}
-        </button>
-      </div>
-    </div>
-
-    <!-- 加载状态 -->
-    <div v-if="loading" class="loading-container reveal">
-      <div class="loading-spinner">
-        <div class="spinner-ring"></div>
-        <div class="spinner-ring inner"></div>
-      </div>
-      <p class="loading-text">加载中...</p>
-    </div>
-
-    <!-- 排行榜列表 -->
-    <div v-else-if="rankings.length > 0" class="rankings-container">
-      <div
-        v-for="(song, index) in rankings"
-        :key="song.song_id"
-        class="ranking-item reveal"
-        :class="{ 'top-3': song.rank <= 3 }"
-        @click="playSong(song)"
-      >
-        <!-- 装饰光晕 -->
-        <div class="item-glow"></div>
-
-        <!-- 排名奖牌 -->
-        <div class="rank-medal" :class="getRankClass(song.rank)">
-          <template v-if="song.rank <= 3">
-            <svg class="medal-icon" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-            </svg>
-          </template>
-          <template v-else>{{ song.rank }}</template>
+    <div class="content-wrapper">
+      <!-- 头部区域 -->
+      <header class="header-section">
+        <div class="badge-pill">
+          <span class="live-dot"></span>
+          <span>实时热度排行</span>
         </div>
+        <h1 class="main-title">
+          Music <span class="text-gradient">Rankings</span>
+        </h1>
+        <p class="subtitle">探索最受欢迎的音乐，发现新的声音</p>
 
-        <!-- 封面 -->
-        <div class="song-cover">
-          <div class="cover-inner">
-            <img
-              v-if="song.cover_image"
-              :src="`${apiUrl}/api/music/image/${song.cover_image}?token=${token}`"
-              :alt="song.title"
-              @error="handleImageError"
-            />
-            <div v-else class="no-cover">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-              </svg>
+        <!-- 统计数据 (绑定你的真实数据) -->
+        <div class="stats-board">
+          <div class="stat-card">
+            <div class="stat-num">{{ totalSongs }}</div>
+            <div class="stat-label">总歌曲</div>
+          </div>
+          <div class="stat-separator"></div>
+          <div class="stat-card">
+            <div class="stat-num">{{ formatPlayCountShort(totalPlays) }}</div>
+            <div class="stat-label">总播放</div>
+          </div>
+          <div class="stat-separator"></div>
+          <div class="stat-card">
+            <div class="stat-num">{{ updateCount }}</div>
+            <div class="stat-label">今日更新</div>
+          </div>
+        </div>
+      </header>
+
+      <!-- 筛选控制栏 (保留原本的时间和对比逻辑) -->
+      <div class="controls-bar">
+        <!-- 时间范围选择 -->
+        <div class="tabs glass-panel">
+          <button 
+            v-for="range in timeRanges"
+            :key="range.value"
+            :class="['tab-btn', { active: timeRange === range.value }]"
+            @click="changeTimeRange(range.value)"
+          >
+            {{ range.label }}
+          </button>
+        </div>
+        
+        <!-- 对比类型选择 -->
+        <div class="tabs glass-panel">
+          <button 
+            v-for="type in compareTypes"
+            :key="type.value"
+            :class="['tab-btn', { active: compareType === type.value }]"
+            @click="changeCompareType(type.value)"
+          >
+            {{ type.label }}
+          </button>
+        </div>
+      </div>
+
+      <!-- 加载状态 -->
+      <div v-if="loading" class="loading-container">
+        <div class="spinner"></div>
+        <p>数据加载中...</p>
+      </div>
+
+      <!-- 排行榜列表 -->
+      <div v-else-if="rankings.length > 0" class="rank-list">
+        <transition-group name="list-anim">
+          <div 
+            v-for="(song, index) in rankings" 
+            :key="song.song_id"
+            class="rank-item glass-panel"
+            :class="{'top-three': song.rank <= 3}"
+            @click="playSong(song)"
+          >
+            <!-- 排名序号 -->
+            <div class="rank-index">
+              <span class="number" :class="getRankClass(song.rank)">
+                {{ song.rank }}
+              </span>
+              <!-- 排名变化逻辑 -->
+              <div 
+                v-if="song.rank_changes && song.rank_changes[compareType]" 
+                class="trend" 
+                :class="getTrendClass(song.rank_changes[compareType])"
+              >
+                <span>{{ getRankChangeIcon(song.rank_changes[compareType]) }}</span>
+                <span v-if="song.rank_changes[compareType].change !== 'same' && song.rank_changes[compareType].change !== 'new'">
+                  {{ Math.abs(song.rank_changes[compareType].value) }}
+                </span>
+                <span v-if="song.rank_changes[compareType].change === 'new'">NEW</span>
+              </div>
+            </div>
+
+            <!-- 封面 (支持图片加载失败回退到渐变色) -->
+            <div class="cover-wrapper">
+              <div class="cover-img" :style="{ background: getRandomGradient(index) }">
+                <!-- 如果有图片则显示图片 -->
+                <img 
+                  v-if="song.cover_image && !imageLoadErrors[song.song_id]"
+                  :src="`${apiUrl}/api/music/image/${song.cover_image}?token=${token}`"
+                  :alt="song.title"
+                  @error="handleImageError(song.song_id)"
+                  class="real-image"
+                />
+                <!-- 如果没图片显示首字母 -->
+                <span v-else class="cover-initial">{{ song.title.charAt(0) }}</span>
+                
+                <!-- 播放遮罩 -->
+                <div class="play-overlay">
+                  <div class="play-icon">▶</div>
+                </div>
+              </div>
+              <div v-if="song.rank <= 3" class="crown-icon">
+                {{ song.rank === 1 ? '👑' : (song.rank === 2 ? '🥈' : '🥉') }}
+              </div>
+            </div>
+
+            <!-- 歌曲信息 -->
+            <div class="song-info">
+              <div class="title-row">
+                <h3 class="song-title">{{ song.title }}</h3>
+              </div>
+              <p class="artist-name">{{ song.artist || '未知艺术家' }}</p>
+            </div>
+
+            <!-- 播放数据 -->
+            <div class="play-stats">
+              <div class="stat-row">
+                <svg class="icon-small" viewBox="0 0 24 24"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+                <span>{{ formatPlayCount(song.play_count) }}</span>
+              </div>
+              <div class="stat-row duration">
+                {{ formatDuration(song.duration) }}
+              </div>
+            </div>
+
+            <!-- 操作按钮 -->
+            <div class="action-btns">
+              <button class="icon-btn play" @click.stop="playSong(song)">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+              </button>
             </div>
           </div>
-          <!-- 音符动画 -->
-          <div class="music-notes">
-            <span class="note note-1">🎵</span>
-            <span class="note note-2">🎶</span>
-          </div>
-        </div>
-
-        <!-- 歌曲信息 -->
-        <div class="song-info">
-          <h3 class="song-title">{{ song.title }}</h3>
-          <p class="song-artist">{{ song.artist || '未知艺术家' }}</p>
-          <div class="song-meta">
-            <span class="meta-item">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M8 5v14l11-7z"/>
-              </svg>
-              {{ formatPlayCount(song.play_count) }}
-            </span>
-            <span class="meta-item duration">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/>
-              </svg>
-              {{ formatDuration(song.duration) }}
-            </span>
-          </div>
-        </div>
-
-        <!-- 排名变化 -->
-        <div 
-          v-if="song.rank_changes && song.rank_changes[compareType]" 
-          class="rank-change"
-          :class="getRankChangeClass(song.rank_changes[compareType])"
-        >
-          <div class="change-inner">
-            <span class="change-icon">{{ getRankChangeIcon(song.rank_changes[compareType]) }}</span>
-            <span class="change-value">{{ formatRankChange(song.rank_changes[compareType]) }}</span>
-          </div>
-        </div>
-
-        <!-- 播放按钮 -->
-        <button class="play-btn" @click.stop="playSong(song)">
-          <div class="play-bg"></div>
-          <div class="play-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M8 5v14l11-7z"/>
-            </svg>
-          </div>
-        </button>
+        </transition-group>
       </div>
-    </div>
 
-    <!-- 空状态 -->
-    <div v-else class="empty-state reveal">
-      <div class="empty-icon">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-        </svg>
+      <!-- 空状态 -->
+      <div v-else class="empty-state glass-panel">
+        <div class="empty-icon">🎵</div>
+        <h3>暂无排行榜数据</h3>
+        <p>请稍后刷新或检查网络连接</p>
+        <button @click="fetchRankings" class="retry-btn">重新加载</button>
       </div>
-      <h3 class="empty-title">暂无排行榜数据</h3>
-      <p class="empty-desc">请稍后刷新或检查网络连接</p>
-      <button @click="fetchRankings" class="retry-btn">重新加载</button>
     </div>
   </div>
 </template>
 
 <script>
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, reactive } from 'vue';
 import axios from 'axios';
 
 export default {
   name: 'MusicRankingsView',
   setup() {
+    // --- 原始逻辑部分开始 ---
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
     const token = ref(localStorage.getItem('token') || '');
 
@@ -185,6 +183,9 @@ export default {
     const totalSongs = ref(0);
     const totalPlays = ref(0);
     const updateCount = ref(0);
+    
+    // 图片错误追踪
+    const imageLoadErrors = reactive({});
 
     const timeRanges = [
       { label: '全部时间', value: 'all' },
@@ -218,7 +219,7 @@ export default {
           // 更新统计数据
           totalSongs.value = rankings.value.length;
           totalPlays.value = rankings.value.reduce((sum, song) => sum + (song.play_count || 0), 0);
-          // 模拟今日更新数
+          // 计算今日更新数 (基于rank_changes逻辑)
           updateCount.value = Math.floor(rankings.value.filter(song => 
             song.rank_changes && song.rank_changes.update && song.rank_changes.update.change === 'new'
           ).length);
@@ -241,121 +242,94 @@ export default {
       compareType.value = type;
     };
 
-    // 获取排名变化图标
-    const getRankChangeIcon = (change) => {
-      switch(change.change) {
-        case 'up':
-          return '▲';
-        case 'down':
-          return '▼';
-        case 'same':
-          return '-';
-        case 'new':
-          return '✨';
-        default:
-          return '-';
-      }
-    };
-
-    // 获取排名变化样式类
-    const getRankChangeClass = (change) => {
-      switch(change.change) {
-        case 'up':
-          return 'rank-change-up';
-        case 'down':
-          return 'rank-change-down';
-        case 'same':
-          return 'rank-change-same';
-        case 'new':
-          return 'rank-change-new';
-        default:
-          return 'rank-change-same';
-      }
-    };
-
-    // 格式化排名变化数值
-    const formatRankChange = (change) => {
-      if (change.change === 'new') {
-        return 'NEW';
-      }
-      return change.change === 'same' ? '0' : (change.value > 0 ? `+${change.value}` : change.value);
-    };
-
     // 播放歌曲
     const playSong = (song) => {
       window.location.href = `/#/music?song_id=${song.song_id}`;
     };
 
-    // 格式化播放次数
+    // --- 格式化工具函数 ---
+
     const formatPlayCount = (count) => {
-      if (count >= 100000) {
-        return `${(count / 10000).toFixed(1)}万`;
-      } else if (count >= 10000) {
-        return `${(count / 10000).toFixed(1)}万`;
-      }
+      if (!count) return '0';
+      if (count >= 100000) return `${(count / 10000).toFixed(1)}万`;
+      if (count >= 10000) return `${(count / 10000).toFixed(1)}万`;
       return count.toString();
     };
 
-    // 格式化时长（秒 -> 分:秒）
+    // 顶部统计板用的简短格式
+    const formatPlayCountShort = (count) => {
+      if (!count) return '0';
+      if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
+      if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
+      return count.toString();
+    };
+
     const formatDuration = (seconds) => {
-      if (!seconds || seconds === 0) {
-        return '未知';
-      }
+      if (!seconds || seconds === 0) return '未知';
       const mins = Math.floor(seconds / 60);
       const secs = Math.floor(seconds % 60);
       return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
-    // 获取排名样式类
+    const getRankChangeIcon = (change) => {
+      if (!change) return '-';
+      switch(change.change) {
+        case 'up': return '▲';
+        case 'down': return '▼';
+        case 'same': return '-';
+        case 'new': return '✨';
+        default: return '-';
+      }
+    };
+
+    // --- 样式辅助逻辑 ---
+
+    // 映射 API 状态到新的 CSS 类名
+    const getTrendClass = (change) => {
+      if (!change) return '';
+      if (change.change === 'up') return 'up';
+      if (change.change === 'down') return 'down';
+      if (change.change === 'new') return 'new';
+      return 'same';
+    };
+
     const getRankClass = (rank) => {
-      if (rank === 1) return 'rank-first';
-      if (rank === 2) return 'rank-second';
-      if (rank === 3) return 'rank-third';
+      if (rank === 1) return 'rank-1';
+      if (rank === 2) return 'rank-2';
+      if (rank === 3) return 'rank-3';
       return '';
     };
 
-    // 处理图片加载错误
-    const handleImageError = (e) => {
-      e.target.style.display = 'none';
-      e.target.parentElement.classList.add('error');
+    // 处理图片加载失败，切换到渐变背景
+    const handleImageError = (songId) => {
+      imageLoadErrors[songId] = true;
     };
 
-    // 滚动动画观察器
-    let observer = null;
+    // 生成确定的随机渐变色（基于index，保证列表滚动时颜色不闪烁）
+    const gradients = [
+      'linear-gradient(135deg, #FF9A9E 0%, #FECFEF 100%)',
+      'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)',
+      'linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%)',
+      'linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%)',
+      'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+      'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+    ];
+    const getRandomGradient = (index) => {
+      return gradients[index % gradients.length];
+    };
+
+    // 自动刷新
+    let refreshInterval = null;
 
     onMounted(() => {
       fetchRankings();
-      
-      // 自动刷新
-      const refreshInterval = setInterval(() => {
-        if (!loading.value) {
-          fetchRankings();
-        }
+      refreshInterval = setInterval(() => {
+        if (!loading.value) fetchRankings();
       }, 5 * 60 * 1000);
+    });
 
-      // 初始化滚动动画
-      observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('show');
-            observer.unobserve(entry.target);
-          }
-        });
-      }, { threshold: 0.1 });
-
-      // 观察所有需要动画的元素
-      setTimeout(() => {
-        document.querySelectorAll('.reveal').forEach(el => {
-          observer.observe(el);
-        });
-      }, 100);
-
-      onUnmounted(() => {
-        clearInterval(refreshInterval);
-        if (observer) {
-          observer.disconnect();
-        }
-      });
+    onUnmounted(() => {
+      if (refreshInterval) clearInterval(refreshInterval);
     });
 
     return {
@@ -370,800 +344,577 @@ export default {
       totalSongs,
       totalPlays,
       updateCount,
+      imageLoadErrors,
       fetchRankings,
       changeTimeRange,
       changeCompareType,
       playSong,
       formatPlayCount,
+      formatPlayCountShort,
       formatDuration,
-      getRankClass,
       getRankChangeIcon,
-      getRankChangeClass,
-      formatRankChange,
-      handleImageError
+      getTrendClass,
+      getRankClass,
+      handleImageError,
+      getRandomGradient
     };
   }
 };
 </script>
 
 <style scoped>
-/* CSS 变量定义 - 参考 luxury_landing */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+
+/* --- 全局变量与基础设置 --- */
 :root {
-  --bg0: #070A12;
-  --bg1: #0B1224;
-  --card: rgba(255, 255, 255, 0.06);
-  --card2: rgba(255, 255, 255, 0.08);
-  --stroke: rgba(255, 255, 255, 0.10);
-  --stroke2: rgba(255, 255, 255, 0.14);
-  --text: rgba(255, 255, 255, 0.92);
-  --muted: rgba(255, 255, 255, 0.66);
-  --muted2: rgba(255, 255, 255, 0.52);
-  --brand: #7C5CFF;
-  --brand2: #2DE2E6;
-  --brand3: #FF3D8D;
-  --ok: #39D98A;
-  --warn: #FFB020;
-  --shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
-  --shadow2: 0 18px 60px rgba(0, 0, 0, 0.40);
-  --radius: 22px;
-  --radius2: 18px;
-  --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease2: cubic-bezier(0.16, 1, 0.3, 1);
+  --bg-dark: #050511;
+  --glass-bg: rgba(255, 255, 255, 0.03);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-highlight: rgba(255, 255, 255, 0.15);
+  --primary: #7000ff;
+  --accent: #00f2fe;
+  --text-main: #ffffff;
+  --text-muted: rgba(255, 255, 255, 0.6);
+  --radius-lg: 24px;
+  --radius-md: 16px;
+  --gold: #FFD700;
+  --silver: #E0E0E0;
+  --bronze: #CD7F32;
 }
 
-.music-rankings {
-  position: relative;
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 3rem 2rem 6rem;
+.music-leaderboard {
   min-height: 100vh;
+  /* background-color: #050511; */
+  color: white;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  position: relative;
+  overflow-x: hidden;
+  padding-bottom: 50px;
 }
 
-/* 动态背景 */
-.bg {
+/* --- 动态背景 --- */
+.ambient-bg {
   position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: -3;
-  background:
-    radial-gradient(1200px 900px at 15% 18%, color-mix(in srgb, var(--brand) 25%, transparent), transparent 55%),
-    radial-gradient(900px 700px at 80% 28%, color-mix(in srgb, var(--brand2) 22%, transparent), transparent 60%),
-    radial-gradient(900px 700px at 60% 88%, color-mix(in srgb, var(--brand3) 18%, transparent), transparent 60%);
-  filter: saturate(120%);
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  background-color: #050511;
+  overflow: hidden;
 }
 
-.bg::before {
-  content: "";
+.blob {
   position: absolute;
-  inset: -30vh -30vw;
-  background:
-    radial-gradient(closest-side, rgba(255, 255, 255, 0.06), transparent 65%) 10% 20% / 520px 520px,
-    radial-gradient(closest-side, rgba(255, 255, 255, 0.05), transparent 66%) 78% 30% / 680px 680px,
-    radial-gradient(closest-side, rgba(255, 255, 255, 0.04), transparent 68%) 60% 85% / 820px 820px;
-  mix-blend-mode: overlay;
+  border-radius: 50%;
+  filter: blur(80px);
   opacity: 0.6;
-  transform: translate3d(0, 0, 0);
-  animation: drift 18s var(--ease) infinite alternate;
+  animation: float 10s infinite ease-in-out alternate;
 }
 
-@keyframes drift {
-  from { transform: translate3d(-2%, -1.5%, 0) scale(1); }
-  to { transform: translate3d(2.5%, 1.6%, 0) scale(1.02); }
+.blob-1 {
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, #4f00bc 0%, transparent 70%);
+  top: -100px;
+  left: -100px;
 }
 
-/* 头部区域 */
-.rankings-header {
+.blob-2 {
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, #bc006d 0%, transparent 70%);
+  bottom: -100px;
+  right: -100px;
+  animation-delay: -5s;
+}
+
+.blob-3 {
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, #0044bc 0%, transparent 70%);
+  top: 40%;
+  left: 30%;
+  animation-duration: 15s;
+}
+
+.grid-overlay {
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(circle at center, black 40%, transparent 100%);
+}
+
+@keyframes float {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(30px, 50px) scale(1.1); }
+}
+
+/* --- 内容容器 --- */
+.content-wrapper {
+  position: relative;
+  z-index: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px 20px;
+}
+
+/* --- 头部区域 --- */
+.header-section {
   text-align: center;
-  margin-bottom: 3rem;
+  margin-bottom: 40px;
+  animation: slideDown 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.header-badge {
+.badge-pill {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 16px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--card2) 72%, transparent);
-  border: 1px solid var(--stroke);
-  color: var(--muted);
-  font-size: 13px;
-  margin-bottom: 1.5rem;
-  animation: fadeInUp 0.6s var(--ease) forwards;
+  gap: 8px;
+  padding: 6px 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 100px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 20px;
+  backdrop-filter: blur(10px);
 }
 
-.pulse-dot {
-  width: 10px;
-  height: 10px;
+.live-dot {
+  width: 8px;
+  height: 8px;
+  background: #00ff88;
   border-radius: 50%;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--brand2) 85%, #fff), color-mix(in srgb, var(--brand) 85%, #000));
-  box-shadow: 0 0 0 6px color-mix(in srgb, var(--brand) 18%, transparent);
-  animation: pulse 2s ease-in-out infinite;
+  box-shadow: 0 0 10px #00ff88;
+  animation: blink 2s infinite;
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.6; transform: scale(1.1); }
-}
-
-.rankings-title {
-  margin: 0 0 1rem;
-  font-size: clamp(40px, 5vw, 64px);
+.main-title {
+  font-size: clamp(40px, 6vw, 72px);
   font-weight: 800;
-  letter-spacing: -0.02em;
   line-height: 1.1;
-  animation: fadeInUp 0.6s var(--ease) 0.1s forwards;
-  opacity: 0;
+  margin: 0 0 16px;
 }
 
-.title-main {
-  color: var(--text);
-}
-
-.title-gradient {
-  background: linear-gradient(90deg, 
-    color-mix(in srgb, var(--brand) 92%, #fff), 
-    color-mix(in srgb, var(--brand2) 86%, #fff), 
-    color-mix(in srgb, var(--brand3) 70%, #fff));
+.text-gradient {
+  background: linear-gradient(135deg, #fff 0%, #a5a5a5 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  position: relative;
 }
 
-.rankings-subtitle {
-  color: var(--muted);
-  font-size: 16px;
-  margin: 0 0 2rem;
-  max-width: 600px;
-  margin-left: auto;
-  margin-right: auto;
-  line-height: 1.6;
-  animation: fadeInUp 0.6s var(--ease) 0.2s forwards;
-  opacity: 0;
+.subtitle {
+  color: var(--text-muted);
+  font-size: 18px;
+  margin-bottom: 40px;
 }
 
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+/* 数据看板 */
+.stats-board {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(20px);
+  padding: 20px 40px;
+  border-radius: 24px;
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 20px 40px rgba(0,0,0,0.3);
 }
 
-/* 统计数据行 */
-.stats-row {
-  display: flex;
-  justify-content: center;
-  gap: 2rem;
-  flex-wrap: wrap;
-  animation: fadeInUp 0.6s var(--ease) 0.3s forwards;
-  opacity: 0;
+.stat-card {
+  text-align: left;
+  min-width: 100px;
 }
 
-.stat-item {
-  text-align: center;
-  padding: 1rem 2rem;
-  border-radius: 18px;
-  border: 1px solid var(--stroke);
-  background: color-mix(in srgb, var(--card) 78%, transparent);
-  box-shadow: var(--shadow2);
-  min-width: 140px;
-}
-
-.stat-value {
-  font-size: 32px;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  background: linear-gradient(90deg, var(--brand), var(--brand2));
+.stat-num {
+  font-size: 24px;
+  font-weight: 700;
+  background: linear-gradient(90deg, var(--accent), #fff);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 
 .stat-label {
-  margin-top: 0.5rem;
-  color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
+  color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 1px;
+  margin-top: 4px;
 }
 
-/* 筛选区域 */
-.filter-section {
-  margin-bottom: 2rem;
-  animation: fadeInUp 0.6s var(--ease) 0.4s forwards;
-  opacity: 0;
+.stat-separator {
+  width: 1px;
+  height: 30px;
+  background: rgba(255,255,255,0.1);
+  margin: 0 30px;
 }
 
-.time-range-selector,
-.compare-type-selector {
+/* --- 控制栏 --- */
+.controls-bar {
   display: flex;
   justify-content: center;
-  gap: 0.75rem;
-  margin-bottom: 1.5rem;
+  gap: 20px;
+  margin-bottom: 30px;
   flex-wrap: wrap;
 }
 
-.time-btn,
-.compare-btn {
-  padding: 0.75rem 1.5rem;
-  border: 2px solid var(--stroke);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--card) 85%, transparent);
-  color: var(--muted);
-  font-size: 14px;
-  font-weight: 500;
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+}
+
+.tabs {
+  padding: 6px;
+  display: flex;
+  gap: 4px;
+}
+
+.tab-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 10px 24px;
+  border-radius: 12px;
   cursor: pointer;
-  transition: all 0.3s var(--ease);
-  position: relative;
-  overflow: hidden;
-}
-
-.time-btn:hover,
-.compare-btn:hover {
-  border-color: var(--stroke2);
-  color: var(--text);
-  transform: translateY(-2px);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.20);
-}
-
-.time-btn.active,
-.compare-btn.active {
-  background: linear-gradient(135deg,
-    color-mix(in srgb, var(--brand) 92%, #000),
-    color-mix(in srgb, var(--brand2) 80%, #000));
-  border-color: transparent;
-  color: white;
-  box-shadow: 0 18px 50px color-mix(in srgb, var(--brand) 26%, transparent);
-}
-
-.compare-btn {
-  padding: 0.5rem 1.25rem;
-  font-size: 13px;
-}
-
-/* 加载状态 */
-.loading-container {
-  text-align: center;
-  padding: 4rem 2rem;
-  animation: fadeInUp 0.6s var(--ease) forwards;
-  opacity: 0;
-}
-
-.loading-spinner {
-  position: relative;
-  width: 80px;
-  height: 80px;
-  margin: 0 auto 1.5rem;
-}
-
-.spinner-ring {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  border: 3px solid transparent;
-  border-top-color: var(--brand);
-  animation: spin 1s linear infinite;
-}
-
-.spinner-ring.inner {
-  inset: 12px;
-  border-top-color: var(--brand2);
-  animation: spin 0.8s linear infinite reverse;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.loading-text {
-  color: var(--muted);
+  font-weight: 600;
+  transition: all 0.3s ease;
   font-size: 14px;
 }
 
-/* 排行榜容器 */
-.rankings-container {
+.tab-btn:hover {
+  color: white;
+  background: rgba(255,255,255,0.05);
+}
+
+.tab-btn.active {
+  background: rgba(255,255,255,0.1);
+  color: white;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  border: 1px solid rgba(255,255,255,0.05);
+}
+
+/* --- 列表样式 --- */
+.rank-list {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 12px;
 }
 
-.ranking-item {
+.rank-item {
+  display: grid;
+  grid-template-columns: 60px 80px 1fr 120px 60px;
+  align-items: center;
+  padding: 16px;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.rank-item:hover {
+  transform: scale(1.01);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  z-index: 2;
+}
+
+/* 排名列 */
+.rank-index {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.number {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.rank-1 { color: var(--gold); text-shadow: 0 0 10px rgba(255, 215, 0, 0.5); font-size: 24px; }
+.rank-2 { color: var(--silver); font-size: 22px; }
+.rank-3 { color: var(--bronze); font-size: 22px; }
+
+.trend {
+  font-size: 10px;
+  color: var(--text-muted);
   display: flex;
   align-items: center;
-  gap: 1.5rem;
-  padding: 1.5rem 1.25rem;
-  border-radius: var(--radius);
-  border: 1px solid var(--stroke);
-  background: color-mix(in srgb, var(--card) 70%, transparent);
-  box-shadow: var(--shadow2);
-  cursor: pointer;
-  overflow: hidden;
-  transition: all 0.3s var(--ease);
-  opacity: 0;
-  transform: translateY(20px);
+  gap: 2px;
 }
 
-.ranking-item.reveal.show {
-  opacity: 1;
-  transform: translateY(0);
+.trend.up { color: #00ff88; }
+.trend.down { color: #ff4d4d; }
+.trend.new { color: #d000ff; font-weight: bold; animation: pulse 1s infinite; }
+
+/* 封面列 */
+.cover-wrapper {
+  position: relative;
+  width: 60px;
+  height: 60px;
 }
 
-.ranking-item:hover {
-  transform: translateY(-4px) scale(1.01);
-  border-color: var(--stroke2);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
-}
-
-/* 装饰光晕 */
-.item-glow {
-  position: absolute;
-  inset: -2px;
-  background:
-    radial-gradient(700px 320px at 10% 0%, color-mix(in srgb, var(--brand) 8%, transparent), transparent 50%),
-    radial-gradient(600px 280px at 90% 12%, color-mix(in srgb, var(--brand2) 8%, transparent), transparent 50%);
-  opacity: 0;
-  transition: opacity 0.3s var(--ease);
-  pointer-events: none;
-}
-
-.ranking-item:hover .item-glow {
-  opacity: 1;
-}
-
-.ranking-item.top-3 .item-glow {
-  opacity: 0.6;
-}
-
-/* 排名奖牌 */
-.rank-medal {
-  width: 56px;
-  height: 56px;
+.cover-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
-  font-weight: 800;
-  color: var(--muted2);
-  background: color-mix(in srgb, var(--card2) 85%, transparent);
-  border: 1px solid var(--stroke);
-  border-radius: 16px;
-  flex-shrink: 0;
-  transition: all 0.3s var(--ease);
-}
-
-.medal-icon {
-  width: 32px;
-  height: 32px;
-}
-
-.rank-first {
-  background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
-  color: white;
-  border-color: transparent;
-  box-shadow: 0 10px 30px color-mix(in srgb, #FFD700 30%, transparent);
-  transform: scale(1.1);
-}
-
-.rank-second {
-  background: linear-gradient(135deg, #C0C0C0 0%, #808080 100%);
-  color: white;
-  border-color: transparent;
-  box-shadow: 0 10px 30px color-mix(in srgb, #C0C0C0 30%, transparent);
-  transform: scale(1.05);
-}
-
-.rank-third {
-  background: linear-gradient(135deg, #CD7F32 0%, #8B4513 100%);
-  color: white;
-  border-color: transparent;
-  box-shadow: 0 10px 30px color-mix(in srgb, #CD7F32 30%, transparent);
-  transform: scale(1.02);
-}
-
-/* 封面 */
-.song-cover {
   position: relative;
-  width: 80px;
-  height: 80px;
-  flex-shrink: 0;
-  transition: all 0.3s var(--ease);
-}
-
-.ranking-item:hover .song-cover {
-  transform: scale(1.1) rotate(2deg);
-}
-
-.cover-inner {
-  width: 100%;
-  height: 100%;
-  border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.30);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
 }
 
-.song-cover img {
+.real-image {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 0.3s var(--ease);
 }
 
-.no-cover,
-.song-cover.error {
-  width: 100%;
-  height: 100%;
+.cover-initial {
+  font-size: 24px;
+  font-weight: 800;
+  color: rgba(255,255,255,0.3);
+}
+
+.play-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--brand) 0%, var(--brand2) 100%);
-  color: white;
-}
-
-.no-cover svg {
-  width: 40px;
-  height: 40px;
-  opacity: 0.9;
-}
-
-/* 音乐音符动画 */
-.music-notes {
-  position: absolute;
-  inset: -5px;
-  pointer-events: none;
-}
-
-.note {
-  position: absolute;
-  font-size: 16px;
   opacity: 0;
-  animation: floatNote 2s ease-in-out infinite;
+  transition: opacity 0.2s;
+  backdrop-filter: blur(2px);
 }
 
-.note-1 {
-  top: 0;
-  right: 10px;
-  animation-delay: 0s;
-}
-
-.note-2 {
-  bottom: 0;
-  left: 10px;
-  animation-delay: 1s;
-}
-
-.ranking-item:hover .note {
+.rank-item:hover .play-overlay {
   opacity: 1;
 }
 
-@keyframes floatNote {
-  0%, 100% {
-    transform: translateY(0) rotate(0deg);
-    opacity: 0;
-  }
-  50% {
-    transform: translateY(-15px) rotate(15deg);
-    opacity: 1;
-  }
+.play-icon {
+  color: white;
+  font-size: 14px;
 }
 
-/* 歌曲信息 */
+.crown-icon {
+  position: absolute;
+  top: -10px;
+  left: -8px;
+  font-size: 20px;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+  transform: rotate(-15deg);
+}
+
+/* 信息列 */
 .song-info {
-  flex: 1;
+  padding-left: 20px;
   min-width: 0;
 }
 
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
 .song-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text);
-  margin: 0 0 0.5rem 0;
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  letter-spacing: -0.01em;
+  color: var(--text-main);
 }
 
-.song-artist {
-  font-size: 14px;
-  color: var(--muted);
-  margin: 0 0 0.75rem 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.song-meta {
-  display: flex;
-  gap: 1.5rem;
-  align-items: center;
-}
-
-.meta-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--muted2);
+.artist-name {
   font-size: 13px;
-  padding: 0.35rem 0.75rem;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--card2) 72%, transparent);
-  border: 1px solid var(--stroke);
+  color: var(--text-muted);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.meta-item svg {
+/* 播放数据 */
+.play-stats {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.stat-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.icon-small {
   width: 14px;
   height: 14px;
-  opacity: 0.8;
+  opacity: 0.7;
 }
 
-/* 排名变化 */
-.rank-change {
-  flex-shrink: 0;
-}
-
-.change-inner {
+/* 按钮 */
+.action-btns {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.6rem 1rem;
-  border-radius: 12px;
-  font-size: 14px;
-  font-weight: 600;
-  min-width: 80px;
-  justify-content: center;
-  background: color-mix(in srgb, var(--card2) 72%, transparent);
-  border: 1px solid var(--stroke);
+  justify-content: flex-end;
+  opacity: 0;
+  transition: opacity 0.2s;
 }
 
-.change-icon {
-  font-size: 12px;
+.rank-item:hover .action-btns {
+  opacity: 1;
 }
 
-.rank-change-up {
-  background: rgba(76, 175, 80, 0.15);
-  color: #4CAF50;
-  border-color: rgba(76, 175, 80, 0.3);
-}
-
-.rank-change-down {
-  background: rgba(244, 67, 54, 0.15);
-  color: #F44336;
-  border-color: rgba(244, 67, 54, 0.3);
-}
-
-.rank-change-same {
-  background: rgba(158, 158, 158, 0.15);
-  color: var(--muted2);
-  border-color: var(--stroke);
-}
-
-.rank-change-new {
-  background: rgba(156, 39, 176, 0.15);
-  color: #9C27B0;
-  border-color: rgba(156, 39, 176, 0.3);
-  animation: pulse 2s ease-in-out infinite;
-}
-
-/* 播放按钮 */
-.play-btn {
-  position: relative;
-  width: 60px;
-  height: 60px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: all 0.3s var(--ease);
-}
-
-.play-bg {
-  position: absolute;
-  inset: 0;
+.icon-btn {
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  background: linear-gradient(135deg,
-    color-mix(in srgb, var(--brand) 92%, #000),
-    color-mix(in srgb, var(--brand2) 80%, #000));
-  box-shadow: 0 18px 50px color-mix(in srgb, var(--brand) 26%, transparent);
-  transition: all 0.3s var(--ease);
-}
-
-.play-icon {
-  position: absolute;
-  inset: 0;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: transparent;
+  color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
-  z-index: 1;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
-.play-btn:hover {
-  transform: scale(1.15);
+.icon-btn:hover {
+  background: var(--primary);
+  border-color: var(--primary);
+  box-shadow: 0 0 15px rgba(112, 0, 255, 0.4);
 }
 
-.play-btn:hover .play-bg {
-  box-shadow: 0 22px 70px color-mix(in srgb, var(--brand) 34%, transparent);
+/* 空状态与加载 */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 0;
+  color: var(--text-muted);
 }
 
-.play-icon svg {
-  width: 24px;
-  height: 24px;
-  margin-left: 3px;
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255,255,255,0.1);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 20px;
 }
 
-/* 空状态 */
 .empty-state {
   text-align: center;
-  padding: 6rem 2rem;
-  animation: fadeInUp 0.6s var(--ease) forwards;
-  opacity: 0;
+  padding: 60px 20px;
+  color: var(--text-muted);
 }
 
 .empty-icon {
-  width: 120px;
-  height: 120px;
-  margin: 0 auto 2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: color-mix(in srgb, var(--card2) 72%, transparent);
-  border: 1px solid var(--stroke);
-  border-radius: 50%;
-}
-
-.empty-icon svg {
-  width: 60px;
-  height: 60px;
-  color: var(--muted);
-  opacity: 0.5;
-}
-
-.empty-title {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--text);
-  margin: 0 0 0.75rem 0;
-}
-
-.empty-desc {
-  color: var(--muted);
-  font-size: 14px;
-  margin: 0 0 2rem 0;
+  font-size: 48px;
+  margin-bottom: 20px;
 }
 
 .retry-btn {
-  padding: 1rem 2.5rem;
-  border: 2px solid var(--brand);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--card) 85%, transparent);
-  color: var(--text);
-  font-size: 14px;
-  font-weight: 600;
+  margin-top: 20px;
+  padding: 8px 24px;
+  background: var(--primary);
+  border: none;
+  border-radius: 20px;
+  color: white;
   cursor: pointer;
-  transition: all 0.3s var(--ease);
+  font-weight: 600;
+  transition: 0.2s;
 }
 
 .retry-btn:hover {
-  background: linear-gradient(135deg,
-    color-mix(in srgb, var(--brand) 92%, #000),
-    color-mix(in srgb, var(--brand2) 80%, #000));
-  border-color: transparent;
-  color: white;
-  transform: translateY(-2px);
-  box-shadow: 0 18px 50px color-mix(in srgb, var(--brand) 26%, transparent);
+  filter: brightness(1.2);
 }
 
-/* 响应式设计 */
-@media (max-width: 1024px) {
-  .music-rankings {
-    padding: 2rem 1.5rem 4rem;
-  }
-
-  .stats-row {
-    gap: 1rem;
-  }
-
-  .stat-item {
-    padding: 0.75rem 1.5rem;
-    min-width: 120px;
-  }
-}
-
+/* --- 响应式调整 --- */
 @media (max-width: 768px) {
-  .music-rankings {
-    padding: 1.5rem 1rem 3rem;
+  .rank-item {
+    grid-template-columns: 40px 60px 1fr 60px; /* 移除了按钮列在移动端 */
+    gap: 10px;
+    padding: 12px;
+  }
+  
+  .action-btns {
+    display: none;
   }
 
-  .rankings-title {
+  .stats-board {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    padding: 20px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  
+  .stat-separator {
+    width: 100%;
+    height: 1px;
+    margin: 5px 0;
+  }
+
+  .main-title {
     font-size: 36px;
   }
-
-  .time-range-selector,
-  .compare-type-selector {
-    gap: 0.5rem;
-  }
-
-  .time-btn,
-  .compare-btn {
-    padding: 0.6rem 1.25rem;
-    font-size: 13px;
-  }
-
-  .ranking-item {
-    padding: 1.25rem 1rem;
-    gap: 1rem;
-  }
-
-  .rank-medal {
-    width: 48px;
-    height: 48px;
-    font-size: 18px;
-  }
-
-  .song-cover {
-    width: 64px;
-    height: 64px;
-  }
-
-  .song-title {
-    font-size: 16px;
-  }
-
-  .song-artist {
-    font-size: 13px;
-  }
-
-  .song-meta {
-    flex-wrap: wrap;
-    gap: 0.75rem;
-  }
-
-  .play-btn {
-    width: 50px;
-    height: 50px;
-  }
-
-  .play-icon svg {
-    width: 20px;
-    height: 20px;
-  }
 }
 
-@media (max-width: 480px) {
-  .rankings-title {
-    font-size: 28px;
-  }
-
-  .ranking-item {
-    flex-wrap: wrap;
-  }
-
-  .rank-medal {
-    margin-right: -0.5rem;
-  }
-
-  .song-info {
-    flex: 1 1 100%;
-    margin-top: 0.5rem;
-  }
-
-  .play-btn {
-    position: absolute;
-    top: 1.25rem;
-    right: 1rem;
-  }
+/* --- 动画关键帧 --- */
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
-/* 性能优化 - 减少动效偏好 */
-@media (prefers-reduced-motion: reduce) {
-  * {
-    animation: none !important;
-    transition: none !important;
-  }
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+.list-anim-enter-active,
+.list-anim-leave-active {
+  transition: all 0.5s ease;
+}
+
+.list-anim-enter-from,
+.list-anim-leave-to {
+  opacity: 0;
+  transform: translateY(30px);
 }
 </style>

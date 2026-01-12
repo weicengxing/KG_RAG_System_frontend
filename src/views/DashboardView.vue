@@ -60,6 +60,21 @@
           </div>
         </el-card>
         
+        <!-- 日志查询 -->
+        <el-card class="box-card">
+          <template #header>
+            <div class="card-header">
+              <span>📊 日志查询</span>
+            </div>
+          </template>
+          <div class="log-search-preview">
+            <p style="color: #666; margin-bottom: 12px;">查询系统日志、追踪TraceID</p>
+            <el-button type="primary" @click="showLogDialog = true" style="width: 100%;">
+              🔍 查询日志
+            </el-button>
+          </div>
+        </el-card>
+        
         <!-- 系统信息 -->
         <el-card class="box-card full-width">
           <template #header>
@@ -88,24 +103,159 @@
               <span class="info-label">数据存储:</span>
               <span class="info-value">Neo4j + MongoDB</span>
             </div>
+            <div class="info-item">
+              <span class="info-label">搜索引擎:</span>
+              <span class="info-value">Elasticsearch</span>
+            </div>
           </div>
         </el-card>
       </div>
     </div>
+
+    <!-- 日志查询对话框 -->
+    <el-dialog v-model="showLogDialog" title="📊 系统日志查询" width="80%" top="5vh">
+      <!-- 搜索表单 -->
+      <el-form :model="logSearchForm" label-width="100px" size="small">
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="关键词">
+              <el-input v-model="logSearchForm.keyword" placeholder="输入搜索关键词" clearable />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="日志级别">
+              <el-select v-model="logSearchForm.level" placeholder="全部" clearable style="width: 100%;">
+                <el-option label="DEBUG" value="DEBUG" />
+                <el-option label="INFO" value="INFO" />
+                <el-option label="WARNING" value="WARNING" />
+                <el-option label="ERROR" value="ERROR" />
+                <el-option label="CRITICAL" value="CRITICAL" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="模块">
+              <el-input v-model="logSearchForm.module" placeholder="模块名称" clearable />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="用户ID">
+              <el-input v-model="logSearchForm.user_id" placeholder="输入用户ID" clearable />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="TraceID">
+              <el-input v-model="logSearchForm.trace_id" placeholder="输入TraceID" clearable />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="开始时间">
+              <el-date-picker
+                v-model="logSearchForm.start_time"
+                type="datetime"
+                placeholder="选择开始时间"
+                style="width: 100%;"
+                format="YYYY-MM-DD HH:mm:ss"
+                value-format="YYYY-MM-DDTHH:mm:ss"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="结束时间">
+              <el-date-picker
+                v-model="logSearchForm.end_time"
+                type="datetime"
+                placeholder="选择结束时间"
+                style="width: 100%;"
+                format="YYYY-MM-DD HH:mm:ss"
+                value-format="YYYY-MM-DDTHH:mm:ss"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row>
+          <el-col :span="24" style="text-align: center;">
+            <el-button type="primary" @click="searchLogs" :loading="searching">🔍 搜索</el-button>
+            <el-button @click="resetSearch">🔄 重置</el-button>
+          </el-col>
+        </el-row>
+      </el-form>
+
+      <!-- 搜索结果 -->
+      <div v-if="searchResults.length > 0" style="margin-top: 20px;">
+        <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+          <span style="color: #666;">找到 {{ searchTotal }} 条日志</span>
+          <el-pagination
+            v-model:current-page="currentPage"
+            :page-size="pageSize"
+            :total="searchTotal"
+            layout="prev, pager, next"
+            @current-change="handlePageChange"
+            small
+          />
+        </div>
+
+        <el-table :data="searchResults" stripe size="small" max-height="500">
+          <el-table-column prop="timestamp" label="时间" width="180" />
+          <el-table-column prop="level" label="级别" width="100">
+            <template #default="{ row }">
+              <el-tag :type="getLevelTagType(row.level)" size="small">{{ row.level }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="module" label="模块" width="120" />
+          <el-table-column prop="user_id" label="用户" width="100" />
+          <el-table-column prop="trace_id" label="TraceID" width="200" show-overflow-tooltip />
+          <el-table-column label="日志内容" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span v-html="highlightSearch(row.message)"></span>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+
+      <div v-else-if="!searching && hasSearched" style="text-align: center; padding: 40px; color: #999;">
+        <el-icon :size="48" style="margin-bottom: 12px;"><DocumentDelete /></el-icon>
+        <p>暂无匹配的日志记录</p>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { DocumentDelete } from '@element-plus/icons-vue'
 import request from '../utils/request'
 import MusicTrending from '../components/MusicTrending.vue'
+import { ElMessage } from 'element-plus'
 
 const status = ref('离线')
 const message = ref('正在连接...')
 
+// 日志查询相关
+const showLogDialog = ref(false)
+const searching = ref(false)
+const hasSearched = ref(false)
+const searchResults = ref([])
+const searchTotal = ref(0)
+const currentPage = ref(1)
+const pageSize = ref(20)
+
+const logSearchForm = ref({
+  keyword: '',
+  level: '',
+  module: '',
+  user_id: '',
+  trace_id: '',
+  start_time: null,
+  end_time: null
+})
+
 const checkBackend = async () => {
   try {
-    // 请求后端的根路径
     const res = await request.get('/')
     if (res.data.status === 'success') {
       status.value = '在线'
@@ -116,6 +266,73 @@ const checkBackend = async () => {
     message.value = '无法连接到后端，请检查服务是否启动。'
     console.error(error)
   }
+}
+
+const searchLogs = async () => {
+  searching.value = true
+  hasSearched.value = true
+  try {
+    const params = {
+      keyword: logSearchForm.value.keyword,
+      level: logSearchForm.value.level,
+      module: logSearchForm.value.module,
+      user_id: logSearchForm.value.user_id,
+      trace_id: logSearchForm.value.trace_id,
+      start_time: logSearchForm.value.start_time,
+      end_time: logSearchForm.value.end_time,
+      size: pageSize.value,
+      from_: (currentPage.value - 1) * pageSize.value
+    }
+
+    const res = await request.get('/api/logs/search', { params })
+    searchResults.value = res.data.logs || []
+    searchTotal.value = res.data.total || 0
+    ElMessage.success(`找到 ${searchTotal.value} 条日志`)
+  } catch (error) {
+    console.error('搜索日志失败:', error)
+    ElMessage.error('搜索日志失败: ' + (error.response?.data?.detail || error.message))
+  } finally {
+    searching.value = false
+  }
+}
+
+const resetSearch = () => {
+  logSearchForm.value = {
+    keyword: '',
+    level: '',
+    module: '',
+    user_id: '',
+    trace_id: '',
+    start_time: null,
+    end_time: null
+  }
+  searchResults.value = []
+  searchTotal.value = 0
+  currentPage.value = 1
+  hasSearched.value = false
+}
+
+const handlePageChange = (page) => {
+  currentPage.value = page
+  searchLogs()
+}
+
+const getLevelTagType = (level) => {
+  const typeMap = {
+    'DEBUG': 'info',
+    'INFO': 'success',
+    'WARNING': 'warning',
+    'ERROR': 'danger',
+    'CRITICAL': 'danger'
+  }
+  return typeMap[level] || 'info'
+}
+
+const highlightSearch = (text) => {
+  if (!logSearchForm.value.keyword || !text) return text
+  const keyword = logSearchForm.value.keyword
+  const regex = new RegExp(`(${keyword})`, 'gi')
+  return text.replace(regex, '<mark style="background-color: #ffeb3b; color: #000;">$1</mark>')
 }
 
 onMounted(() => {

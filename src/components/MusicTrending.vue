@@ -48,10 +48,11 @@
         <!-- 歌曲信息 -->
         <div class="song-info">
           <img 
-            v-if="song.cover_image && coverMap[song.cover_image]" 
-            :src="coverMap[song.cover_image]" 
+            v-if="song.cover_image" 
+            :src="getStaticImageUrl(song.cover_image)" 
             :alt="song.title"
             class="song-cover"
+            @error="handleImageError"
           />
           <div class="song-cover-placeholder" v-else>
             🎵
@@ -97,7 +98,6 @@ const hasMore = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
 const maxHotness = ref(100) // 动态最大热度值
-const coverMap = ref({}) // 封面图片缓存 map
 
 // 计算热度百分比（用于进度条）
 const getHotnessPercentage = (hotness) => {
@@ -106,31 +106,15 @@ const getHotnessPercentage = (hotness) => {
   return Math.min((hotness / effectiveMax) * 100, 100)
 }
 
-// 批量获取图片数据
-const loadCoversForSongs = async (songsToLoad) => {
-  const coverNames = songsToLoad
-    .map(song => song.cover_image)
-    .filter(Boolean)
-  
-  if (coverNames.length === 0) return
-  
-  try {
-    const response = await request.post('/api/music/images/batch', {
-      filenames: coverNames
-    })
-    
-    if (response.data && response.data.data) {
-      // 后端返回格式: {data: {filename: "data:mime;base64,..."}}
-      Object.keys(response.data.data).forEach(filename => {
-        const base64Data = response.data.data[filename]
-        if (base64Data) {
-          coverMap.value[filename] = base64Data
-        }
-      })
-    }
-  } catch (error) {
-    console.error('批量加载封面失败:', error)
-  }
+// 获取静态资源图片 URL
+const getStaticImageUrl = (filename) => {
+  if (!filename) return ''
+  return `/images/${encodeURIComponent(filename)}`
+}
+
+// 处理图片加载错误
+const handleImageError = (e) => {
+  e.target.style.display = 'none'
 }
 
 // 加载热门歌曲
@@ -157,9 +141,6 @@ const loadTrendingSongs = async (page = 1, reset = true) => {
       // 判断是否还有更多数据
       hasMore.value = response.data.songs.length === pageSize.value
       currentPage.value = page
-      
-      // 批量加载封面图片
-      await loadCoversForSongs(response.data.songs)
     }
   } catch (error) {
     console.error('加载热门趋势失败:', error)

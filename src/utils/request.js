@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '../stores/user'
+import { generateTraceId, getTraceIdFromResponse, storeTraceId, traceLog } from './trace'
 
 // 创建 axios 实例
 const request = axios.create({
@@ -11,13 +12,23 @@ const request = axios.create({
 // 请求拦截器
 request.interceptors.request.use(
   (config) => {
-    // 从 localStorage 获取 token（避免 Pinia 在模块初始化时未就绪）
+    // 1. 生成TraceID并添加到请求头
+    const traceId = generateTraceId()
+    config.headers['X-Trace-ID'] = traceId
+    
+    // 2. 从 localStorage 获取 token（避免 Pinia 在模块初始化时未就绪）
     const token = localStorage.getItem('token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
     // 跳过 ngrok 浏览器警告拦截页
     config.headers['ngrok-skip-browser-warning'] = 'true'
+    
+    // 3. 记录请求日志（仅在开发环境）
+    if (process.env.NODE_ENV === 'development') {
+      traceLog('log', traceId, `请求: ${config.method?.toUpperCase()} ${config.url}`)
+    }
+    
     return config
   },
   (error) => {
@@ -28,7 +39,19 @@ request.interceptors.request.use(
 // 响应拦截器
 request.interceptors.response.use(
   (response) => {
-    // 📌 检查是否有新 token（token 过期但在 24 小时活动窗口内时返回）
+    // 1. 提取TraceID
+    const traceId = getTraceIdFromResponse(response)
+    if (traceId) {
+      // 存储TraceID用于调试
+      storeTraceId(traceId)
+      
+      // 记录响应日志（仅在开发环境）
+      if (process.env.NODE_ENV === 'development') {
+        traceLog('log', traceId, `响应: ${response.config.method?.toUpperCase()} ${response.config.url} - ${response.status}`)
+      }
+    }
+    
+    // 2. 📌 检查是否有新 token（token 过期但在 24 小时活动窗口内时返回）
     const newToken = response.headers['x-new-token']
     if (newToken) {
       console.log('📝 [JWT] 收到新 token，已自动保存')

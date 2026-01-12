@@ -610,7 +610,7 @@
 
 <script setup>
 import { ref, nextTick, computed, watch, onUnmounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Connection, Upload, UploadFilled, Document, Search, Share, Loading, Position, Promotion } from '@element-plus/icons-vue'
 import G6 from '@antv/g6'
 import request from '@/utils/request'
@@ -985,6 +985,34 @@ const uploadDocument = async () => {
 
     if (isDisposed.value) return
 
+    // 检查是否是重复上传
+    if (res.data.duplicate) {
+      // 使用确认对话框询问用户
+      try {
+        await ElMessageBox.confirm(
+          res.data.message || '该文档已上传过，是否查看已有知识图谱？',
+          '文档已存在',
+          {
+            confirmButtonText: '查看知识图谱',
+            cancelButtonText: '取消',
+            type: 'info',
+            customClass: 'duplicate-doc-dialog'
+          }
+        )
+
+        // 用户点击了确认，显示文档详情弹窗
+        const existingDoc = res.data.existing_doc
+        if (existingDoc) {
+          showExistingDocDialog(existingDoc)
+        }
+      } catch (error) {
+        // 用户点击了取消，不做任何操作
+        console.log('用户取消了查看已有知识图谱')
+      }
+      uploading.value = false
+      return
+    }
+
     docId.value = res.data.doc_id
     documentText.value = res.data.text_preview
 
@@ -1000,11 +1028,117 @@ const uploadDocument = async () => {
   }
 }
 
+// 显示已存在文档的详情弹窗
+const showExistingDocDialog = (existingDoc) => {
+  // 格式化上传时间
+  const uploadTime = existingDoc.upload_time 
+    ? new Date(existingDoc.upload_time).toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      })
+    : '未知'
+
+  // 格式化文件大小
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0 B'
+    const k = 1024
+    const sizes = ['B', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  // 状态标签颜色映射
+  const statusMap = {
+    'uploaded': { type: 'info', text: '已上传' },
+    'processing': { type: 'warning', text: '处理中' },
+    'completed': { type: 'success', text: '已完成' },
+    'failed': { type: 'danger', text: '处理失败' }
+  }
+
+  const statusInfo = statusMap[existingDoc.status] || { type: '', text: existingDoc.status }
+
+  ElMessageBox.alert(
+    `
+      <div class="doc-detail-content">
+        <div class="doc-detail-header">
+          <div class="doc-icon">📄</div>
+          <div class="doc-title">${existingDoc.filename}</div>
+        </div>
+        
+        <div class="doc-detail-info">
+          <div class="info-item">
+            <span class="info-label">文档ID</span>
+            <span class="info-value">${existingDoc.doc_id?.substring(0, 8)}...</span>
+          </div>
+          
+          <div class="info-item">
+            <span class="info-label">上传时间</span>
+            <span class="info-value">${uploadTime}</span>
+          </div>
+          
+          <div class="info-item">
+            <span class="info-label">文件大小</span>
+            <span class="info-value">${formatFileSize(existingDoc.file_size)}</span>
+          </div>
+          
+          <div class="info-item">
+            <span class="info-label">文本长度</span>
+            <span class="info-value">${existingDoc.text_length?.toLocaleString() || 0} 字符</span>
+          </div>
+          
+          <div class="info-item">
+            <span class="info-label">处理状态</span>
+            <span class="info-value status-tag">${statusInfo.text}</span>
+          </div>
+        </div>
+        
+        <div class="doc-detail-footer">
+          <el-icon class="check-icon"><Check /></el-icon>
+          <span>知识图谱已构建完成，点击底部按钮查看</span>
+        </div>
+      </div>
+    `,
+    '文档详情',
+    {
+      confirmButtonText: '查看知识图谱',
+      cancelButtonText: '关闭',
+      showCancelButton: true,
+      dangerouslyUseHTMLString: true,
+      customClass: 'existing-doc-dialog',
+      distinguishCancelAndClose: true,
+      callback: async (action) => {
+        if (action === 'confirm') {
+          // 保存已存在文档的 doc_id
+          docId.value = existingDoc.doc_id
+          
+          // 跳转到图谱步骤
+          currentStep.value = 3
+          
+          // 等待 DOM 更新
+          await nextTick()
+          
+          // 加载图谱数据
+          try {
+            await loadGraphData()
+            ElMessage.success('已跳转到知识图谱')
+          } catch (error) {
+            ElMessage.error('加载图谱数据失败')
+          }
+        }
+      }
+    }
+  )
+}
+
 // 文本分块
 const splitText = async () => {
   try {
-    const res = await request.post('/api/kg/split-text', null, {
-      params: { doc_id: docId.value }
+    const res = await request.post('/api/kg/split-text', {
+      doc_id: docId.value
     })
 
     if (isDisposed.value) return
@@ -1020,8 +1154,8 @@ const splitText = async () => {
 const extractEntities = async () => {
   extracting.value = true
   try {
-    const res = await request.post('/api/kg/extract-entities', null, {
-      params: { doc_id: docId.value }
+    const res = await request.post('/api/kg/extract-entities', {
+      doc_id: docId.value
     })
 
     if (isDisposed.value) return
@@ -1040,8 +1174,8 @@ const extractEntities = async () => {
 const buildGraph = async () => {
   building.value = true
   try {
-    const res = await request.post('/api/kg/build-graph', null, {
-      params: { doc_id: docId.value }
+    const res = await request.post('/api/kg/build-graph', {
+      doc_id: docId.value
     })
 
     if (isDisposed.value) return
@@ -3870,6 +4004,142 @@ onUnmounted(() => {
     font-size: 20px;
   }
 }
+/* ==================== 重复文档弹窗样式 ==================== */
+
+.doc-detail-content {
+  padding: 20px;
+  min-width: 400px;
+}
+
+.doc-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid rgba(148, 163, 184, 0.2);
+  margin-bottom: 20px;
+}
+
+.doc-icon {
+  font-size: 48px;
+  animation: float 3s ease-in-out infinite;
+}
+
+.doc-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #1e293b;
+  flex: 1;
+  word-break: break-all;
+}
+
+.doc-detail-info {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: rgba(248, 250, 252, 0.8);
+  border-radius: 10px;
+  border-left: 3px solid #6366f1;
+  transition: all 0.2s ease;
+}
+
+.info-item:hover {
+  background: rgba(248, 250, 252, 1);
+  transform: translateX(4px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+}
+
+.info-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.info-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.info-value.status-tag {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.doc-detail-footer {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 2px solid rgba(148, 163, 184, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #10b981;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.check-icon {
+  font-size: 20px;
+  animation: checkPulse 2s ease-in-out infinite;
+}
+
+@keyframes checkPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
+}
+
+/* Element Plus Dialog 样式覆盖 */
+.existing-doc-dialog {
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.existing-doc-dialog .el-dialog__header {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  padding: 20px 24px;
+  border-radius: 16px 16px 0 0;
+}
+
+.existing-doc-dialog .el-dialog__title {
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.existing-doc-dialog .el-dialog__headerbtn .el-dialog__close {
+  color: #ffffff;
+  font-size: 24px;
+}
+
+.existing-doc-dialog .el-dialog__body {
+  padding: 0;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.existing-doc-dialog .el-dialog__footer {
+  padding: 20px 24px;
+  background: rgba(248, 250, 252, 0.8);
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+}
+
 /* ================= 全屏弹窗样式 ================= */
 
 /* 覆盖 Element Plus Dialog 的默认样式，使其背景透明 */

@@ -263,7 +263,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
-import request from '../utils/request' // 用于获取列表JSON
+import request from '../utils/request'
 import { useMusicStore } from '../stores/music'
 
 const musicStore = useMusicStore()
@@ -285,10 +285,22 @@ const lyricsLineRefs = ref({})
 const isUserScrolling = ref(false)
 const scrollTimeout = ref(null)
 
+// 滚动控制变量 
+const lastActiveIndex = ref(-1) // 记录上一行歌词索引
+const isAutoScrolling = ref(false) // 标记是否正在自动滚动
+let autoScrollTimer = null // 自动滚动锁定计时器
+//在上一版代码中，当代码触发滚动时，浏览器会连续触发几十次 scroll 事件。 handleLyricsScroll 在第一次收到事件时就把“自动滚动锁”解开了，导致后续的几十次滚动事件被误判为“用户正在手动滚动”，从而立即打断了后续的歌词跟随。
+//我们给自动滚动加一个时间锁，在滚动动画结束前，坚决不认为是用户在操作。
+
 // 歌曲列表相关
 const isLoadingSongs = ref(false)
 const totalSongs = ref(0)
 const songListRef = ref(null)
+
+// ES搜索相关
+const isSearching = ref(false)
+const searchResults = ref([])
+const usingESSearch = ref(false)
 
 // --- Store 映射 ---
 const songs = computed(() => musicStore.songs)
@@ -318,7 +330,19 @@ const progressPercent = computed(() => {
 })
 
 const filteredSongs = computed(() => {
-  if (!searchQuery.value.trim()) return songs.value
+  // 如果正在使用ES搜索且有搜索结果，返回ES搜索结果
+  if (usingESSearch.value && searchResults.value.length > 0) {
+    return searchResults.value
+  }
+  
+  // 如果没有搜索词汇，返回所有歌曲
+  if (!searchQuery.value.trim()) {
+    usingESSearch.value = false
+    return songs.value
+  }
+  
+  // 否则使用前端过滤
+  usingESSearch.value = false
   const query = searchQuery.value.toLowerCase()
   return songs.value.filter(song => 
     song.title.toLowerCase().includes(query) ||
@@ -328,63 +352,45 @@ const filteredSongs = computed(() => {
 const loadedCount = computed(() => songs.value.length)
 
 // ==========================================
-// 核心逻辑 1：静态资源路径处理
+// 逻辑 1：静态资源路径处理
 // ==========================================
-
-// 辅助函数：根据文件名生成静态资源 URL
-// 假设 public 目录下有 images 和 music 文件夹
 const getStaticImageUrl = (filename) => {
   if (!filename) return '' 
-  // 必须进行 encodeURIComponent，因为文件名可能包含空格或特殊字符
   return `/images/${encodeURIComponent(filename)}`
 }
 
 const getStaticAudioUrl = (song) => {
   if (!song) return ''
-  // 优先使用 file_path 字段（如果后端返回了完整文件名），否则用 title + .mp3 兜底
-  // 你的截图中mp3名字有空格，所以必须 encode
-  // 注意：后端返回的 file_path 可能是绝对路径 "D:/...", 我们需要提取文件名
-  
   let filename = ''
   if (song.file_path) {
-    // 提取文件名: "D:/music/Song Name.mp3" -> "Song Name.mp3"
     filename = song.file_path.split(/[/\\]/).pop() 
   } else {
-    // 兜底：假设文件名就是 歌名.mp3
     filename = `${song.title}.mp3`
   }
-  
   return `/music/${encodeURIComponent(filename)}`
 }
 
 // ==========================================
-// 核心逻辑 2：图片懒加载 (Observer)
+// 逻辑 2：图片懒加载
 // ==========================================
-
 let observer = null
 
-// 初始化 IntersectionObserver
 const initIntersectionObserver = () => {
   if (observer) observer.disconnect()
-
   observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
       if (entry.isIntersecting) {
         const songId = Number(entry.target.dataset.id)
         const song = musicStore.songs.find(s => s.id === songId)
-        
-        // 如果这首歌有封面配置，且还没设置到 coverBlobUrl (这里我们复用这个字段存URL)
         if (song && song.cover_image && !song.coverBlobUrl) {
-           // 直接赋值静态路径，浏览器开始下载
            song.coverBlobUrl = getStaticImageUrl(song.cover_image)
-           // 停止观察
            observer.unobserve(entry.target)
         }
       }
     })
   }, {
     root: songListRef.value,
-    rootMargin: '200px 0px', // 预加载：提前 200px 加载
+    rootMargin: '200px 0px',
     threshold: 0.01
   })
 }
@@ -393,7 +399,6 @@ const observeSongItems = () => {
   if (!observer || !songListRef.value) return
   const items = songListRef.value.querySelectorAll('.song-item')
   items.forEach(item => {
-    // 只有没加载 URL 的才观察
     if (item.dataset.loaded !== 'true') {
       observer.observe(item)
     }
@@ -401,37 +406,27 @@ const observeSongItems = () => {
 }
 
 // ==========================================
-// 核心逻辑 3：获取列表
+// 逻辑 3：获取列表
 // ==========================================
-
 const fetchSongs = async () => {
   isLoadingSongs.value = true
   try {
-    // 依然请求后端获取 JSON 数据，知道有哪些歌，对应的图片文件名是什么
     const response = await request.get('/api/music/songs/all')
-    
     if (response.data && response.data.success) {
       const rawSongs = response.data.songs
       totalSongs.value = response.data.total
       
-      // 初始化数据
       const processedSongs = rawSongs.map(song => ({
         ...song,
-        // coverBlobUrl 这里不再是 Blob，而是作为最终显示的 src 属性
-        // 初始为空，依靠 Observer 填充，实现懒加载
         coverBlobUrl: '', 
-        // 预先计算好音频 URL
         audioSrc: getStaticAudioUrl(song)
       }))
       
       musicStore.setSongs(processedSongs)
-      
-      // 默认选中第一首
       if (processedSongs.length > 0 && !musicStore.currentSong) {
         selectSong(processedSongs[0], false)
       }
 
-      // 开启懒加载监听
       nextTick(() => {
         initIntersectionObserver()
         observeSongItems()
@@ -446,20 +441,16 @@ const fetchSongs = async () => {
 }
 
 // ==========================================
-// 核心逻辑 4：播放控制 (静态链接版 + 事件上报)
+// 逻辑 4：播放控制
 // ==========================================
-
-// 发送播放事件到后端（不阻塞播放体验）
 const sendPlayEvent = async (songId) => {
   try {
     await request.post('/api/music/play-event', {
       song_id: songId,
       timestamp: Date.now()
     })
-    console.log(`✅ 播放事件已发送: song_id=${songId}`)
   } catch (error) {
     console.error('❌ 发送播放事件失败:', error)
-    // 不影响播放体验，静默失败
   }
 }
 
@@ -467,46 +458,35 @@ const selectSong = async (song, autoPlay = true) => {
   if (!musicStore.audioPlayer) return
 
   try {
-    // 1. 状态更新
     if (musicStore.isPlaying) musicStore.audioPlayer.pause()
     musicStore.setCurrentSong(song)
     musicStore.setIsPlaying(false)
     resetLyrics()
 
-    // 2. 构造音频 URL (直接指向 public/music/...)
     const targetUrl = song.audioSrc || getStaticAudioUrl(song)
-    
-    // 3. 设置给播放器
-    musicStore.setCurrentBlobUrl(targetUrl) // 复用 store 字段
+    musicStore.setCurrentBlobUrl(targetUrl)
     musicStore.audioPlayer.src = targetUrl
     musicStore.audioPlayer.volume = musicStore.volume / 100
-    
-    // 4. 播放
-    musicStore.audioPlayer.load() // 重新加载
+    musicStore.audioPlayer.load()
 
     if (autoPlay) {
       const playPromise = musicStore.audioPlayer.play()
       if (playPromise) {
         playPromise
           .then(() => {
-            // 播放成功时发送播放事件（非阻塞）
             sendPlayEvent(song.id)
             musicStore.setIsPlaying(true)
           })
           .catch(e => {
-            console.warn('自动播放受阻(可能是浏览器策略):', e)
+            console.warn('自动播放受阻:', e)
             musicStore.setIsPlaying(false)
           })
       }
     } else {
-      // 不自动播放时也发送事件（记录用户选择）
       sendPlayEvent(song.id)
     }
     
-    // 5. 加载歌词
     if (showLyrics.value) fetchLyrics()
-    
-    // 6. 特殊处理：如果点击的歌曲封面还没被懒加载刷出来，立即显示
     if (song.cover_image && !song.coverBlobUrl) {
       song.coverBlobUrl = getStaticImageUrl(song.cover_image)
     }
@@ -518,9 +498,8 @@ const selectSong = async (song, autoPlay = true) => {
 }
 
 // ==========================================
-// 其他辅助逻辑 (保持不变)
+// 辅助逻辑
 // ==========================================
-
 const togglePlay = () => {
   if (!currentSong.value || !audioPlayer.value) return
   if (isPlaying.value) {
@@ -532,17 +511,11 @@ const togglePlay = () => {
   }
 }
 
-// 切换播放模式
 const cyclePlayMode = () => {
   const newMode = musicStore.togglePlayMode()
-  const modeNames = {
-    'sequence': '顺序播放',
-    'loop': '循环播放',
-    'random': '随机播放'
-  }
+  const modeNames = { 'sequence': '顺序播放', 'loop': '循环播放', 'random': '随机播放' }
   ElMessage.success(`已切换为${modeNames[newMode]}`)
 }
-
 
 const handleSongEnded = () => {
   musicStore.setIsPlaying(false)
@@ -583,7 +556,19 @@ const parseLRC = (lrc) => {
   })
   return res.sort((a,b)=>a.time-b.time)
 }
-const resetLyrics = () => { lyricsText.value=''; parsedLyrics.value=[]; lyricsError.value=false }
+
+const resetLyrics = () => { 
+  lyricsText.value = ''
+  parsedLyrics.value = []
+  lyricsError.value = false
+  lyricsLineRefs.value = {} // 清空引用
+  lastActiveIndex.value = -1 // 重置索引
+  isAutoScrolling.value = false
+  if (lyricsContainer.value) {
+    lyricsContainer.value.scrollTop = 0
+  }
+}
+
 const toggleLyrics = () => { showLyrics.value=!showLyrics.value; if(showLyrics.value && !lyricsText.value && currentSong.value) fetchLyrics() }
 const fetchLyrics = async () => {
   if(!currentSong.value) return; lyricsLoading.value=true
@@ -593,30 +578,75 @@ const fetchLyrics = async () => {
     else lyricsError.value=true
   } catch { lyricsError.value=true } finally { lyricsLoading.value=false }
 }
+
+// *** 核心修复：更强健的歌词高亮与滚动 ***
 const updateLyricsHighlight = () => {
-  if(!showLyrics.value || !parsedLyrics.value.length) return
-  const cur = currentTime.value; let idx = -1
-  for(let i=parsedLyrics.value.length-1; i>=0; i--) { if(cur>=parsedLyrics.value[i].time){idx=i;break} }
-  parsedLyrics.value.forEach((l,i)=>l.isActive=i===idx)
-  if(!isUserScrolling.value && idx>=0 && lyricsLineRefs.value[idx]) {
-    const el = lyricsLineRefs.value[idx], c = lyricsContainer.value
-    if(c) {
-      const t = el.offsetTop - c.clientHeight/2 + el.offsetHeight/2
-      if(Math.abs(c.scrollTop-t)>5) c.scrollTo({top:Math.max(0,t), behavior:'smooth'})
+  if (!showLyrics.value || !parsedLyrics.value.length) return
+  
+  const cur = currentTime.value
+  let idx = -1
+  
+  // 查找当前播放行
+  for (let i = parsedLyrics.value.length - 1; i >= 0; i--) {
+    if (cur >= parsedLyrics.value[i].time) {
+      idx = i
+      break
+    }
+  }
+
+  // 1. 实时更新高亮
+  parsedLyrics.value.forEach((l, i) => l.isActive = i === idx)
+
+  // 2. 触发滚动 (仅当行数改变 且 不在用户手动操作中)
+  if (idx !== lastActiveIndex.value) {
+    lastActiveIndex.value = idx 
+    
+    if (idx >= 0 && lyricsLineRefs.value[idx] && !isUserScrolling.value) {
+      const el = lyricsLineRefs.value[idx]
+      const container = lyricsContainer.value
+      
+      if (container) {
+        const targetTop = el.offsetTop - container.clientHeight / 2 + el.offsetHeight / 2
+        
+        // 关键修复：开启自动滚动锁，并设置超时释放
+        // 浏览器平滑滚动会持续几百毫秒，这期间会不断触发 scroll 事件
+        // 我们必须在此期间保持锁定，否则第一个 scroll 事件就会解锁导致卡顿
+        isAutoScrolling.value = true 
+        if (autoScrollTimer) clearTimeout(autoScrollTimer)
+        autoScrollTimer = setTimeout(() => {
+          isAutoScrolling.value = false
+        }, 1000) // 锁定1秒，足够平滑滚动完成
+
+        container.scrollTo({
+          top: Math.max(0, targetTop),
+          behavior: 'smooth' 
+        })
+      }
     }
   }
 }
 
-// 辅助功能
-const handleImageError = (e) => {
-  // 图片加载失败时，显示默认图标
-  e.target.style.display='none'
-  // 也可以在这里给一个默认图 e.target.src = '/default.png'
+// *** 核心修复：处理滚动事件 ***
+const handleLyricsScroll = () => { 
+  // 如果锁是开着的，说明是代码在滚，直接忽略此次事件
+  if (isAutoScrolling.value) {
+    return 
+  }
+  
+  // 代码没在滚，那就是用户在滚
+  isUserScrolling.value = true
+  
+  // 防抖：用户停止滚动2秒后，恢复自动跟随
+  clearTimeout(scrollTimeout.value)
+  scrollTimeout.value = setTimeout(() => {
+    isUserScrolling.value = false
+  }, 2000) 
 }
+
+const handleImageError = (e) => { e.target.style.display='none' }
 const formatTime = (s) => !s||isNaN(s)?'0:00':`${Math.floor(s/60)}:${Math.floor(s%60).toString().padStart(2,'0')}`
 const formatDuration = formatTime
 
-// 下载: 直接利用静态链接
 const downloadSong = (song) => {
   const link = document.createElement('a')
   link.href = song.audioSrc || getStaticAudioUrl(song)
@@ -626,15 +656,75 @@ const downloadSong = (song) => {
   document.body.removeChild(link)
 }
 
-const handleSearch = () => { nextTick(observeSongItems) }
+// 使用Elasticsearch搜索音乐
+const searchMusicWithES = async (query) => {
+  if (!query || query.trim().length < 2) {
+    usingESSearch.value = false
+    searchResults.value = []
+    return
+  }
 
-// 跳转到排行榜页面
-const goToRankings = () => {
-  // 使用 Vue Router 进行跳转
-  window.location.href = '/music-rankings'
+  isSearching.value = true
+  usingESSearch.value = true
+  
+  try {
+    const response = await request.get('/api/music/search-es', {
+      params: {
+        query: query.trim(),
+        size: 50
+      }
+    })
+
+    if (response.data && response.data.success) {
+      const esSongs = response.data.songs || []
+      
+      // 为ES搜索结果添加必要字段
+      searchResults.value = esSongs.map(song => ({
+        ...song,
+        coverBlobUrl: song.cover_image ? getStaticImageUrl(song.cover_image) : '',
+        audioSrc: getStaticAudioUrl(song)
+      }))
+      
+      // 如果搜索结果为空，提示用户
+      if (esSongs.length === 0) {
+        ElMessage.info('未找到相关歌曲，将使用本地搜索')
+        usingESSearch.value = false
+      }
+    }
+  } catch (error) {
+    console.error('ES搜索失败:', error)
+    // ES搜索失败，降级到本地搜索
+    usingESSearch.value = false
+    ElMessage.warning('搜索引擎不可用，使用本地搜索')
+  } finally {
+    isSearching.value = false
+  }
 }
+
+const handleSearch = () => {
+  // 延迟搜索，避免频繁请求
+  if (searchTimeout.value) {
+    clearTimeout(searchTimeout.value)
+  }
+  
+  if (!searchQuery.value.trim()) {
+    usingESSearch.value = false
+    searchResults.value = []
+    nextTick(observeSongItems)
+    return
+  }
+
+  // 500ms后执行ES搜索
+  searchTimeout.value = setTimeout(() => {
+    searchMusicWithES(searchQuery.value)
+    nextTick(observeSongItems)
+  }, 500)
+}
+
+let searchTimeout = null
+const goToRankings = () => { window.location.href = '/music-rankings' }
 const playFromTime = (t) => { if(audioPlayer.value){audioPlayer.value.currentTime=t;if(!isPlaying.value)audioPlayer.value.play().then(()=>musicStore.setIsPlaying(true))} }
-const handleLyricsScroll = () => { isUserScrolling.value=true; clearTimeout(scrollTimeout.value); scrollTimeout.value=setTimeout(()=>isUserScrolling.value=false,2000) }
+
 const handleLyricsAreaClick = (e) => { if(!e.target.closest('.lyrics-line')) toggleLyrics() }
 const handleVolumeClick = (e) => { const r=e.currentTarget.getBoundingClientRect(); musicStore.setVolume(Math.max(0,Math.min(100,((e.clientX-r.left)/r.width)*100))); if(audioPlayer.value) audioPlayer.value.volume=volume.value/100 }
 const startVolumeDrag = (e) => { isVolumeDragging.value=true; const m=(ev)=>{const c=ev.touches?ev.touches[0].clientX:ev.clientX,r=document.querySelector('.volume-wrapper').getBoundingClientRect();const v=Math.max(0,Math.min(100,((c-r.left)/r.width)*100));musicStore.setVolume(v);if(audioPlayer.value)audioPlayer.value.volume=v/100}; const up=()=>{isVolumeDragging.value=false;document.removeEventListener('mousemove',m);document.removeEventListener('mouseup',up);document.removeEventListener('touchmove',m);document.removeEventListener('touchend',up)}; document.addEventListener('mousemove',m);document.addEventListener('mouseup',up);document.addEventListener('touchmove',m);document.addEventListener('touchend',up) }
@@ -645,7 +735,7 @@ const handleNextSongEvent = (e) => { if(e.detail?.song) selectSong(e.detail.song
 const handleAudioError = () => { musicStore.setIsPlaying(false); ElMessage.error('无法播放/文件不存在') }
 
 watch(()=>musicStore.audioPlayer, p=>{if(p){p.removeEventListener('ended',handleSongEnded);p.removeEventListener('error',handleAudioError);p.addEventListener('ended',handleSongEnded);p.addEventListener('error',handleAudioError);p.volume=volume.value/100}},{immediate:true})
-watch(currentTime, updateLyricsHighlight)
+watch(currentTime, updateLyricsHighlight, { flush: 'sync' })
 
 onMounted(async () => {
   window.addEventListener('music-next-song', handleNextSongEvent)
@@ -662,6 +752,7 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener('music-next-song', handleNextSongEvent)
   if(scrollTimeout.value) clearTimeout(scrollTimeout.value)
+  if(autoScrollTimer) clearTimeout(autoScrollTimer)
   if(observer) observer.disconnect()
 })
 </script>
@@ -1241,6 +1332,8 @@ onUnmounted(() => {
 }
 
 .lyrics-container {
+  /* 重要：添加 relative 定位，确保子元素的 offsetTop 计算准确 */
+  position: relative; 
   width: 100%;
   flex: 1;
   overflow-y: auto;
@@ -1250,8 +1343,8 @@ onUnmounted(() => {
   align-items: center;
   justify-content: flex-start;
   text-align: center;
-  scroll-behavior: smooth;
   min-height: 0;
+  /* 禁止 CSS 滚动行为，完全交由 JS 控制 */
 }
 
 .lyrics-container::-webkit-scrollbar {
@@ -1301,6 +1394,7 @@ onUnmounted(() => {
   background: rgba(74, 158, 255, 0.15);
   transform: scale(1.05);
   box-shadow: 0 4px 12px rgba(74, 158, 255, 0.3);
+  transition: none !important;
 }
 
 .lyrics-text {

@@ -14,6 +14,7 @@ import NovelUploadView from '../views/NovelUploadView.vue'
 import ChatRoomView from '../views/ChatRoomView.vue'
 import KnowledgeGraphView from '../views/KnowledgeGraphView.vue'
 import GameView from '../views/GameView.vue'
+import PlantsVsZombiesView from '../views/PlantsVsZombiesView.vue'
 
 const routes = [
   // 无需登录的页面
@@ -36,7 +37,8 @@ const routes = [
       { path: 'novel-upload', name: 'NovelUpload', component: NovelUploadView },
       { path: 'chat-room', name: 'ChatRoom', component: ChatRoomView },
       { path: 'knowledge-graph', name: 'KnowledgeGraph', component: KnowledgeGraphView },
-      { path: 'game', name: 'Game', component: GameView }
+      { path: 'game', name: 'Game', component: GameView },
+      { path: 'plants-vs-zombies', name: 'PlantsVsZombies', component: PlantsVsZombiesView }
     ]
   }
 ]

@@ -64,9 +64,7 @@ const navItems = [
   { name: '音乐播放器', path: '/music', icon: '🎵' },
   { name: '聊天室', path: '/chat-room', icon: '💬' },
   { name: '游戏世界', path: '/game', icon: '🎮' },
-
-  { name: '敬请期待', path: '/coming-soon', icon: '⏳' }
-
+  { name: '植物大战僵尸', path: '/plants-vs-zombies', icon: '🌻' }
   // 可以在这里添加更多导航项
   // { name: '知识图谱', path: '/knowledge-graph', icon: '🔗' },
   // { name: '问答系统', path: '/qa', icon: '💬' },

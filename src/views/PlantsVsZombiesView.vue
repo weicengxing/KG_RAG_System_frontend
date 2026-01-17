@@ -75,6 +75,9 @@
         <span class="info-label">记录</span>
         <span class="info-value">{{ highScore }}</span>
       </div>
+      <button @click="toggleShovelMode" v-if="isPlaying" :class="['shovel-btn', { 'shovel-active': isShovelMode }]">
+        🧹 {{ isShovelMode ? '铲除模式' : '铲子' }}
+      </button>
       </div>
     </div>
 
@@ -153,6 +156,7 @@ const isMuted = ref(false)
 const zombiesKilled = ref(0)
 const highScore = ref(0)
 const autoCollectSun = ref(false)
+const isShovelMode = ref(false)
 
 // 弹窗状态
 const showAchievements = ref(false)
@@ -251,6 +255,24 @@ const toggleAutoCollectSun = () => {
   }
 }
 
+// 切换铲除模式
+const toggleShovelMode = () => {
+  if (!gameEngine.value) return
+  
+  isShovelMode.value = !isShovelMode.value
+  
+  // 如果进入铲除模式，清除植物选择
+  if (isShovelMode.value) {
+    selectedPlantId.value = null
+    gameEngine.value.selectedPlant = null
+    gameEngine.value.isShovelMode = true
+    gameEngine.value.showMessage('铲除模式已开启，点击植物进行铲除', '#fbbf24')
+  } else {
+    gameEngine.value.isShovelMode = false
+    gameEngine.value.showMessage('铲除模式已关闭', '#22c55e')
+  }
+}
+
 // 选择植物
 const selectPlant = (plantId) => {
   if (!gameEngine.value) return
@@ -286,6 +308,7 @@ const updateUI = () => {
     plantCooldowns.value = { ...gameEngine.value.plantCooldowns }
     isPaused.value = gameEngine.value.isPaused
     autoCollectSun.value = gameEngine.value.autoCollectSun
+    isShovelMode.value = gameEngine.value.isShovelMode
     
     // 更新成就
     achievements.value = { ...gameEngine.value.achievements }
@@ -298,10 +321,10 @@ const updateUI = () => {
 }
 
 // 刷新统计数据
-const refreshStats = () => {
+const refreshStats = async () => {
   if (gameEngine.value) {
-    stats.value = gameEngine.value.getStats()
-    highScore.value = gameEngine.value.getHighScore()
+    stats.value = await gameEngine.value.getStats()
+    highScore.value = await gameEngine.value.getHighScore()
   }
 }
 
@@ -759,6 +782,41 @@ onUnmounted(() => {
 
 .auto-collect-active {
   background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%) !important;
+}
+
+/* 铲子按钮样式 */
+.shovel-btn {
+  margin-top: 16px;
+  padding: 12px 20px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: white;
+  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+}
+
+.shovel-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.5);
+}
+
+.shovel-active {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.6) !important;
+  animation: pulse-red 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-red {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(239, 68, 68, 0.9);
+  }
 }
 
 /* 响应式设计 */

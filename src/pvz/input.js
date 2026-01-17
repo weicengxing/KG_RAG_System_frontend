@@ -111,6 +111,20 @@ export class InputHandler {
       return
     }
     
+    // 检查是否在铲除模式
+    if (this.engine.isShovelMode) {
+      const plant = this.engine.grid.getPlant(col, row)
+      if (plant) {
+        // 铲除植物
+        this.engine.digupPlant(plant)
+        // 铲除后自动退出铲除模式
+        this.engine.isShovelMode = false
+      } else {
+        this.engine.showMessage('请选择要铲除的植物', '#f87171')
+      }
+      return
+    }
+    
     // 检查是否选中了植物
     if (!this.engine.selectedPlant) {
       return

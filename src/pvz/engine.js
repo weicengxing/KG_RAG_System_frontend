@@ -116,6 +116,9 @@ export class GameEngine {
     this.selectedPlant = null
     this.plantCooldowns = {}
     
+    // 铲除模式
+    this.isShovelMode = false
+    
     // 渲染器
     this.renderer = new Renderer(this.ctx)
     
@@ -358,6 +361,11 @@ export class GameEngine {
             oscillator.frequency.value = 1200
           }, 100)
           break
+        case 'digup':
+          oscillator.frequency.value = 250
+          oscillator.type = 'triangle'
+          gainNode.gain.value = 0.1
+          break
         default:
           oscillator.frequency.value = 440
           oscillator.type = 'sine'
@@ -593,32 +601,49 @@ export class GameEngine {
   }
   
   // 保存高分
-  saveHighScore() {
-    const highScore = localStorage.getItem('pvz_highScore') || 0
-    if (this.score > highScore) {
-      localStorage.setItem('pvz_highScore', this.score)
+  async saveHighScore() {
+    try {
+      await request.post('/api/pvz/update-stats', {
+        score: this.score,
+        kills: this.zombiesKilled,
+        waves: this.wavesCleared
+      })
+    } catch (error) {
+      console.error('保存统计数据失败:', error)
     }
-    
-    // 保存击杀数
-    const totalKills = (localStorage.getItem('pvz_totalKills') || 0) - 0
-    localStorage.setItem('pvz_totalKills', totalKills + this.zombiesKilled)
-    
-    // 保存完成波次数
-    const totalWaves = (localStorage.getItem('pvz_totalWaves') || 0) - 0
-    localStorage.setItem('pvz_totalWaves', totalWaves + this.wavesCleared)
   }
   
   // 获取高分
-  getHighScore() {
-    return parseInt(localStorage.getItem('pvz_highScore')) || 0
+  async getHighScore() {
+    try {
+      const result = await request.get('/api/pvz/get-stats')
+      if (result.data.success && result.data.data) {
+        return result.data.data.highScore || 0
+      }
+    } catch (error) {
+      console.error('获取统计数据失败:', error)
+    }
+    return 0
   }
   
   // 获取统计数据
-  getStats() {
+  async getStats() {
+    try {
+      const result = await request.get('/api/pvz/get-stats')
+      if (result.data.success && result.data.data) {
+        return {
+          totalKills: result.data.data.totalKills || 0,
+          totalWaves: result.data.data.totalWaves || 0,
+          highScore: result.data.data.highScore || 0
+        }
+      }
+    } catch (error) {
+      console.error('获取统计数据失败:', error)
+    }
     return {
-      totalKills: parseInt(localStorage.getItem('pvz_totalKills')) || 0,
-      totalWaves: parseInt(localStorage.getItem('pvz_totalWaves')) || 0,
-      highScore: this.getHighScore()
+      totalKills: 0,
+      totalWaves: 0,
+      highScore: 0
     }
   }
   
@@ -675,19 +700,11 @@ export class GameEngine {
         this.wave = gameState.wave
         this.plantCooldowns = gameState.plantCooldowns || {}
         
+        // 恢复小推车
+        this.restoreLawnMowers(gameState)
+        
         // 恢复植物和僵尸
         this.restoreGameEntities(gameState)
-        
-        // 恢复小推车状态
-        if (gameState.lawnMowers) {
-          gameState.lawnMowers.forEach(savedLm => {
-            const lawnMower = this.lawnMowers.find(lm => lm.id === savedLm.id)
-            if (lawnMower) {
-              lawnMower.state = savedLm.state
-              lawnMower.x = savedLm.x
-            }
-          })
-        }
         
         // 启动游戏
         this.isPlaying = true
@@ -772,6 +789,40 @@ export class GameEngine {
     
     this.plants.push(plant)
     this.grid.placePlant(plantData.col, plantData.row, plant)
+  }
+  
+  // 恢复小推车
+  restoreLawnMowers(gameState) {
+    // 清空当前的小推车
+    this.lawnMowers = []
+    
+    // 如果存档中有小推车数据
+    if (gameState.lawnMowers && gameState.lawnMowers.length > 0) {
+      gameState.lawnMowers.forEach(savedLm => {
+        // 只恢复状态为 idle 或 moving 的小推车，不恢复 state 为 used 的小推车
+        if (savedLm.state === 'idle' || savedLm.state === 'moving') {
+          const lawnMower = {
+            id: savedLm.id,
+            x: savedLm.x,
+            y: savedLm.id * gameConfig.cellHeight,
+            width: gameConfig.cellWidth,
+            height: gameConfig.cellHeight,
+            state: savedLm.state,
+            row: savedLm.id,
+            col: gameConfig.lawnMowers.col,
+            speed: gameConfig.lawnMowers.speed,
+            damage: gameConfig.lawnMowers.damage,
+            triggerDistance: gameConfig.lawnMowers.triggerDistance
+          }
+          this.lawnMowers.push(lawnMower)
+        }
+      })
+    }
+    
+    // 如果没有小推车数据或所有小推车都是 used 状态，初始化所有小推车
+    if (this.lawnMowers.length === 0) {
+      this.initLawnMowers()
+    }
   }
   
   // 渲染
@@ -1259,5 +1310,31 @@ export class GameEngine {
       this.autoCollectSun ? '#22c55e' : '#fbbf24'
     )
     return this.autoCollectSun
+  }
+  
+  // 铲除植物
+  digupPlant(plant) {
+    const config = plantConfig[plant.type]
+    
+    // 检查是否是樱桃炸弹正在倒计时
+    if (plant.type === 'cherryBomb' && plant.explodeTimer > 0) {
+      this.showMessage('樱桃炸弹正在爆炸倒计时中，无法铲除', '#f87171')
+      return
+    }
+    
+    // 计算返还阳光（植物成本的50%）
+    const refund = Math.floor(config.cost * 0.5)
+    
+    // 增加阳光
+    this.sunEnergy += refund
+    
+    // 从植物列表和网格中移除植物
+    this.removePlant(plant)
+    
+    // 播放铲除音效
+    this.playSound('digup')
+    
+    // 显示铲除成功消息
+    this.showMessage(`铲除成功，返还 ${refund} 阳光`, '#22c55e')
   }
 }

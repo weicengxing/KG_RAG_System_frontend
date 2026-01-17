@@ -13,9 +13,22 @@ export class Renderer {
         const x = col * grid.cellWidth
         const y = row * grid.cellHeight
         
-        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)'
-        this.ctx.lineWidth = 1
-        this.ctx.strokeRect(x, y, grid.cellWidth, grid.cellHeight)
+        // 检查是否是小推车所在的列
+        if (col === gameConfig.lawnMowers.col) {
+          // 绘制紫红色背景
+          this.ctx.fillStyle = gameConfig.lawnMowers.bgColor
+          this.ctx.fillRect(x, y, grid.cellWidth, grid.cellHeight)
+          
+          // 绘制紫红色边框
+          this.ctx.strokeStyle = gameConfig.lawnMowers.borderColor
+          this.ctx.lineWidth = 2
+          this.ctx.strokeRect(x, y, grid.cellWidth, grid.cellHeight)
+        } else {
+          // 普通格子
+          this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)'
+          this.ctx.lineWidth = 1
+          this.ctx.strokeRect(x, y, grid.cellWidth, grid.cellHeight)
+        }
       }
     }
   }
@@ -315,9 +328,16 @@ export class Renderer {
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i]
       
-      // 移除过期消息已在engine中处理
+      // 计算透明度（渐进消失）
+      const alpha = Math.max(0, message.time / message.maxTime)
       
-      // 绘制消息背景
+      // 保存当前状态
+      this.ctx.save()
+      
+      // 设置全局透明度
+      this.ctx.globalAlpha = alpha
+      
+      // 绘制消息
       this.ctx.font = 'bold 24px Arial'
       this.ctx.textAlign = 'center'
       this.ctx.textBaseline = 'top'
@@ -336,6 +356,67 @@ export class Renderer {
       // 绘制文字
       this.ctx.fillStyle = message.color
       this.ctx.fillText(message.text, textX, textY)
+      
+      // 恢复之前的状态
+      this.ctx.restore()
+    }
+  }
+  
+  // 绘制小推车
+  drawLawnMowers(lawnMowers) {
+    for (const lawnMower of lawnMowers) {
+      if (lawnMower.state === 'used') {
+        // 已使用的小推车不显示
+        continue
+      }
+      
+      // 根据状态绘制不同样式
+      let bgColor, borderColor, alpha = 1
+      
+      if (lawnMower.state === 'idle') {
+        bgColor = '#94a3b8' // 灰色
+        borderColor = '#64748b'
+      } else if (lawnMower.state === 'moving') {
+        bgColor = '#fbbf24' // 金色
+        borderColor = '#f59e0b'
+        // 移动时添加闪烁效果
+        alpha = 0.8 + Math.random() * 0.2
+      }
+      
+      // 保存当前状态
+      this.ctx.save()
+      this.ctx.globalAlpha = alpha
+      
+      // 绘制小推车主体
+      this.ctx.fillStyle = bgColor
+      this.ctx.fillRect(lawnMower.x, lawnMower.y, lawnMower.width, lawnMower.height)
+      
+      // 绘制边框
+      this.ctx.strokeStyle = borderColor
+      this.ctx.lineWidth = 3
+      this.ctx.strokeRect(lawnMower.x, lawnMower.y, lawnMower.width, lawnMower.height)
+      
+      // 绘制小推车图标
+      this.ctx.font = '64px Arial'
+      this.ctx.textAlign = 'center'
+      this.ctx.textBaseline = 'middle'
+      this.ctx.fillText('🚗', lawnMower.x + lawnMower.width / 2, lawnMower.y + lawnMower.height / 2)
+      
+      // 如果是待机状态，显示"待机"文字
+      if (lawnMower.state === 'idle') {
+        this.ctx.font = 'bold 12px Arial'
+        this.ctx.fillStyle = '#ffffff'
+        this.ctx.fillText('待机', lawnMower.x + lawnMower.width / 2, lawnMower.y + lawnMower.height - 10)
+      }
+      
+      // 绘制箭头指示方向
+      if (lawnMower.state === 'moving') {
+        this.ctx.font = '24px Arial'
+        this.ctx.fillText('➡️', lawnMower.x + lawnMower.width - 15, lawnMower.y + lawnMower.height / 2)
+      }
+      
+      // 恢复之前的状态
+      this.ctx.restore()
     }
   }
 }

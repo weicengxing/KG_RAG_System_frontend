@@ -78,6 +78,7 @@ export class GameEngine {
     this.zombies = []
     this.projectiles = []
     this.suns = []
+    this.lawnMowers = []
     
     // 网格系统
     this.grid = new Grid(
@@ -156,9 +157,13 @@ export class GameEngine {
     this.currentWaveConfig = null
     this.zombieSpawnQueue = []
     this.isWaveActive = false
-    this.waveCooldown = 3
+    this.waveCooldown = 10  // 游戏开始后10秒才开始第一波，给玩家充足准备时间
     this.lastTime = performance.now()
     this.animations = []
+    this.lawnMowers = []
+    
+    // 初始化小推车
+    this.initLawnMowers()
     
     // 初始化波次配置
     this.initWave(1)
@@ -170,6 +175,99 @@ export class GameEngine {
     this.loadAchievements()
     
     this.gameLoop()
+  }
+  
+  // 初始化小推车
+  initLawnMowers() {
+    this.lawnMowers = []
+    
+    // 为每一行创建一个小推车，放在最左边的格子中
+    for (let row = 0; row < gameConfig.gridRows; row++) {
+      const lawnMower = {
+        id: row,
+        x: gameConfig.lawnMowers.col * gameConfig.cellWidth,
+        y: row * gameConfig.cellHeight,
+        width: gameConfig.cellWidth,
+        height: gameConfig.cellHeight,
+        state: 'idle', // idle, moving, used
+        row: row,
+        col: gameConfig.lawnMowers.col,
+        speed: gameConfig.lawnMowers.speed,
+        damage: gameConfig.lawnMowers.damage,
+        triggerDistance: gameConfig.lawnMowers.triggerDistance
+      }
+      
+      this.lawnMowers.push(lawnMower)
+    }
+  }
+  
+  // 更新小推车
+  updateLawnMowers(deltaTime) {
+    for (const lawnMower of this.lawnMowers) {
+      if (lawnMower.state === 'idle') {
+        // 检查是否有僵尸到达触发区域
+        for (const zombie of this.zombies) {
+          const zombieRow = Math.floor(zombie.y / gameConfig.cellHeight)
+          
+          if (zombieRow === lawnMower.row && 
+              zombie.x < lawnMower.x + lawnMower.width + lawnMower.triggerDistance) {
+            // 触发小推车
+            lawnMower.state = 'moving'
+            this.showMessage('🚗 小推车启动！', '#fbbf24')
+            this.playSound('waveComplete')
+            
+            // 立即碾压当前僵尸
+            this.zombieHitByLawnMower(zombie, lawnMower.damage)
+            break
+          }
+        }
+      } else if (lawnMower.state === 'moving') {
+        // 向右移动
+        lawnMower.x += lawnMower.speed * deltaTime
+        
+        // 碾压路上的所有僵尸
+        for (let i = this.zombies.length - 1; i >= 0; i--) {
+          const zombie = this.zombies[i]
+          const zombieRow = Math.floor(zombie.y / gameConfig.cellHeight)
+          
+          if (zombieRow === lawnMower.row && 
+              zombie.x >= lawnMower.x && 
+              zombie.x <= lawnMower.x + lawnMower.width) {
+            
+            this.zombieHitByLawnMower(zombie, lawnMower.damage)
+          }
+        }
+        
+        // 如果到达最右边，标记为已使用
+        if (lawnMower.x >= this.width - lawnMower.width) {
+          lawnMower.state = 'used'
+        }
+      }
+    }
+  }
+  
+  // 小推车击中僵尸
+  zombieHitByLawnMower(zombie, damage) {
+    // 直接秒杀（或造成巨额伤害）
+    if (zombie.shieldHp > 0) {
+      zombie.shieldHp -= damage
+      if (zombie.shieldHp < 0) {
+        zombie.hp += zombie.shieldHp
+        zombie.shieldHp = 0
+      }
+    }
+    zombie.hp -= damage
+    
+    if (zombie.hp <= 0) {
+      const index = this.zombies.indexOf(zombie)
+      if (index > -1) {
+        this.zombies.splice(index, 1)
+        this.score += 10
+        this.zombiesKilled++
+        this.playSound('zombieDeath')
+        this.addDeathAnimation(zombie.x, zombie.y)
+      }
+    }
   }
   
   // 初始化波次
@@ -330,6 +428,9 @@ export class GameEngine {
     // 更新僵尸
     this.updateZombies(deltaTime)
     
+    // 更新小推车
+    this.updateLawnMowers(deltaTime)
+    
     // 更新子弹
     this.updateProjectiles(deltaTime)
     
@@ -338,6 +439,9 @@ export class GameEngine {
     
     // 更新动画
     this.updateAnimations(deltaTime)
+    
+    // 更新消息
+    this.updateMessages(deltaTime)
     
     // 碰撞检测
     this.checkCollisions()
@@ -537,11 +641,16 @@ export class GameEngine {
         hp: zombie.hp,
         shieldHp: zombie.shieldHp
       })),
-      plantCooldowns: { ...this.plantCooldowns }
+      plantCooldowns: { ...this.plantCooldowns },
+      lawnMowers: this.lawnMowers.map(lm => ({
+        id: lm.id,
+        state: lm.state,
+        x: lm.x
+      }))
     }
     
     try {
-      const result = await request.post('/api/pvz/save?user_id=default', gameState)
+      const result = await request.post('/api/pvz/save', gameState)
       if (result.data.success) {
         this.showMessage('游戏已保存！', '#22c55e')
       } else {
@@ -556,7 +665,7 @@ export class GameEngine {
   // 加载游戏
   async loadGame() {
     try {
-      const result = await request.get('/api/pvz/default')
+      const result = await request.get('/api/pvz/load')
       
       if (result.data.success && result.data.data) {
         const gameState = result.data.data
@@ -569,7 +678,27 @@ export class GameEngine {
         // 恢复植物和僵尸
         this.restoreGameEntities(gameState)
         
+        // 恢复小推车状态
+        if (gameState.lawnMowers) {
+          gameState.lawnMowers.forEach(savedLm => {
+            const lawnMower = this.lawnMowers.find(lm => lm.id === savedLm.id)
+            if (lawnMower) {
+              lawnMower.state = savedLm.state
+              lawnMower.x = savedLm.x
+            }
+          })
+        }
+        
+        // 启动游戏
+        this.isPlaying = true
+        this.gameOver = false
+        this.lastTime = performance.now()
+        
         this.showMessage('游戏已加载！', '#22c55e')
+        
+        // 启动游戏循环
+        this.gameLoop()
+        
         return true
       } else {
         this.showMessage(result.data.message || '没有找到存档！', '#f87171')
@@ -625,12 +754,13 @@ export class GameEngine {
   // 恢复植物
   restorePlant(plantData) {
     const config = plantConfig[plantData.type]
+    const pixelPos = this.grid.gridToPixel(plantData.col, plantData.row)
     const plant = {
       type: plantData.type,
       col: plantData.col,
       row: plantData.row,
-      x: plantData.col * gameConfig.cellWidth,
-      y: plantData.row * gameConfig.cellHeight,
+      x: pixelPos.x,
+      y: pixelPos.y,
       width: config.width,
       height: config.height,
       hp: plantData.hp,
@@ -657,6 +787,7 @@ export class GameEngine {
     this.renderer.drawZombies(this.zombies)
     this.renderer.drawProjectiles(this.projectiles)
     this.renderer.drawSuns(this.suns)
+    this.renderer.drawLawnMowers(this.lawnMowers)
     this.renderer.drawAnimations(this.animations)
     this.renderer.drawMessages(this.messages)
   }
@@ -1003,13 +1134,14 @@ export class GameEngine {
   // 种植植物
   plant(col, row, plantType) {
     const config = plantConfig[plantType]
+    const pixelPos = this.grid.gridToPixel(col, row)
     
     const plant = {
       type: plantType,
       col: col,
       row: row,
-      x: col * gameConfig.cellWidth,
-      y: row * gameConfig.cellHeight,
+      x: pixelPos.x,
+      y: pixelPos.y,
       width: config.width,
       height: config.height,
       hp: config.hp,
@@ -1086,12 +1218,25 @@ export class GameEngine {
     }
   }
   
+  // 更新消息
+  updateMessages(deltaTime) {
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      this.messages[i].time -= deltaTime
+      
+      // 移除时间到期的消息
+      if (this.messages[i].time <= 0) {
+        this.messages.splice(i, 1)
+      }
+    }
+  }
+  
   // 显示消息
   showMessage(text, color = '#ffffff') {
     this.messages.push({
       text,
       color,
-      time: 2.0
+      time: 2.0,
+      maxTime: 2.0
     })
   }
   

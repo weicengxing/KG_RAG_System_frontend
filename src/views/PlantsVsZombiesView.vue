@@ -34,6 +34,8 @@
               'disabled': sunEnergy < plant.cost || plantCooldowns[plant.id] > 0
             }"
             @click="selectPlant(plant.id)"
+            draggable="true"
+            @dragstart="(e) => handleDragStart(e, plant.id)"
           >
             <span class="plant-icon">{{ plant.icon }}</span>
             <span class="plant-name">{{ plant.name }}</span>
@@ -80,10 +82,11 @@
     <div class="game-instructions">
       <h3>游戏说明</h3>
       <p>1. 点击植物选择栏中的植物，然后点击游戏画布上的网格位置来种植植物。</p>
-      <p>2. 向日葵可以生产阳光，豌豆射手可以攻击僵尸。</p>
-      <p>3. 点击屏幕上的阳光来收集，用阳光购买更多植物。</p>
-      <p>4. 保护你的家园不让僵尸入侵，完成所有波次即可获胜！</p>
-      <p>5. 新功能：波次系统、成就系统、游戏存档、音效控制</p>
+      <p>2. 或者直接从植物选择栏拖拽植物到网格位置进行种植。</p>
+      <p>3. 向日葵可以生产阳光，豌豆射手可以攻击僵尸。</p>
+      <p>4. 点击屏幕上的阳光来收集，用阳光购买更多植物。</p>
+      <p>5. 保护你的家园不让僵尸入侵，完成所有波次即可获胜！</p>
+      <p>6. 新功能：波次系统、成就系统、游戏存档、音效控制、拖拽种植</p>
     </div>
     
     <!-- 成就弹窗 -->
@@ -352,6 +355,17 @@ const initGame = () => {
     const canvasHeight = gameConfig.gridRows * gameConfig.cellHeight
     gameCanvas.value.width = canvasWidth
     gameCanvas.value.height = canvasHeight
+  }
+}
+
+// 拖拽开始处理
+const handleDragStart = (e, plantId) => {
+  e.dataTransfer.setData('text/plain', plantId)
+  e.dataTransfer.effectAllowed = 'copy'
+  
+  // 设置拖拽时的透明度
+  if (e.dataTransfer.setDragImage) {
+    e.dataTransfer.setDragImage(e.target, 75, 75)
   }
 }
 

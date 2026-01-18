@@ -122,7 +122,8 @@ const getPlantDescription = (plantId) => {
     jalapeno: '消灭整行僵尸',
     squash: '压扁邻近的僵尸',
     potatoMine: '需要准备时间，然后炸毁接触的僵尸',
-    hypnoShroom: '接触僵尸让其为你而战，血量x3，攻击力x2'
+    hypnoShroom: '接触僵尸让其为你而战，血量x3，攻击力x2',
+    thunderMelon: '发射闪电链，在多个僵尸之间跳跃传播，伤害递增并减速'
   }
   return descriptions[plantId] || '强大的植物'
 }

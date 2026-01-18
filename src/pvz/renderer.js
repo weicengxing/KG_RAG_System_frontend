@@ -1,4 +1,5 @@
 import { gameConfig, plantConfig, zombieConfig } from './config.js'
+import { LightningRenderer } from './lightningSystem.js'
 
 // 渲染器类
 export class Renderer {
@@ -867,12 +868,28 @@ export class Renderer {
         case 'squashHit':
           this.drawSquashHitAnimation(anim, progress)
           break
-        case 'potatoMineExplode':
+      case 'potatoMineExplode':
           this.drawPotatoMineExplodeAnimation(anim, progress)
+          break
+        case 'lightningSurround':
+          LightningRenderer.drawLightningSurround(this.ctx, anim, progress)
           break
       }
     }
   }
+  
+  // 绘制闪电链
+  drawLightningChains(chains) {
+    // 调试：强制重置 Canvas 状态
+    this.ctx.globalAlpha = 1
+    this.ctx.globalCompositeOperation = 'source-over'
+    
+    for (const chain of chains) {
+      LightningRenderer.drawLightningChain(this.ctx, chain, this)
+    }
+  }
+  
+  // 土豆地雷爆炸动画
   
   // 土豆地雷爆炸动画
   drawPotatoMineExplodeAnimation(anim, progress) {

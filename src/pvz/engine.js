@@ -2,6 +2,7 @@ import { gameConfig, plantConfig, zombieConfig } from './config.js'
 import { Renderer } from './renderer.js'
 import { InputHandler } from './input.js'
 import { ProjectileManager } from './projectileManager.js'
+import { LightningChain } from './lightningSystem.js'
 import request from '../utils/request.js'
 
 // 网格类
@@ -180,6 +181,9 @@ export class GameEngine {
     
     // 子弹管理器
     this.projectileManager = new ProjectileManager(this)
+    
+    // 闪电链系统
+    this.lightningChain = new LightningChain(this)
   }
   
   // 启动游戏
@@ -475,6 +479,9 @@ export class GameEngine {
     
     // 更新子弹（使用 projectileManager）
     this.projectileManager.updateProjectiles(deltaTime)
+    
+    // 更新闪电链系统
+    this.lightningChain.update(deltaTime)
     
     // 更新阳光
     this.updateSuns(deltaTime)
@@ -875,8 +882,23 @@ export class GameEngine {
     this.renderer.drawParticles(this.projectileManager.getParticleSystem().getParticles())
     this.renderer.drawSuns(this.suns)
     this.renderer.drawLawnMowers(this.lawnMowers)
+    this.renderer.drawLightningChains(this.lightningChain.getActiveChains())
     this.renderer.drawAnimations(this.animations)
     this.renderer.drawMessages(this.messages)
+    
+    // 调试：在 render 末尾添加日志检查闪电链数据
+    const chains = this.lightningChain.getActiveChains()
+    if (chains.length > 0) {
+      console.log('[闪电链调试]', {
+        chainsCount: chains.length,
+        firstChain: chains[0] ? {
+          jumpsCount: chains[0].jumps?.length,
+          currentJump: chains[0].currentJump,
+          isComplete: chains[0].isComplete,
+          firstJumpSegments: chains[0].jumps?.[0]?.segments?.length
+        } : null
+      })
+    }
   }
   
   // 更新植物
@@ -1064,6 +1086,27 @@ export class GameEngine {
           if (plant.jumpTimer >= config.jumpDuration) {
             this.squashAttack(plant)
             this.removePlant(plant)
+          }
+        }
+      } else if (plant.type === 'thunderMelon') {
+        // 雷霆怒瓜：发射闪电链
+        plant.attackTimer += deltaTime
+        
+        if (plant.attackTimer >= config.attackInterval) {
+          const row = Math.floor((plant.y + plant.height / 2) / gameConfig.cellHeight)
+          const hasZombie = this.hasZombieInRow(row, plant.x)
+          
+          if (hasZombie) {
+            plant.attackTimer = 0
+            
+            // 找到最近的僵尸作为第一个目标
+            const nearestZombie = this.findNearestZombieInRow(row, plant.x)
+            
+            if (nearestZombie) {
+              // 发射闪电链
+              this.lightningChain.castLightningChain(plant, nearestZombie)
+              this.showMessage('⚡ 雷霆怒瓜释放闪电链！', '#00ffff')
+            }
           }
         }
       }

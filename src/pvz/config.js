@@ -210,6 +210,23 @@ export const plantConfig = {
       attackMultiplier: 2,  // 攻击提升100%（变成2倍）
       color: '#a855f7'      // 紫色（魅惑颜色）
     }
+  },
+  thunderMelon: {
+    id: 'thunderMelon',
+    name: '雷霆怒瓜',
+    icon: '⚡',
+    cost: 300,           // 中等消耗
+    hp: 400,             // 正常生命值
+    damage: 100,         // 初始伤害
+    damageIncrement: 50, // 每次跳跃增加的伤害
+    attackInterval: 3,   // 攻击间隔（秒）
+    lightningRange: 150, // 闪电跳跃半径（像素）
+    maxJumps: 5,         // 最大跳跃次数
+    slowDuration: 3,     // 减速持续时间（秒）
+    slowFactor: 0.5,     // 减速系数（50%）
+    cooldown: 8,         // 冷却时间（秒）
+    width: 104,
+    height: 130
   }
 }
 

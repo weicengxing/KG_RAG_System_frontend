@@ -655,8 +655,6 @@ export class ProjectileManager {
       isCenter: true
     })
     
-    // 显示消息
-    this.engine.showMessage('💥 玉米加农炮爆炸！', '#ff6b6b')
   }
 
   // 清空所有子弹

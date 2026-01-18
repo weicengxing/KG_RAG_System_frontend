@@ -62,8 +62,17 @@ export class LightningChain {
       segmentIndex: 0,
       segmentProgress: 0,
       isComplete: false,
-      appliedDamage: false
+      appliedDamage: false,
+      startTime: 0,
+      time: 0
     }), 20)
+  }
+
+  // 简化的噪声函数 - 生成平滑的随机变化
+  noise(x, frequency = 1, amplitude = 1) {
+    const x_scaled = x * frequency
+    // 简化的伪随机函数，使用三角函数组合模拟噪声
+    return (Math.sin(x_scaled) + Math.sin(x_scaled * 2.3 + 1.2) * 0.5 + Math.sin(x_scaled * 4.1 + 2.5) * 0.25) * amplitude
   }
 
   // 发射闪电链
@@ -116,6 +125,8 @@ export class LightningChain {
     jump.segmentProgress = 0
     jump.isComplete = false
     jump.appliedDamage = false
+    jump.startTime = Date.now()
+    jump.time = 0
 
     chain.jumps.push(jump)
 
@@ -150,7 +161,7 @@ export class LightningChain {
     }
   }
 
-  // 生成折线闪电路径 - 使用对象池优化
+  // 生成折线闪电路径 - 使用对象池优化（动态版本）
   generateLightningPath(startX, startY, endX, endY) {
     const segments = []
     const distance = Math.sqrt((endX - startX) ** 2 + (endY - startY) ** 2)
@@ -164,25 +175,30 @@ export class LightningChain {
       const targetX = startX + (endX - startX) * progress
       const targetY = startY + (endY - startY) * progress
       
-      // 添加随机偏移，形成折线效果 - 优化偏移量
-      const offsetAmount = 60 * (1 - Math.abs(progress - 0.5) * 2) // 减小偏移量提升性能
-      const offsetX = (Math.random() - 0.5) * offsetAmount
-      const offsetY = (Math.random() - 0.5) * offsetAmount * 0.8
+      // 基础偏移量
+      const offsetAmount = 60 * (1 - Math.abs(progress - 0.5) * 2)
       
-      let segmentEndX = targetX + offsetX
-      let segmentEndY = targetY + offsetY
+      // 计算静态偏移（初始形状）
+      const staticOffsetX = (Math.random() - 0.5) * offsetAmount
+      const staticOffsetY = (Math.random() - 0.5) * offsetAmount * 0.8
+      
+      const baseEndX = targetX + staticOffsetX
+      const baseEndY = targetY + staticOffsetY
       
       // 从对象池获取segment
       const segment = this.segmentPool.get()
       segment.startX = currentX
       segment.startY = currentY
-      segment.endX = segmentEndX
-      segment.endY = segmentEndY
+      segment.baseEndX = baseEndX // 基础终点
+      segment.baseEndY = baseEndY
+      segment.endX = baseEndX // 实际终点
+      segment.endY = baseEndY
       segment.segmentIndex = i
+      segment.offsetAmount = offsetAmount // 存储偏移量用于动态计算
       segments.push(segment)
       
-      currentX = segmentEndX
-      currentY = segmentEndY
+      currentX = baseEndX
+      currentY = baseEndY
     }
     
     return segments
@@ -332,22 +348,46 @@ export class LightningChain {
     }
   }
 
-  // 更新跳跃动画 - 优化版本
+  // 更新跳跃动画 - 优化版本（带动态路径）
   updateJumpAnimation(jump, deltaTime) {
     const segments = jump.segments
     
-    // 更新当前段
+    // 更新时间
+    jump.time += deltaTime
+    
+    // 更新所有已延伸的segment的动态偏移
+    const progress = jump.segmentIndex + jump.segmentProgress
+    const segmentsToUpdate = Math.min(Math.floor(progress) + 1, segments.length)
+    
+    for (let i = 0; i < segmentsToUpdate; i++) {
+      const segment = segments[i]
+      
+      // 使用噪声函数生成动态偏移
+      // 基于时间和segment索引生成平滑的随机变化
+      const dynamicTime = jump.time * 3 // 控制变化速度
+      const noiseX = this.noise(dynamicTime + i * 2.5, 0.8, segment.offsetAmount * 0.4)
+      const noiseY = this.noise(dynamicTime + i * 2.5 + 100, 0.8, segment.offsetAmount * 0.32) // +100避免相关性
+      
+      // 更新实际终点
+      segment.endX = segment.baseEndX + noiseX
+      segment.endY = segment.baseEndY + noiseY
+      
+      // 如果不是最后一个segment，还需要更新下一个segment的起点
+      if (i < segments.length - 1) {
+        segments[i + 1].startX = segment.endX
+        segments[i + 1].startY = segment.endY
+      }
+    }
+    
+    // 更新当前段进度
     if (jump.segmentIndex < segments.length) {
-      // 提高闪电延伸速度
-      const speed = deltaTime * 800 // 从300提升到800
+      const speed = deltaTime * 800
       jump.segmentProgress += speed
       
-      // 如果当前段完成，跳到下一段
       if (jump.segmentProgress >= 1 && jump.segmentIndex < segments.length - 1) {
         jump.segmentProgress = 0
         jump.segmentIndex++
       }
-      // 如果所有段都完成了
       else if (jump.segmentIndex >= segments.length - 1 && jump.segmentProgress >= 1) {
         jump.isComplete = true
         jump.segmentIndex = segments.length
@@ -396,7 +436,7 @@ export class LightningRenderer {
         const segment = jump.segments[i]
         const isPartial = isCurrentJump && i === Math.floor(progress)
         
-        // 计算实际终点
+        // 计算实际终点（已经动态更新过了）
         let endX = segment.endX
         let endY = segment.endY
         

@@ -215,7 +215,7 @@ export const plantConfig = {
     id: 'thunderMelon',
     name: '雷霆怒瓜',
     icon: '⚡',
-    cost: 300,           // 中等消耗
+    cost: 500,           // 中等消耗
     hp: 400,             // 正常生命值
     damage: 100,         // 初始伤害
     damageIncrement: 50, // 每次跳跃增加的伤害

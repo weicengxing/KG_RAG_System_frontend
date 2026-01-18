@@ -74,6 +74,10 @@ export class Renderer {
           bgColor = '#a3e635'
           borderColor = '#84cc16'
           break
+        case 'cannon':
+          bgColor = '#fbbf24'
+          borderColor = '#f59e0b'
+          break
         default:
           bgColor = '#4ade80'
           borderColor = '#22c55e'
@@ -87,6 +91,23 @@ export class Renderer {
       this.ctx.strokeStyle = borderColor
       this.ctx.lineWidth = 2
       this.ctx.strokeRect(plant.x, plant.y, plant.width, plant.height)
+      
+      // 如果是玉米加农炮且在沉睡状态，添加视觉效果
+      if (plant.type === 'cannon' && plant.isSleeping) {
+        this.ctx.globalAlpha = 0.6 // 半透明效果
+        
+        // 绘制沉睡 Zzz 动画
+        const sleepTime = Date.now() / 1000
+        const zOffset = Math.sin(sleepTime * 2) * 5
+        this.ctx.font = '24px Arial'
+        this.ctx.fillStyle = '#ffffff'
+        this.ctx.fillText('Z', plant.x + plant.width / 2 - 15, plant.y - 10 + zOffset)
+        this.ctx.fillText('z', plant.x + plant.width / 2, plant.y - 20 + zOffset)
+        this.ctx.fillText('z', plant.x + plant.width / 2 + 15, plant.y - 10 + zOffset)
+        
+        // 恢复透明度
+        this.ctx.globalAlpha = 1
+      }
       
       // 绘制emoji
       this.ctx.font = '48px Arial'
@@ -244,6 +265,81 @@ export class Renderer {
         this.ctx.lineWidth = 2
         this.ctx.stroke()
       }
+      // 玉米加农炮炮弹
+      else if (projectile.type === 'cannon') {
+        // 绘制尾迹
+        if (projectile.trail && projectile.trail.length > 1) {
+          this.ctx.save()
+          
+          // 绘制尾迹虚线
+          this.ctx.strokeStyle = 'rgba(251, 191, 36, 0.6)'
+          this.ctx.lineWidth = 3
+          this.ctx.setLineDash([5, 5])
+          
+          this.ctx.beginPath()
+          for (let i = 0; i < projectile.trail.length; i++) {
+            const point = projectile.trail[i]
+            if (i === 0) {
+              this.ctx.moveTo(point.x, point.y)
+            } else {
+              this.ctx.lineTo(point.x, point.y)
+            }
+          }
+          this.ctx.stroke()
+          
+          // 绘制尾迹点
+          this.ctx.setLineDash([])
+          for (let i = 0; i < projectile.trail.length; i += 3) {
+            const point = projectile.trail[i]
+            const alpha = (i / projectile.trail.length) * 0.5
+            this.ctx.fillStyle = `rgba(251, 191, 36, ${alpha})`
+            this.ctx.beginPath()
+            this.ctx.arc(point.x, point.y, 4, 0, Math.PI * 2)
+            this.ctx.fill()
+          }
+          
+          this.ctx.restore()
+        }
+        
+        // 保存上下文并旋转
+        this.ctx.save()
+        this.ctx.translate(projectile.x, projectile.y)
+        this.ctx.rotate(projectile.rotation || 0)
+        
+        // 绘制大号炮弹（玉米）
+        this.ctx.fillStyle = '#fbbf24' // 金黄色
+        this.ctx.beginPath()
+        this.ctx.arc(0, 0, 15, 0, Math.PI * 2)
+        this.ctx.fill()
+        
+        // 绘制边框
+        this.ctx.strokeStyle = '#f59e0b'
+        this.ctx.lineWidth = 2
+        this.ctx.stroke()
+        
+        // 绘制玉米纹理
+        this.ctx.fillStyle = '#fcd34d'
+        for (let i = 0; i < 5; i++) {
+          const angle = (i / 5) * Math.PI * 2
+          const x = Math.cos(angle) * 8
+          const y = Math.sin(angle) * 8
+          this.ctx.beginPath()
+          this.ctx.arc(x, y, 3, 0, Math.PI * 2)
+          this.ctx.fill()
+        }
+        
+        // 添加发光效果
+        this.ctx.globalAlpha = 0.4
+        const gradient = this.ctx.createRadialGradient(0, 0, 15, 0, 0, 25)
+        gradient.addColorStop(0, 'rgba(251, 191, 36, 0.8)')
+        gradient.addColorStop(1, 'rgba(251, 191, 36, 0)')
+        this.ctx.fillStyle = gradient
+        this.ctx.beginPath()
+        this.ctx.arc(0, 0, 25, 0, Math.PI * 2)
+        this.ctx.fill()
+        
+        this.ctx.restore()
+      }
     }
   }
   
@@ -307,6 +403,9 @@ export class Renderer {
           break
         case 'watermelonHit':
           this.drawWatermelonHitAnimation(anim, progress)
+          break
+        case 'cannonExplode':
+          this.drawCannonExplodeAnimation(anim, progress)
           break
       }
     }
@@ -596,5 +695,153 @@ export class Renderer {
       // 恢复之前的状态
       this.ctx.restore()
     }
+  }
+  
+  // 玉米加农炮爆炸动画
+  drawCannonExplodeAnimation(anim, progress) {
+    const scale = 1 + progress * 4 // 从1扩展到5倍（减半）
+    const alpha = 1 - progress * progress // 二次衰减，后期更快消失
+    
+    this.ctx.save()
+    this.ctx.translate(anim.x, anim.y)
+    
+    // 1. 核心爆炸（白色闪光）
+    {
+      const coreRadius = 5 + progress * 30 // 减半
+      const coreAlpha = Math.max(0, 1 - progress * 2)
+      
+      this.ctx.globalAlpha = coreAlpha * alpha
+      const coreGradient = this.ctx.createRadialGradient(0, 0, 0, 0, 0, coreRadius)
+      coreGradient.addColorStop(0, 'rgba(255, 255, 255, 1)')
+      coreGradient.addColorStop(0.3, 'rgba(255, 255, 200, 0.8)')
+      coreGradient.addColorStop(0.6, 'rgba(255, 200, 100, 0.6)')
+      coreGradient.addColorStop(1, 'rgba(255, 150, 50, 0)')
+      
+      this.ctx.fillStyle = coreGradient
+      this.ctx.beginPath()
+      this.ctx.arc(0, 0, coreRadius, 0, Math.PI * 2)
+      this.ctx.fill()
+    }
+    
+    // 2. 火焰环（橙红色）
+    {
+      const ringScale = scale * 0.8
+      const ringAlpha = Math.max(0, 1 - progress * 1.5)
+      
+      this.ctx.globalAlpha = ringAlpha * alpha
+      const flameGradient = this.ctx.createRadialGradient(0, 0, 0, 0, 0, 50 * ringScale) // 减半
+      flameGradient.addColorStop(0, 'rgba(255, 100, 0, 0)')
+      flameGradient.addColorStop(0.3, 'rgba(255, 150, 0, 0.6)')
+      flameGradient.addColorStop(0.5, 'rgba(255, 200, 0, 0.8)')
+      flameGradient.addColorStop(0.7, 'rgba(255, 255, 100, 0.5)')
+      flameGradient.addColorStop(1, 'rgba(255, 255, 255, 0)')
+      
+      this.ctx.fillStyle = flameGradient
+      this.ctx.beginPath()
+      this.ctx.arc(0, 0, 50 * ringScale, 0, Math.PI * 2) // 减半
+      this.ctx.fill()
+    }
+    
+    // 3. 玉米碎片飞溅效果（金黄色不规则碎片）
+    {
+      const fragmentAlpha = Math.max(0, 1 - progress * 1.2)
+      this.ctx.globalAlpha = fragmentAlpha * alpha
+      
+      const fragmentCount = 24
+      for (let i = 0; i < fragmentCount; i++) {
+        const angle = (i / fragmentCount) * Math.PI * 2 + Math.random() * 0.3
+        const distance = 10 + progress * 75 // 减半
+        const rotation = angle + progress * 10
+        
+        const x = Math.cos(angle) * distance
+        const y = Math.sin(angle) * distance
+        
+        this.ctx.save()
+        this.ctx.translate(x, y)
+        this.ctx.rotate(rotation)
+        
+        // 绘制不规则碎片
+        this.ctx.fillStyle = `rgba(251, 191, 36, ${0.8 + Math.random() * 0.2})`
+        this.ctx.beginPath()
+        this.ctx.moveTo(-4, -1.5) // 减半
+        this.ctx.lineTo(2.5, -3)
+        this.ctx.lineTo(5, 1)
+        this.ctx.lineTo(1.5, 4)
+        this.ctx.lineTo(-3.5, 2.5)
+        this.ctx.lineTo(-5, -1)
+        this.ctx.closePath()
+        this.ctx.fill()
+        
+        // 添加阴影效果
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.3)'
+        this.ctx.beginPath()
+        this.ctx.arc(1, 1.5, 1, 0, Math.PI * 2) // 减半
+        this.ctx.fill()
+        
+        this.ctx.restore()
+      }
+    }
+    
+    // 4. 烟雾扩散（深灰色到透明）
+    {
+      const smokeScale = scale * 1.5
+      const smokeAlpha = Math.max(0, 0.3 - progress * 0.3)
+      
+      this.ctx.globalAlpha = smokeAlpha * alpha
+      const smokeGradient = this.ctx.createRadialGradient(0, 0, 25 * scale, 0, 0, 75 * smokeScale) // 减半
+      smokeGradient.addColorStop(0, 'rgba(0, 0, 0, 0)')
+      smokeGradient.addColorStop(0.5, 'rgba(50, 50, 50, 0.3)')
+      smokeGradient.addColorStop(0.8, 'rgba(30, 30, 30, 0.2)')
+      smokeGradient.addColorStop(1, 'rgba(0, 0, 0, 0)')
+      
+      this.ctx.fillStyle = smokeGradient
+      this.ctx.beginPath()
+      this.ctx.arc(0, 0, 75 * smokeScale, 0, Math.PI * 2) // 减半
+      this.ctx.fill()
+    }
+    
+    // 5. 火花粒子（橙色小点）
+    {
+      const sparkAlpha = Math.max(0, 1 - progress * 2)
+      this.ctx.globalAlpha = sparkAlpha * alpha
+      
+      const sparkCount = 40
+      for (let i = 0; i < sparkCount; i++) {
+        const angle = (i / sparkCount) * Math.PI * 2 + Math.random() * Math.PI
+        const distance = 15 + Math.random() * progress * 100 // 减半
+        const size = 1 + Math.random() * 2 // 减半
+        
+        const x = Math.cos(angle) * distance
+        const y = Math.sin(angle) * distance
+        
+        // 绘制火花
+        this.ctx.fillStyle = 'rgba(255, 100, 0, 0.8)'
+        this.ctx.beginPath()
+        this.ctx.arc(x, y, size, 0, Math.PI * 2)
+        this.ctx.fill()
+        
+        // 火花光晕
+        this.ctx.fillStyle = 'rgba(255, 200, 0, 0.3)'
+        this.ctx.beginPath()
+        this.ctx.arc(x, y, size * 2, 0, Math.PI * 2)
+        this.ctx.fill()
+      }
+    }
+    
+    // 6. 冲击波环（金色光环，快速扩散）
+    {
+      const shockwaveRadius = 25 + progress * 100 // 减半
+      const shockwaveAlpha = Math.max(0, 1 - progress * 3)
+      
+      this.ctx.globalAlpha = shockwaveAlpha * 0.5
+      this.ctx.strokeStyle = 'rgba(255, 215, 0, 0.6)'
+      this.ctx.lineWidth = 4 * (1 - progress) // 减半
+      
+      this.ctx.beginPath()
+      this.ctx.arc(0, 0, shockwaveRadius, 0, Math.PI * 2)
+      this.ctx.stroke()
+    }
+    
+    this.ctx.restore()
   }
 }

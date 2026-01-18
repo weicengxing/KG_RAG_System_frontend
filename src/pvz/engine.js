@@ -90,7 +90,7 @@ export class GameEngine {
     )
     
     // 游戏数据
-    this.sunEnergy = 1000
+    this.sunEnergy = 10000
     this.score = 0
     this.wave = 1
     this.totalScore = 0
@@ -119,6 +119,10 @@ export class GameEngine {
     
     // 铲除模式
     this.isShovelMode = false
+    
+    // 玉米加农炮瞄准模式
+    this.isCannonAimingMode = false
+    this.activeCannon = null
     
     // 渲染器
     this.renderer = new Renderer(this.ctx)
@@ -152,7 +156,7 @@ export class GameEngine {
   start() {
     this.isPlaying = true
     this.gameOver = false
-    this.sunEnergy = 1000
+    this.sunEnergy = 10000
     this.score = 0
     this.wave = 1
     this.zombiesKilled = 0
@@ -851,6 +855,19 @@ export class GameEngine {
       const plant = this.plants[i]
       const config = plantConfig[plant.type]
       
+      // 玉米加农炮沉睡逻辑
+      if (plant.type === 'cannon') {
+        if (plant.isSleeping) {
+          plant.sleepTimer -= deltaTime
+          if (plant.sleepTimer <= 0) {
+            plant.isSleeping = false
+            plant.sleepTimer = 0
+            this.showMessage('玉米加农炮苏醒了！', '#22c55e')
+          }
+        }
+        continue
+      }
+      
       if (plant.type === 'sunflower') {
         plant.produceTimer += deltaTime
         
@@ -897,9 +914,14 @@ export class GameEngine {
         plant.attackTimer += deltaTime
         
         if (plant.attackTimer >= config.attackInterval) {
-          plant.attackTimer = 0
-          this.throwGoldenStaff(plant)
-          this.playSound('shoot')
+          const row = Math.floor((plant.y + plant.height / 2) / gameConfig.cellHeight)
+          const hasZombie = this.hasZombieInRow(row, plant.x)
+          
+          if (hasZombie) {
+            plant.attackTimer = 0
+            this.throwGoldenStaff(plant)
+            this.playSound('shoot')
+          }
         }
       }
     }
@@ -1170,8 +1192,48 @@ export class GameEngine {
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const projectile = this.projectiles[i]
       
+      // 如果是玉米加农炮炮弹，使用两段式动画
+      if (projectile.type === 'cannon') {
+        projectile.phaseTimer += deltaTime
+        
+        // 更新旋转角度
+        projectile.rotation += projectile.rotationSpeed * deltaTime
+        
+        // 记录尾迹位置（每帧记录一次，最多保留30个点）
+        projectile.trail.push({ x: projectile.x, y: projectile.y })
+        if (projectile.trail.length > 30) {
+          projectile.trail.shift()
+        }
+        
+        if (projectile.phase === 'rising') {
+          // 第一阶段：垂直向上
+          projectile.y += projectile.vy * deltaTime
+          
+          // 检查是否到达天空顶部
+          if (projectile.y <= projectile.skyHeight || projectile.phaseTimer >= projectile.riseTime) {
+            // 切换到下降阶段
+            projectile.phase = 'falling'
+            // 从目标点正上方落下
+            projectile.x = projectile.targetX
+            projectile.y = projectile.skyHeight
+            projectile.vy = projectile.fallSpeed
+            projectile.phaseTimer = 0
+          }
+        } else if (projectile.phase === 'falling') {
+          // 第二阶段：从天而降
+          projectile.y += projectile.vy * deltaTime
+          
+          // 检查是否到达目标位置
+          if (projectile.y >= projectile.targetY || projectile.phaseTimer >= projectile.fallTime) {
+            // 爆炸
+            this.explodeCannonProjectile(projectile)
+            this.projectiles.splice(i, 1)
+            continue
+          }
+        }
+      }
       // 如果是西瓜，使用抛物线运动
-      if (projectile.type === 'watermelon' || projectile.type === 'iceWatermelon') {
+      else if (projectile.type === 'watermelon' || projectile.type === 'iceWatermelon') {
         // 水平运动
         projectile.x += projectile.vx * deltaTime
         // 垂直运动（抛物线）：vy 受重力影响
@@ -1184,8 +1246,8 @@ export class GameEngine {
         projectile.x += projectile.speed * deltaTime * 60
       }
       
-      // 检查是否飞出屏幕
-      if (projectile.x > this.width + 100) { // 允许稍微飞出屏幕
+      // 检查是否飞出屏幕（普通子弹）
+      if (projectile.type !== 'cannon' && projectile.x > this.width + 100) { // 允许稍微飞出屏幕
         this.projectiles.splice(i, 1)
         continue
       }
@@ -1511,7 +1573,10 @@ export class GameEngine {
       maxHp: config.hp,
       attackTimer: 0,
       produceTimer: 0,
-      explodeTimer: 0
+      explodeTimer: 0,
+      // 玉米加农炮沉睡相关字段
+      isSleeping: false,
+      sleepTimer: 0
     }
     
     this.plants.push(plant)
@@ -1678,5 +1743,136 @@ export class GameEngine {
     
     // 显示铲除成功消息
     this.showMessage(`铲除成功，返还 ${refund} 阳光`, '#22c55e')
+  }
+  
+  // 玉米加农炮发射炮弹
+  fireCannonProjectile(cannon, targetX, targetY) {
+    // 检查玉米加农炮是否处于沉睡状态
+    if (cannon.isSleeping) {
+      this.showMessage('玉米加农炮正在沉睡中，无法发射！', '#f87171')
+      return false
+    }
+    
+    const config = plantConfig.cannon
+    const startX = cannon.x + cannon.width / 2
+    const startY = cannon.y + cannon.height / 2
+    
+    // 计算飞行到天空顶部的高度（屏幕上方 50px，降低高度以加快动画）
+    const skyAboveHeight = 50
+    const skyY = -skyAboveHeight // 屏幕上方50px（负值）
+    
+    // 第一阶段：垂直向上飞到屏幕上方（提速以加快动画）
+    const upSpeed = 400 // px/s（提速3.75倍）
+    const upDistance = startY - skyY // 从startY到-skyY的距离
+    const upTime = upDistance / upSpeed
+    
+    // 第二阶段：从天而降到目标点（提速以加快动画）
+    const fallTargetY = targetY
+    const fallSpeed = 500 // px/s（提速4倍）
+    const fallDistance = fallTargetY - skyY
+    const fallTime = fallDistance / fallSpeed
+    
+    // 设置沉睡状态
+    cannon.isSleeping = true
+    cannon.sleepTimer = config.sleepDuration
+    
+    const projectile = {
+      x: startX,
+      y: startY,
+      vx: 0,
+      vy: -upSpeed, // 初始向上速度
+      type: 'cannon',
+      damage: config.damage,
+      explodeRadius: config.explodeRadius,
+      targetX: targetX,
+      targetY: targetY,
+      phase: 'rising', // rising（上升）或 falling（下降）
+      riseTime: upTime,
+      fallTime: fallTime,
+      phaseTimer: 0,
+      skyHeight: skyY, // ✅ 修复：使用正确的天空高度 -200
+      fallSpeed: fallSpeed, // ✅ 保存下降速度
+      rotation: 0,
+      rotationSpeed: 3, // 旋转速度（弧度/秒）
+      trail: []
+    }
+    
+    this.projectiles.push(projectile)
+    this.playSound('shoot')
+    this.showMessage('🌽 玉米加农炮发射！', '#fbbf24')
+    return true
+  }
+  
+  // 玉米加农炮炮弹爆炸
+  explodeCannonProjectile(projectile) {
+    const centerX = projectile.targetX
+    const centerY = projectile.targetY
+    const explodeRadius = projectile.explodeRadius
+    
+    // 对爆炸范围内的所有僵尸造成伤害
+    for (let i = this.zombies.length - 1; i >= 0; i--) {
+      const zombie = this.zombies[i]
+      const zombieCenterX = zombie.x + zombie.width / 2
+      const zombieCenterY = zombie.y + zombie.height / 2
+      
+      const distance = Math.sqrt(
+        (zombieCenterX - centerX) ** 2 + (zombieCenterY - centerY) ** 2
+      )
+      
+      if (distance <= explodeRadius) {
+        // 造成伤害
+        if (zombie.shieldHp > 0) {
+          zombie.shieldHp -= projectile.damage
+          if (zombie.shieldHp < 0) {
+            zombie.hp += zombie.shieldHp
+            zombie.shieldHp = 0
+          }
+        } else {
+          zombie.hp -= projectile.damage
+        }
+        
+        this.playSound('hit')
+        
+        // 添加爆炸动画
+        this.animations.push({
+          type: 'cannonExplode',
+          x: zombieCenterX,
+          y: zombieCenterY,
+          time: 0,
+          duration: 0.5
+        })
+        
+        // 检查僵尸是否死亡
+        if (zombie.hp <= 0) {
+          this.zombies.splice(i, 1)
+          this.score += 10
+          this.zombiesKilled++
+          
+          if (i < this.zombies.length) {
+            // 由于已经删除了元素，索引可能已经改变，需要重新检查
+            continue
+          }
+          
+          this.playSound('zombieDeath')
+          this.addDeathAnimation(zombie.x, zombie.y)
+        }
+      }
+    }
+    
+    // 播放爆炸音效
+    this.playSound('explode')
+    
+    // 添加中心爆炸动画
+    this.animations.push({
+      type: 'cannonExplode',
+      x: centerX,
+      y: centerY,
+      time: 0,
+      duration: 0.9,
+      isCenter: true
+    })
+    
+    // 显示消息
+    this.showMessage('💥 玉米加农炮爆炸！', '#ff6b6b')
   }
 }

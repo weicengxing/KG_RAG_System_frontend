@@ -74,7 +74,7 @@ export const plantConfig = {
     projectileSpeed: 8,  // 较慢的子弹速度
     gravity: 300,        // 重力加速度（像素/秒²）
     rotationSpeed: 5,    // 旋转速度（弧度/秒）
-    cooldown: 12,        // 长冷却时间
+    cooldown: 0,       // 长冷却时间
     width: 104,
     height: 130
   },
@@ -101,12 +101,26 @@ export const plantConfig = {
     icon: '🥝',
     cost: 250,           // 中等消耗
     hp: 350,
-    attackInterval: 8,   // 攻击间隔（秒）
+    attackInterval: 4,   // 攻击间隔（秒）
     staffDamage: 150,     // 金箍棒伤害
     staffLifeTime: 5,    // 金箍棒存在时间（秒）
-    staffAttackInterval: 0.1, // 金箍棒攻击间隔（秒）
+    staffAttackInterval: 0.5, // 金箍棒攻击间隔（秒）
     staffRadius: 50,     // 金箍棒攻击半径（像素）
     cooldown: 10,        // 中等冷却时间
+    width: 104,
+    height: 130
+  },
+  cannon: {
+    id: 'cannon',
+    name: '玉米加农炮',
+    icon: '🌽',
+    cost: 500,           // 高消耗
+    hp: 500,             // 中等生命值
+    damage: 3000,        // 爆炸伤害
+    explodeRadius: 220,  // 爆炸半径（像素）- 约2-3个格子
+    projectileSpeed: 15, // 炮弹速度
+    cooldown: 40,        // 很长的冷却时间
+    sleepDuration: 20,   // 发射后沉睡时间（秒）
     width: 104,
     height: 130
   }
@@ -141,8 +155,8 @@ export const zombieConfig = {
     id: 'buckethead',
     name: '铁桶僵尸',
     icon: '🗑️',
-    hp: 1300,            // 200 + 1100护盾
-    shieldHp: 1100,      // 铁桶护盾血量
+    hp: 860,            // 200 + 660护盾
+    shieldHp: 660,      // 铁桶护盾血量
     speed: 0.65,         // 移动速度（像素/帧）- 放大到1.3倍
     attackDamage: 1,
     attackInterval: 1,

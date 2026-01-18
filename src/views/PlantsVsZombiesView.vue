@@ -158,7 +158,7 @@ import { GameEngine } from '../pvz/engine.js'
 import { plantConfig, gameConfig } from '../pvz/config.js'
 
 const gameCanvas = ref(null)
-const sunEnergy = ref(1000)
+const sunEnergy = ref(10000)
 const score = ref(0)
 const wave = ref(1)
 const maxWaves = ref(gameConfig.waveConfigs.length)
@@ -231,7 +231,8 @@ const selectedPlants = ref([
   { id: 'cherryBomb', ...plantConfig.cherryBomb },
   { id: 'watermelon', ...plantConfig.watermelon },
   { id: 'iceWatermelon', ...plantConfig.iceWatermelon },
-  { id: 'kiwi', ...plantConfig.kiwi }
+  { id: 'kiwi', ...plantConfig.kiwi },
+  { id: 'cannon', ...plantConfig.cannon }
 ])
 
 // 暂停/继续

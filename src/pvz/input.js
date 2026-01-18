@@ -81,6 +81,9 @@ export class InputHandler {
     // 检查是否点击到阳光
     if (this.checkSunClick(x, y)) return
     
+    // 检查是否在玉米加农炮瞄准模式
+    if (this.handleCannonAimingClick(x, y)) return
+    
     // 检查是否点击到网格种植植物
     this.checkPlantClick(x, y)
   }
@@ -100,6 +103,57 @@ export class InputHandler {
     return false
   }
   
+  handleCannonAimingClick(x, y) {
+    // 如果在玉米加农炮瞄准模式
+    if (this.engine.isCannonAimingMode) {
+      const { col, row } = this.engine.grid.pixelToGrid(x, y)
+      
+      // 检查是否在网格范围内
+      if (col >= 0 && col < gameConfig.gridCols && 
+          row >= 0 && row < gameConfig.gridRows) {
+        // 发射炮弹到目标位置
+        if (this.engine.activeCannon) {
+          const pixelPos = this.engine.grid.gridToPixel(col, row)
+          const targetX = pixelPos.x + gameConfig.cellWidth / 2
+          const targetY = pixelPos.y + gameConfig.cellHeight / 2
+          
+          this.engine.fireCannonProjectile(this.engine.activeCannon, targetX, targetY)
+          this.engine.showMessage('🌽 玉米加农炮发射！', '#fbbf24')
+        }
+      }
+      
+      // 退出瞄准模式
+      this.engine.isCannonAimingMode = false
+      this.engine.activeCannon = null
+      
+      return true
+    }
+    
+    // 如果不在瞄准模式，检查是否点击了玉米加农炮
+    const { col, row } = this.engine.grid.pixelToGrid(x, y)
+    if (col >= 0 && col < gameConfig.gridCols && 
+        row >= 0 && row < gameConfig.gridRows) {
+      const plant = this.engine.grid.getPlant(col, row)
+      
+      // 如果点击的是玉米加农炮
+      if (plant && plant.type === 'cannon') {
+        // 检查是否处于沉睡状态
+        if (plant.isSleeping) {
+          this.engine.showMessage('玉米加农炮正在沉睡中，无法发射！', '#f87171')
+          return true
+        }
+        
+        // 进入瞄准模式
+        this.engine.isCannonAimingMode = true
+        this.engine.activeCannon = plant
+        this.engine.showMessage('🎯 瞄准模式：选择目标位置', '#fbbf24')
+        return true
+      }
+    }
+    
+    return false
+  }
+  
   checkPlantClick(x, y) {
     const { col, row } = this.engine.grid.pixelToGrid(x, y)
     
@@ -108,6 +162,12 @@ export class InputHandler {
         row < 0 || row >= gameConfig.gridRows) {
       // 点击网格外，取消选择
       this.engine.selectedPlant = null
+      // 如果在瞄准模式点击网格外，也要取消瞄准模式
+      if (this.engine.isCannonAimingMode) {
+        this.engine.isCannonAimingMode = false
+        this.engine.activeCannon = null
+        this.engine.showMessage('已取消瞄准', '#f87171')
+      }
       return
     }
     

@@ -135,6 +135,20 @@
         <button @click="showStats = false" class="modal-close">关闭</button>
       </div>
     </div>
+
+    <!-- Toast 提示消息 -->
+    <div class="toast-container">
+      <transition-group name="toast">
+        <div
+          v-for="toast in toasts"
+          :key="toast.id"
+          :class="['toast', `toast-${toast.type}`]"
+        >
+          <span class="toast-icon">{{ toast.icon }}</span>
+          <span class="toast-message">{{ toast.message }}</span>
+        </div>
+      </transition-group>
+    </div>
   </div>
 </template>
 
@@ -161,6 +175,41 @@ const isShovelMode = ref(false)
 // 弹窗状态
 const showAchievements = ref(false)
 const showStats = ref(false)
+
+// Toast 提示系统
+const toasts = ref([])
+let toastId = 0
+
+// 显示 Toast 提示
+const showToast = (message, type = 'info') => {
+  const icons = {
+    success: '✅',
+    error: '❌',
+    warning: '⚠️',
+    info: 'ℹ️'
+  }
+
+  const id = toastId++
+  toasts.value.push({
+    id,
+    message,
+    type,
+    icon: icons[type]
+  })
+
+  // 3秒后自动移除
+  setTimeout(() => {
+    removeToast(id)
+  }, 3000)
+}
+
+// 移除 Toast 提示
+const removeToast = (id) => {
+  const index = toasts.value.findIndex(toast => toast.id === id)
+  if (index > -1) {
+    toasts.value.splice(index, 1)
+  }
+}
 
 // 成就和统计
 const achievements = ref({})
@@ -284,13 +333,13 @@ const selectPlant = (plantId) => {
   
   // 检查阳光
   if (sunEnergy.value < config.cost) {
-    alert('阳光不足！')
+    showToast(`阳光不足！需要 ${config.cost} 阳光，当前只有 ${sunEnergy.value} 阳光`, 'warning')
     return
   }
   
   // 检查冷却
   if (plantCooldowns.value[plantId] > 0) {
-    alert('植物冷却中！')
+    showToast(`${config.name} 还在冷却中，还需 ${plantCooldowns.value[plantId].toFixed(1)} 秒`, 'warning')
     return
   }
   
@@ -812,6 +861,94 @@ onUnmounted(() => {
 
 .auto-collect-active {
   background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%) !important;
+}
+
+/* Toast 提示样式 */
+.toast-container {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.toast {
+  padding: 16px 20px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 300px;
+  max-width: 400px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  animation: slideIn 0.3s ease-out;
+  backdrop-filter: blur(10px);
+}
+
+.toast-success {
+  background: rgba(34, 197, 94, 0.95);
+  border: 2px solid #22c55e;
+}
+
+.toast-error {
+  background: rgba(239, 68, 68, 0.95);
+  border: 2px solid #ef4444;
+}
+
+.toast-warning {
+  background: rgba(251, 191, 36, 0.95);
+  border: 2px solid #fbbf24;
+}
+
+.toast-info {
+  background: rgba(99, 102, 241, 0.95);
+  border: 2px solid #6366f1;
+}
+
+.toast-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.toast-message {
+  color: white;
+  font-weight: 600;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  flex: 1;
+}
+
+/* Toast 动画 */
+.toast-enter-active {
+  animation: slideIn 0.3s ease-out;
+}
+
+.toast-leave-active {
+  animation: slideOut 0.3s ease-in;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOut {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
 }
 
 /* 铲子按钮样式 */

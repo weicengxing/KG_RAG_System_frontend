@@ -1107,15 +1107,35 @@ export class GameEngine {
       }
       
       if (zombie.state === 'WALKING') {
-        zombie.x -= actualSpeed * deltaTime * 60
-        
         const row = Math.floor(zombie.y / gameConfig.cellHeight)
-        const targetPlant = this.findTargetPlant(zombie.x, row)
+        const moveStep = actualSpeed * deltaTime * 60
+        const nextX = zombie.x - moveStep
+        
+        // 找到同一行中在僵尸前进方向上的最近植物
+        const targetPlant = this.findNearestPlantAhead(zombie.x, nextX, row)
         
         if (targetPlant) {
-          zombie.state = 'EATING'
-          zombie.targetPlant = targetPlant
-          zombie.attackTimer = 0
+          // 计算僵尸应该停止的位置：僵尸左边界在植物右边界左侧1/4，露出植物左边3/4
+          // 添加宽度字段fallback，防止NaN
+          const plantW = targetPlant.width || gameConfig.cellWidth
+          const zombieW = zombie.width || gameConfig.cellWidth
+          // zombie.x是僵尸左边界,不需要再减zombieW
+          const stopPosition = targetPlant.x + (plantW * 0.75)
+          
+          // 跨越检测：这一帧是否会到达或越过 stopPosition
+          if (nextX <= stopPosition) {
+            // 会到达或越过，精确停止
+            zombie.x = stopPosition
+            zombie.state = 'EATING'
+            zombie.targetPlant = targetPlant
+            zombie.attackTimer = 0
+          } else {
+            // 还未到达，继续移动
+            zombie.x = nextX
+          }
+        } else {
+          // 没有植物，继续移动
+          zombie.x = nextX
         }
       } else if (zombie.state === 'EATING') {
         zombie.attackTimer += deltaTime
@@ -1331,16 +1351,54 @@ export class GameEngine {
     return false
   }
   
-  // 查找目标植物
+  // 查找目标植物（旧方法，保留以便兼容）
   findTargetPlant(zombieX, row) {
     for (const plant of this.plants) {
       const plantRow = Math.floor(plant.y / gameConfig.cellHeight)
       
-      if (plantRow === row && Math.abs(zombieX - plant.x) < 5) {
-        return plant
+      // 检查是否在同一行
+      if (plantRow === row) {
+        // 如果僵尸在植物前方，且距离在可检测范围内
+        if (zombieX > plant.x && zombieX < plant.x + plant.width + 10) {
+          return plant
+        }
       }
     }
     return null
+  }
+  
+  // 查找同一行中在僵尸前进方向上的最近植物（新方法）
+  findNearestPlantAhead(currentX, nextX, row) {
+    let nearestPlant = null
+    let minDistance = Infinity
+    
+    for (const plant of this.plants) {
+      const plantRow = Math.floor(plant.y / gameConfig.cellHeight)
+      
+      // 检查是否在同一行
+      if (plantRow === row) {
+        // 植物的右边缘
+        const plantRightEdge = plant.x + (plant.width || gameConfig.cellWidth)
+        
+        // 简化的碰撞检测：只要僵尸当前在植物范围内，或者下一帧会进入植物范围内
+        const isCurrentlyInPlant = currentX >= plant.x - (plant.width || gameConfig.cellWidth) && currentX <= plantRightEdge
+        const willEnterPlant = nextX >= plant.x - (plant.width || gameConfig.cellWidth) && nextX <= plantRightEdge
+        
+        if (isCurrentlyInPlant || willEnterPlant) {
+          // 计算距离（植物x坐标相对于僵尸的距离，越小越近）
+          const distance = currentX - plant.x
+          
+          // 找到x最大的植物（即最右边的植物，距离最近）
+          // 使用distance的绝对值确保正确性
+          if (distance < minDistance) {
+            minDistance = distance
+            nearestPlant = plant
+          }
+        }
+      }
+    }
+    
+    return nearestPlant
   }
   
   // 发射子弹
@@ -1599,6 +1657,15 @@ export class GameEngine {
     
     // 计算返还阳光（植物成本的50%）
     const refund = Math.floor(config.cost * 0.5)
+    
+    // 【修复】在移除植物之前，将所有正在吃该植物的僵尸状态重置为 WALKING
+    for (const zombie of this.zombies) {
+      if (zombie.targetPlant === plant) {
+        zombie.state = 'WALKING'
+        zombie.targetPlant = null
+        zombie.attackTimer = 0
+      }
+    }
     
     // 增加阳光
     this.sunEnergy += refund

@@ -1010,25 +1010,40 @@ export class Renderer {
     }
   }
   
-  // 玉米加农炮爆炸动画
+  // 玉米加农炮爆炸动画（强烈破坏效果）
   drawCannonExplodeAnimation(anim, progress) {
-    const scale = 1 + progress * 4 // 从1扩展到5倍（减半）
-    const alpha = 1 - progress * progress // 二次衰减，后期更快消失
+    const scale = 1 + progress * 6 // 扩展到7倍
+    const alpha = 1 - progress * 0.8 // 线性衰减，后期仍保持可见性
     
     this.ctx.save()
     this.ctx.translate(anim.x, anim.y)
     
-    // 1. 核心爆炸（白色闪光）
+    // 0. 瞬间白屏闪光效果（爆炸前0.2秒）
     {
-      const coreRadius = 5 + progress * 30 // 减半
+      const flashAlpha = Math.max(0, 1 - progress * 5) // 前0.2秒（progress=0-0.2）完全显示
+      this.ctx.globalAlpha = flashAlpha
+      
+      // 整个屏幕覆盖白色闪光
+      this.ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
+      this.ctx.fillRect(-this.ctx.canvas ? -this.ctx.canvas.width / 2 : -500, 
+                       -this.ctx.canvas ? -this.ctx.canvas.height / 2 : -400, 
+                       this.ctx.canvas ? this.ctx.canvas.width : 1000, 
+                       this.ctx.canvas ? this.ctx.canvas.height : 800)
+    }
+    
+    // 1. 超强核心爆炸（刺眼白光）
+    {
+      const coreRadius = 10 + progress * 80
       const coreAlpha = Math.max(0, 1 - progress * 2)
       
       this.ctx.globalAlpha = coreAlpha * alpha
       const coreGradient = this.ctx.createRadialGradient(0, 0, 0, 0, 0, coreRadius)
       coreGradient.addColorStop(0, 'rgba(255, 255, 255, 1)')
-      coreGradient.addColorStop(0.3, 'rgba(255, 255, 200, 0.8)')
-      coreGradient.addColorStop(0.6, 'rgba(255, 200, 100, 0.6)')
-      coreGradient.addColorStop(1, 'rgba(255, 150, 50, 0)')
+      coreGradient.addColorStop(0.2, 'rgba(255, 255, 255, 0.9)')
+      coreGradient.addColorStop(0.4, 'rgba(255, 255, 200, 0.8)')
+      coreGradient.addColorStop(0.6, 'rgba(255, 255, 100, 0.5)')
+      coreGradient.addColorStop(0.8, 'rgba(255, 200, 50, 0.3)')
+      coreGradient.addColorStop(1, 'rgba(255, 150, 0, 0)')
       
       this.ctx.fillStyle = coreGradient
       this.ctx.beginPath()
@@ -1036,35 +1051,83 @@ export class Renderer {
       this.ctx.fill()
     }
     
-    // 2. 火焰环（橙红色）
+    // 2. 多层爆炸波（4层：白色→黄色→橙色→红色）
     {
-      const ringScale = scale * 0.8
-      const ringAlpha = Math.max(0, 1 - progress * 1.5)
+      const waveLayers = [
+        { color: 'rgba(255, 255, 255, ', speed: 1.0, startDelay: 0 },
+        { color: 'rgba(255, 255, 100, ', speed: 0.8, startDelay: 0.1 },
+        { color: 'rgba(255, 200, 50, ', speed: 0.6, startDelay: 0.15 },
+        { color: 'rgba(255, 100, 0, ', speed: 0.4, startDelay: 0.2 }
+      ]
       
-      this.ctx.globalAlpha = ringAlpha * alpha
-      const flameGradient = this.ctx.createRadialGradient(0, 0, 0, 0, 0, 50 * ringScale) // 减半
-      flameGradient.addColorStop(0, 'rgba(255, 100, 0, 0)')
-      flameGradient.addColorStop(0.3, 'rgba(255, 150, 0, 0.6)')
-      flameGradient.addColorStop(0.5, 'rgba(255, 200, 0, 0.8)')
-      flameGradient.addColorStop(0.7, 'rgba(255, 255, 100, 0.5)')
-      flameGradient.addColorStop(1, 'rgba(255, 255, 255, 0)')
-      
-      this.ctx.fillStyle = flameGradient
-      this.ctx.beginPath()
-      this.ctx.arc(0, 0, 50 * ringScale, 0, Math.PI * 2) // 减半
-      this.ctx.fill()
+      for (const layer of waveLayers) {
+        const layerProgress = Math.min(1, Math.max(0, (progress - layer.startDelay) / (1 - layer.startDelay)))
+        if (layerProgress <= 0) continue
+        
+        const waveRadius = 30 * scale * layer.speed * layerProgress
+        const waveAlpha = Math.max(0, 0.9 - layerProgress * 0.9)
+        
+        this.ctx.globalAlpha = waveAlpha * alpha
+        const waveGradient = this.ctx.createRadialGradient(0, 0, waveRadius * 0.7, 0, 0, waveRadius)
+        waveGradient.addColorStop(0, `${layer.color} 0)`)
+        waveGradient.addColorStop(0.5, `${layer.color} 0.6)`)
+        waveGradient.addColorStop(0.8, `${layer.color} 0.8)`)
+        waveGradient.addColorStop(1, `${layer.color} 0)`)
+        
+        this.ctx.fillStyle = waveGradient
+        this.ctx.beginPath()
+        this.ctx.arc(0, 0, waveRadius, 0, Math.PI * 2)
+        this.ctx.fill()
+      }
     }
     
-    // 3. 玉米碎片飞溅效果（金黄色不规则碎片）
+    // 3. 螺旋形火焰喷射
     {
-      const fragmentAlpha = Math.max(0, 1 - progress * 1.2)
-      this.ctx.globalAlpha = fragmentAlpha * alpha
+      const spiralAlpha = Math.max(0, 1 - progress * 1.5)
+      this.ctx.globalAlpha = spiralAlpha * alpha
       
-      const fragmentCount = 24
-      for (let i = 0; i < fragmentCount; i++) {
-        const angle = (i / fragmentCount) * Math.PI * 2 + Math.random() * 0.3
-        const distance = 10 + progress * 75 // 减半
-        const rotation = angle + progress * 10
+      const spiralArms = 6
+      const spiralTurns = 3
+      
+      for (let arm = 0; arm < spiralArms; arm++) {
+        const baseAngle = (arm / spiralArms) * Math.PI * 2 + Date.now() / 100
+        
+        this.ctx.beginPath()
+        this.ctx.strokeStyle = `rgba(255, ${150 + Math.random() * 50}, 0, ${0.6 + Math.random() * 0.4})`
+        this.ctx.lineWidth = 8 + Math.random() * 4
+        
+        const spiralSegments = 40
+        for (let i = 0; i < spiralSegments; i++) {
+          const t = i / spiralSegments
+          const radius = 20 + t * 100 * scale
+          const angle = baseAngle + t * spiralTurns * Math.PI * 2
+          
+          const x = Math.cos(angle) * radius
+          const y = Math.sin(angle) * radius
+          
+          if (i === 0) {
+            this.ctx.moveTo(x, y)
+          } else {
+            this.ctx.lineTo(x, y)
+          }
+        }
+        this.ctx.stroke()
+      }
+    }
+    
+    // 4. 大量飞溅粒子（80+个）
+    {
+      const particleAlpha = Math.max(0, 1 - progress * 1.2)
+      this.ctx.globalAlpha = particleAlpha * alpha
+      
+      const particleCount = 80
+      const time = Date.now() / 1000
+      
+      for (let i = 0; i < particleCount; i++) {
+        const angle = (i / particleCount) * Math.PI * 2 + Math.random() * 0.5 + time * 2
+        const distance = 15 + progress * 150 * (0.5 + Math.random() * 0.8)
+        const rotation = angle + progress * 15 + Math.random() * Math.PI
+        const size = 3 + Math.random() * 4
         
         const x = Math.cos(angle) * distance
         const y = Math.sin(angle) * distance
@@ -1073,86 +1136,183 @@ export class Renderer {
         this.ctx.translate(x, y)
         this.ctx.rotate(rotation)
         
-        // 绘制不规则碎片
-        this.ctx.fillStyle = `rgba(251, 191, 36, ${0.8 + Math.random() * 0.2})`
-        this.ctx.beginPath()
-        this.ctx.moveTo(-4, -1.5) // 减半
-        this.ctx.lineTo(2.5, -3)
-        this.ctx.lineTo(5, 1)
-        this.ctx.lineTo(1.5, 4)
-        this.ctx.lineTo(-3.5, 2.5)
-        this.ctx.lineTo(-5, -1)
-        this.ctx.closePath()
-        this.ctx.fill()
-        
-        // 添加阴影效果
-        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.3)'
-        this.ctx.beginPath()
-        this.ctx.arc(1, 1.5, 1, 0, Math.PI * 2) // 减半
-        this.ctx.fill()
+        // 不同类型的粒子
+        const particleType = i % 4
+        if (particleType === 0) {
+          // 玉米碎片
+          this.ctx.fillStyle = `rgba(251, 191, 36, ${0.8 + Math.random() * 0.2})`
+          this.ctx.beginPath()
+          this.ctx.moveTo(-size/2, -size/4)
+          this.ctx.lineTo(size/3, -size)
+          this.ctx.lineTo(size, size/4)
+          this.ctx.lineTo(size/4, size)
+          this.ctx.lineTo(-size/3, size/2)
+          this.ctx.lineTo(-size, -size/4)
+          this.ctx.closePath()
+          this.ctx.fill()
+        } else if (particleType === 1) {
+          // 火焰粒子
+          const flameGradient = this.ctx.createRadialGradient(0, 0, 0, 0, 0, size)
+          flameGradient.addColorStop(0, 'rgba(255, 255, 0, 0.9)')
+          flameGradient.addColorStop(0.5, 'rgba(255, 150, 0, 0.7)')
+          flameGradient.addColorStop(1, 'rgba(255, 50, 0, 0)')
+          this.ctx.fillStyle = flameGradient
+          this.ctx.beginPath()
+          this.ctx.arc(0, 0, size, 0, Math.PI * 2)
+          this.ctx.fill()
+        } else if (particleType === 2) {
+          // 爆炸碎片
+          this.ctx.fillStyle = `rgba(100, 50, 0, ${0.7 + Math.random() * 0.3})`
+          this.ctx.fillRect(-size/2, -size/2, size, size)
+        } else {
+          // 火星
+          this.ctx.fillStyle = `rgba(255, 200, 100, ${0.9 + Math.random() * 0.1})`
+          this.ctx.beginPath()
+          this.ctx.arc(0, 0, size * 0.5, 0, Math.PI * 2)
+          this.ctx.fill()
+          
+          // 火星光晕
+          this.ctx.fillStyle = 'rgba(255, 100, 0, 0.4)'
+          this.ctx.beginPath()
+          this.ctx.arc(0, 0, size, 0, Math.PI * 2)
+          this.ctx.fill()
+        }
         
         this.ctx.restore()
       }
     }
     
-    // 4. 烟雾扩散（深灰色到透明）
+    // 5. 强烈地面裂纹（放射状）
     {
-      const smokeScale = scale * 1.5
-      const smokeAlpha = Math.max(0, 0.3 - progress * 0.3)
+      const crackAlpha = Math.max(0, 0.8 - progress)
+      this.ctx.globalAlpha = crackAlpha * alpha
       
-      this.ctx.globalAlpha = smokeAlpha * alpha
-      const smokeGradient = this.ctx.createRadialGradient(0, 0, 25 * scale, 0, 0, 75 * smokeScale) // 减半
-      smokeGradient.addColorStop(0, 'rgba(0, 0, 0, 0)')
-      smokeGradient.addColorStop(0.5, 'rgba(50, 50, 50, 0.3)')
-      smokeGradient.addColorStop(0.8, 'rgba(30, 30, 30, 0.2)')
-      smokeGradient.addColorStop(1, 'rgba(0, 0, 0, 0)')
-      
-      this.ctx.fillStyle = smokeGradient
-      this.ctx.beginPath()
-      this.ctx.arc(0, 0, 75 * smokeScale, 0, Math.PI * 2) // 减半
-      this.ctx.fill()
+      const crackCount = 12
+      for (let i = 0; i < crackCount; i++) {
+        const angle = (i / crackCount) * Math.PI * 2
+        const crackLength = 40 + progress * 120 * (0.5 + Math.random() * 0.5)
+        
+        this.ctx.beginPath()
+        this.ctx.strokeStyle = 'rgba(30, 20, 10, 0.7)'
+        this.ctx.lineWidth = 3 + Math.random() * 2
+        
+        // 主裂纹
+        this.ctx.moveTo(0, 0)
+        let lastX = 0, lastY = 0
+        for (let j = 0; j < 5; j++) {
+          const t = (j + 1) / 5
+          const x = Math.cos(angle) * crackLength * t + (Math.random() - 0.5) * 10
+          const y = Math.sin(angle) * crackLength * t + (Math.random() - 0.5) * 10
+          this.ctx.lineTo(x, y)
+          lastX = x
+          lastY = y
+        }
+        this.ctx.stroke()
+        
+        // 分支裂纹
+        if (Math.random() > 0.5) {
+          const branchAngle = angle + (Math.random() - 0.5) * Math.PI * 0.5
+          const branchLength = crackLength * 0.4 * Math.random()
+          
+          this.ctx.beginPath()
+          this.ctx.strokeStyle = 'rgba(30, 20, 10, 0.5)'
+          this.ctx.lineWidth = 2
+          this.ctx.moveTo(lastX, lastY)
+          for (let j = 0; j < 3; j++) {
+            const t = (j + 1) / 3
+            const bx = lastX + Math.cos(branchAngle) * branchLength * t + (Math.random() - 0.5) * 5
+            const by = lastY + Math.sin(branchAngle) * branchLength * t + (Math.random() - 0.5) * 5
+            this.ctx.lineTo(bx, by)
+          }
+          this.ctx.stroke()
+        }
+      }
     }
     
-    // 5. 火花粒子（橙色小点）
+    // 6. 屏幕震动效果（通过偏移实现）
     {
-      const sparkAlpha = Math.max(0, 1 - progress * 2)
-      this.ctx.globalAlpha = sparkAlpha * alpha
+      const shakeIntensity = Math.max(0, 15 * (1 - progress * 3))
+      if (shakeIntensity > 0) {
+        const offsetX = (Math.random() - 0.5) * shakeIntensity
+        const offsetY = (Math.random() - 0.5) * shakeIntensity
+        this.ctx.translate(offsetX, offsetY)
+      }
+    }
+    
+    // 7. 持续余烬效果
+    {
+      const emberAlpha = Math.max(0, 1 - progress * 1.5)
+      this.ctx.globalAlpha = emberAlpha * alpha
       
-      const sparkCount = 40
-      for (let i = 0; i < sparkCount; i++) {
-        const angle = (i / sparkCount) * Math.PI * 2 + Math.random() * Math.PI
-        const distance = 15 + Math.random() * progress * 100 // 减半
-        const size = 1 + Math.random() * 2 // 减半
+      const emberCount = 15
+      const time = Date.now() / 1000
+      
+      for (let i = 0; i < emberCount; i++) {
+        const angle = (i / emberCount) * Math.PI * 2 + time * 0.5
+        const distance = 30 + Math.sin(time + i) * 10 + progress * 60
+        const emberSize = 4 + Math.random() * 4
         
         const x = Math.cos(angle) * distance
         const y = Math.sin(angle) * distance
         
-        // 绘制火花
-        this.ctx.fillStyle = 'rgba(255, 100, 0, 0.8)'
+        // 绘制余烬
+        this.ctx.fillStyle = `rgba(255, ${100 + Math.floor(Math.random() * 100)}, 0, ${0.6 + Math.random() * 0.4})`
         this.ctx.beginPath()
-        this.ctx.arc(x, y, size, 0, Math.PI * 2)
+        this.ctx.arc(x, y, emberSize, 0, Math.PI * 2)
         this.ctx.fill()
         
-        // 火花光晕
-        this.ctx.fillStyle = 'rgba(255, 200, 0, 0.3)'
+        // 余烬光晕
+        this.ctx.fillStyle = 'rgba(255, 150, 50, 0.3)'
         this.ctx.beginPath()
-        this.ctx.arc(x, y, size * 2, 0, Math.PI * 2)
+        this.ctx.arc(x, y, emberSize * 1.5, 0, Math.PI * 2)
         this.ctx.fill()
       }
     }
     
-    // 6. 冲击波环（金色光环，快速扩散）
+    // 8. 增强冲击波（3层）
     {
-      const shockwaveRadius = 25 + progress * 100 // 减半
-      const shockwaveAlpha = Math.max(0, 1 - progress * 3)
+      const shockwaveLayers = [
+        { speed: 1.0, color: 'rgba(255, 255, 255, ', delay: 0 },
+        { speed: 0.8, color: 'rgba(255, 215, 0, ', delay: 0.05 },
+        { speed: 0.6, color: 'rgba(255, 150, 0, ', delay: 0.1 }
+      ]
       
-      this.ctx.globalAlpha = shockwaveAlpha * 0.5
-      this.ctx.strokeStyle = 'rgba(255, 215, 0, 0.6)'
-      this.ctx.lineWidth = 4 * (1 - progress) // 减半
-      
-      this.ctx.beginPath()
-      this.ctx.arc(0, 0, shockwaveRadius, 0, Math.PI * 2)
-      this.ctx.stroke()
+      for (const layer of shockwaveLayers) {
+        const layerProgress = Math.min(1, Math.max(0, (progress - layer.delay) / (1 - layer.delay)))
+        if (layerProgress <= 0) continue
+        
+        const shockwaveRadius = 40 + progress * 150 * layer.speed
+        const shockwaveAlpha = Math.max(0, 1 - layerProgress * 0.8)
+        
+        this.ctx.globalAlpha = shockwaveAlpha * 0.7
+        this.ctx.strokeStyle = `${layer.color} ${0.6 + Math.random() * 0.4})`
+        this.ctx.lineWidth = 6 * (1 - layerProgress * 0.5)
+        
+        this.ctx.beginPath()
+        this.ctx.arc(0, 0, shockwaveRadius, 0, Math.PI * 2)
+        this.ctx.stroke()
+        
+        // 冲击波发光效果
+        this.ctx.strokeStyle = `${layer.color} 0.3)`
+        this.ctx.lineWidth = 12
+        this.ctx.stroke()
+      }
+    }
+    
+    // 9. 额外的爆炸文字
+    {
+      const textAlpha = Math.max(0, 0.9 - progress * 3)
+      if (textAlpha > 0) {
+        this.ctx.globalAlpha = textAlpha * alpha
+        this.ctx.font = 'bold 48px Arial'
+        this.ctx.textAlign = 'center'
+        this.ctx.textBaseline = 'middle'
+        this.ctx.fillStyle = '#ff6600'
+        this.ctx.strokeStyle = '#ffff00'
+        this.ctx.lineWidth = 3
+        this.ctx.strokeText('💥 BOOM!', 0, 0)
+        this.ctx.fillText('💥 BOOM!', 0, 0)
+      }
     }
     
     this.ctx.restore()

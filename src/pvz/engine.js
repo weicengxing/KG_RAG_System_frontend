@@ -1105,7 +1105,6 @@ export class GameEngine {
             if (nearestZombie) {
               // 发射闪电链
               this.lightningChain.castLightningChain(plant, nearestZombie)
-              this.showMessage('⚡ 雷霆怒瓜释放闪电链！', '#00ffff')
             }
           }
         }

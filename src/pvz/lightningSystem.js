@@ -1,11 +1,69 @@
 // 闪电链系统
 import { plantConfig } from './config.js'
 
+// 对象池 - 复用segments和jumps对象
+class ObjectPool {
+  constructor(createFn, initialSize = 10) {
+    this.createFn = createFn
+    this.pool = []
+    this.active = new Set()
+    
+    // 预创建对象
+    for (let i = 0; i < initialSize; i++) {
+      this.pool.push(this.createFn())
+    }
+  }
+  
+  get() {
+    // 从池中获取或创建新对象
+    let obj = this.pool.pop()
+    if (!obj) {
+      obj = this.createFn()
+    }
+    this.active.add(obj)
+    return obj
+  }
+  
+  release(obj) {
+    if (this.active.has(obj)) {
+      this.active.delete(obj)
+      this.pool.push(obj)
+    }
+  }
+  
+  clear() {
+    // 清空激活对象，全部回收到池中
+    this.active.forEach(obj => {
+      this.pool.push(obj)
+    })
+    this.active.clear()
+  }
+}
+
 // 闪电链类
 export class LightningChain {
   constructor(game) {
     this.game = game
     this.activeChains = [] // 当前活跃的闪电链
+    
+    // 初始化对象池
+    this.segmentPool = new ObjectPool(() => ({
+      startX: 0,
+      startY: 0,
+      endX: 0,
+      endY: 0,
+      segmentIndex: 0
+    }), 50)
+    
+    this.jumpPool = new ObjectPool(() => ({
+      zombie: null,
+      segments: [],
+      damage: 0,
+      segmentIndex: 0,
+      segmentProgress: 0,
+      isComplete: false,
+      appliedDamage: false
+    }), 20)
   }
 
   // 发射闪电链
@@ -31,7 +89,7 @@ export class LightningChain {
     this.processLightningJump(chain, targetZombie)
   }
 
-  // 处理闪电跳跃
+  // 处理闪电跳跃 - 使用对象池优化
   processLightningJump(chain, targetZombie) {
     const config = plantConfig.thunderMelon
 
@@ -49,16 +107,15 @@ export class LightningChain {
     // 生成折线闪电轨迹
     const segments = this.generateLightningPath(sourceX, sourceY, targetX, targetY)
 
-    // 记录此次跳跃
-    const jump = {
-      zombie: targetZombie,
-      segments: segments,
-      damage: chain.damage,
-      segmentIndex: 0,
-      segmentProgress: 0,
-      isComplete: false,
-      appliedDamage: false
-    }
+    // 从对象池获取jump
+    const jump = this.jumpPool.get()
+    jump.zombie = targetZombie
+    jump.segments = segments
+    jump.damage = chain.damage
+    jump.segmentIndex = 0
+    jump.segmentProgress = 0
+    jump.isComplete = false
+    jump.appliedDamage = false
 
     chain.jumps.push(jump)
 
@@ -93,11 +150,11 @@ export class LightningChain {
     }
   }
 
-  // 生成折线闪电路径
+  // 生成折线闪电路径 - 使用对象池优化
   generateLightningPath(startX, startY, endX, endY) {
     const segments = []
     const distance = Math.sqrt((endX - startX) ** 2 + (endY - startY) ** 2)
-    const segmentCount = Math.max(3, Math.floor(distance / 45)) // 每45像素一段，减少段数提升性能
+    const segmentCount = Math.max(3, Math.floor(distance / 50)) // 每50像素一段，进一步减少段数提升性能
     
     let currentX = startX
     let currentY = startY
@@ -115,13 +172,14 @@ export class LightningChain {
       let segmentEndX = targetX + offsetX
       let segmentEndY = targetY + offsetY
       
-      segments.push({
-        startX: currentX,
-        startY: currentY,
-        endX: segmentEndX,
-        endY: segmentEndY,
-        segmentIndex: i
-      })
+      // 从对象池获取segment
+      const segment = this.segmentPool.get()
+      segment.startX = currentX
+      segment.startY = currentY
+      segment.endX = segmentEndX
+      segment.endY = segmentEndY
+      segment.segmentIndex = i
+      segments.push(segment)
       
       currentX = segmentEndX
       currentY = segmentEndY
@@ -215,7 +273,7 @@ export class LightningChain {
     })
   }
 
-  // 更新所有闪电链
+  // 更新所有闪电链 - 使用对象池优化
   update(deltaTime) {
     for (let i = this.activeChains.length - 1; i >= 0; i--) {
       const chain = this.activeChains[i]
@@ -233,6 +291,19 @@ export class LightningChain {
       if (chain.isComplete) {
         const allComplete = chain.jumps.every(j => j.isComplete)
         if (allComplete) {
+          // 释放所有jump对象和segment对象
+          for (const jump of chain.jumps) {
+            // 释放所有segments
+            for (const segment of jump.segments) {
+              this.segmentPool.release(segment)
+            }
+            // 清空segments数组
+            jump.segments = []
+            // 释放jump对象
+            this.jumpPool.release(jump)
+          }
+          // 清空jumps数组
+          chain.jumps = []
           this.activeChains.splice(i, 1)
         }
         continue

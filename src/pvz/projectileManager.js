@@ -271,7 +271,6 @@ export class ProjectileManager {
                 // 子弹进入了树桩，增强它
                 this.enhanceProjectile(projectile)
                 projectile.enhancedByFireStump = true
-                this.engine.showMessage('🔥 火焰增强！', '#ff6b6b')
                 this.engine.playSound('hit')
                 
                 // 发射粒子效果
@@ -326,6 +325,29 @@ export class ProjectileManager {
     }
     
     this.projectiles.push(projectile)
+  }
+
+  // 发射机枪射手的子弹（一次发射4颗）
+  shootRepeater(plant) {
+    const config = plantConfig['repeater']
+    const row = Math.floor((plant.y + plant.height / 2) / gameConfig.cellHeight)
+    
+    // 发射4颗子弹，每颗之间有延迟
+    for (let i = 0; i < config.projectileCount; i++) {
+      setTimeout(() => {
+        const projectile = {
+          x: plant.x + plant.width,
+          y: plant.y + plant.height / 2,
+          type: 'pea', // 和豌豆射手一样的子弹类型
+          damage: config.damage, // 每颗子弹的伤害
+          speed: config.projectileSpeed, // 子弹速度
+          row: row,
+          enhancedByFireStump: false // 可以被树桩增强
+        }
+        
+        this.projectiles.push(projectile)
+      }, i * config.projectileDelay * 1000) // 转换为毫秒
+    }
   }
 
   // 发射西瓜（抛物线）

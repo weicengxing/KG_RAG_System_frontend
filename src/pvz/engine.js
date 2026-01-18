@@ -14,17 +14,40 @@ class Grid {
     this.cells = Array(rows).fill(null).map(() => Array(cols).fill(null))
   }
   
-  // 放置植物
-  placePlant(col, row, plant) {
-    if (col >= 0 && col < this.cols && row >= 0 && row < this.rows) {
-      this.cells[row][col] = plant
+  // 检查区域是否为空
+  isAreaEmpty(col, row, gridWidth = 1, gridHeight = 1) {
+    for (let r = row; r < row + gridHeight; r++) {
+      for (let c = col; c < col + gridWidth; c++) {
+        if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) {
+          return false // 超出边界
+        }
+        if (this.cells[r][c] !== null) {
+          return false // 格子已被占用
+        }
+      }
+    }
+    return true
+  }
+  
+  // 放置植物（支持多格子）
+  placePlant(col, row, plant, gridWidth = 1, gridHeight = 1) {
+    for (let r = row; r < row + gridHeight; r++) {
+      for (let c = col; c < col + gridWidth; c++) {
+        if (r >= 0 && r < this.rows && c >= 0 && c < this.cols) {
+          this.cells[r][c] = plant
+        }
+      }
     }
   }
   
-  // 移除植物
-  removePlant(col, row) {
-    if (col >= 0 && col < this.cols && row >= 0 && row < this.rows) {
-      this.cells[row][col] = null
+  // 移除植物（支持多格子）
+  removePlant(col, row, gridWidth = 1, gridHeight = 1) {
+    for (let r = row; r < row + gridHeight; r++) {
+      for (let c = col; c < col + gridWidth; c++) {
+        if (r >= 0 && r < this.rows && c >= 0 && c < this.cols) {
+          this.cells[r][c] = null
+        }
+      }
     }
   }
   
@@ -117,6 +140,9 @@ export class GameEngine {
     // 选择状态
     this.selectedPlant = null
     this.plantCooldowns = {}
+    
+    // 允许的植物列表（从植物选择页面传入）
+    this.allowedPlants = null
     
     // 铲除模式
     this.isShovelMode = false
@@ -225,7 +251,6 @@ export class GameEngine {
               zombie.x < lawnMower.x + lawnMower.width + lawnMower.triggerDistance) {
             // 触发小推车
             lawnMower.state = 'moving'
-            this.showMessage('🚗 小推车启动！', '#fbbf24')
             this.playSound('waveComplete')
             
             // 立即碾压当前僵尸
@@ -893,6 +918,20 @@ export class GameEngine {
             this.playSound('shoot')
           }
         }
+      } else if (plant.type === 'repeater') {
+        // 机枪射手：一次性发射4颗豌豆
+        plant.attackTimer += deltaTime
+        
+        if (plant.attackTimer >= config.attackInterval) {
+          const row = Math.floor((plant.y + plant.height / 2) / gameConfig.cellHeight)
+          const hasZombie = this.hasZombieInRow(row, plant.x)
+          
+          if (hasZombie) {
+            plant.attackTimer = 0
+            this.projectileManager.shootRepeater(plant)
+            this.playSound('shoot')
+          }
+        }
       } else if (plant.type === 'cherryBomb') {
         plant.explodeTimer = (plant.explodeTimer || 0) + deltaTime
         
@@ -933,6 +972,65 @@ export class GameEngine {
             plant.attackTimer = 0
             this.throwGoldenStaff(plant)
             this.playSound('shoot')
+          }
+        }
+      } else if (plant.type === 'potatoMine') {
+        // 土豆地雷逻辑
+        if (plant.isSleeping) {
+          // 沉睡期间，递减sleepTimer
+          plant.sleepTimer -= deltaTime
+          if (plant.sleepTimer <= 0) {
+            plant.isSleeping = false
+            plant.sleepTimer = 0
+            plant.isReady = true
+            this.showMessage('🥔 土豆地雷苏醒了！', '#22c55e')
+          }
+        } else if (plant.isReady) {
+          // 苏醒后，检测周围是否有僵尸
+          const row = plant.row
+          const nearestZombie = this.findNearestZombieInRow(row, plant.x)
+          
+          if (nearestZombie && nearestZombie.x - plant.x < config.triggerDistance) {
+            // 僵尸足够接近，触发爆炸
+            this.explodePotatoMine(plant)
+            this.removePlant(plant)
+          }
+        }
+      } else if (plant.type === 'squash') {
+        // 倭瓜逻辑
+        if (!plant.isJumping) {
+          // 检测同一行是否有僵尸在触发距离内
+          const row = Math.floor((plant.y + plant.height / 2) / gameConfig.cellHeight)
+          const nearestZombie = this.findNearestZombieInRow(row, plant.x)
+          
+          if (nearestZombie && nearestZombie.x - plant.x < config.triggerDistance) {
+            // 僵尸足够接近，触发跳跃攻击
+            plant.isJumping = true
+            plant.jumpTimer = 0
+            plant.originalX = plant.x  // 记录起始x坐标
+            plant.originalY = plant.y  // 记录起始y坐标
+            plant.targetX = nearestZombie.x  // 目标x坐标（僵尸位置）
+            plant.targetZombie = nearestZombie
+            this.showMessage('🎃 倭瓜跳起来了！', '#ff6b6b')
+          }
+        } else {
+          // 跳跃动画进行中
+          plant.jumpTimer += deltaTime
+          
+          // 计算跳跃进度（0到1）
+          const jumpProgress = plant.jumpTimer / config.jumpDuration
+          
+          // x坐标：从原位置线性移动到僵尸位置
+          plant.x = plant.originalX + (plant.targetX - plant.originalX) * jumpProgress
+          
+          // y坐标：使用正弦波模拟跳跃轨迹
+          const maxJumpHeight = 80  // 最大跳跃高度
+          plant.y = plant.originalY - Math.sin(jumpProgress * Math.PI) * maxJumpHeight
+          
+          // 跳跃完成后造成伤害并移除
+          if (plant.jumpTimer >= config.jumpDuration) {
+            this.squashAttack(plant)
+            this.removePlant(plant)
           }
         }
       }
@@ -1097,6 +1195,78 @@ export class GameEngine {
     return false
   }
   
+  // 查找同一行中最近的僵尸（用于倭瓜）
+  findNearestZombieInRow(row, plantX) {
+    let nearestZombie = null
+    let minDistance = Infinity
+    
+    for (const zombie of this.zombies) {
+      const zombieRow = Math.floor((zombie.y + zombie.height / 2) / gameConfig.cellHeight)
+      
+      // 检查是否在同一行
+      if (zombieRow === row) {
+        // 计算僵尸与植物的距离
+        const distance = zombie.x - plantX
+        
+        // 找到最近的且在植物前方的僵尸
+        if (distance > 0 && distance < minDistance) {
+          minDistance = distance
+          nearestZombie = zombie
+        }
+      }
+    }
+    
+    return nearestZombie
+  }
+  
+  // 倭瓜攻击
+  squashAttack(plant) {
+    const config = plantConfig.squash
+    const centerX = plant.x + plant.width / 2
+    const centerY = plant.y + plant.height / 2
+    
+    // 对目标僵尸造成伤害
+    if (plant.targetZombie) {
+      const zombie = plant.targetZombie
+      
+      // 造成伤害
+      if (zombie.shieldHp > 0) {
+        zombie.shieldHp -= config.damage
+        if (zombie.shieldHp < 0) {
+          zombie.hp += zombie.shieldHp
+          zombie.shieldHp = 0
+        }
+      } else {
+        zombie.hp -= config.damage
+      }
+      
+      // 检查僵尸是否死亡
+      if (zombie.hp <= 0) {
+        const index = this.zombies.indexOf(zombie)
+        if (index > -1) {
+          this.zombies.splice(index, 1)
+          this.score += 10
+          this.zombiesKilled++
+          this.playSound('zombieDeath')
+          this.addDeathAnimation(zombie.x, zombie.y)
+        }
+      } else {
+        this.playSound('hit')
+      }
+    }
+    
+    // 添加压击动画
+    this.animations.push({
+      type: 'squashHit',
+      x: centerX,
+      y: centerY,
+      time: 0,
+      duration: 0.5
+    })
+    
+    this.playSound('explode')
+  }
+  
   // 查找目标植物（旧方法，保留以便兼容）
   findTargetPlant(zombieX, row) {
     for (const plant of this.plants) {
@@ -1232,13 +1402,19 @@ export class GameEngine {
     const config = plantConfig[plantType]
     const pixelPos = this.grid.gridToPixel(col, row)
     
+    // 获取植物的格子占用大小
+    const gridWidth = config.gridWidth || 1
+    const gridHeight = config.gridHeight || 1
+    
     const plant = {
       type: plantType,
       col: col,
       row: row,
+      gridWidth: gridWidth,    // 记录占用的格子宽度
+      gridHeight: gridHeight,  // 记录占用的格子高度
       x: pixelPos.x,
       y: pixelPos.y,
-      width: config.width,
+      width: config.width * gridWidth,  // 宽度 = 单格宽度 * 格子数
       height: config.height,
       hp: config.hp,
       maxHp: config.hp,
@@ -1247,11 +1423,21 @@ export class GameEngine {
       explodeTimer: 0,
       // 玉米加农炮沉睡相关字段
       isSleeping: false,
-      sleepTimer: 0
+      sleepTimer: 0,
+      // 土豆地雷相关字段
+      isReady: false
+    }
+    
+    // 如果是土豆地雷，设置沉睡状态
+    if (plantType === 'potatoMine') {
+      plant.isSleeping = true
+      plant.sleepTimer = plantConfig.potatoMine.sleepDuration
+      plant.isReady = false
     }
     
     this.plants.push(plant)
-    this.grid.placePlant(col, row, plant)
+    // 使用多格子放置方法
+    this.grid.placePlant(col, row, plant, gridWidth, gridHeight)
     
     this.sunEnergy -= config.cost
     this.plantCooldowns[plantType] = config.cooldown
@@ -1297,7 +1483,6 @@ export class GameEngine {
     }
     
     this.playSound('explode')
-    this.showMessage('💥 樱桃炸弹爆炸！', '#ff6b6b')
     
     this.animations.push({
       type: 'explode',
@@ -1347,7 +1532,6 @@ export class GameEngine {
     }
     
     this.playSound('explode')
-    this.showMessage('🔥 火爆辣椒 explodes！整行被灼烧！', '#ff4500')
     
     // 添加整行火焰爆炸动画（延长到2秒）
     this.animations.push({
@@ -1356,7 +1540,61 @@ export class GameEngine {
       y: centerY,
       row: row,
       time: 0,
-      duration: 2.0
+      duration: 1.3
+    })
+  }
+  
+  // 土豆地雷爆炸
+  explodePotatoMine(potatoMine) {
+    const config = plantConfig.potatoMine
+    const centerX = potatoMine.x + potatoMine.width / 2
+    const centerY = potatoMine.y + potatoMine.height / 2
+    const explodeRadius = 100  // 爆炸半径（像素）
+    
+    // 对爆炸范围内的所有僵尸造成伤害
+    for (let i = this.zombies.length - 1; i >= 0; i--) {
+      const zombie = this.zombies[i]
+      const zombieCenterX = zombie.x + zombie.width / 2
+      const zombieCenterY = zombie.y + zombie.height / 2
+      
+      const distance = Math.sqrt(
+        (zombieCenterX - centerX) ** 2 + (zombieCenterY - centerY) ** 2
+      )
+      
+      if (distance <= explodeRadius) {
+        // 造成伤害
+        if (zombie.shieldHp > 0) {
+          zombie.shieldHp -= config.damage
+          if (zombie.shieldHp < 0) {
+            zombie.hp += zombie.shieldHp
+            zombie.shieldHp = 0
+          }
+        } else {
+          zombie.hp -= config.damage
+        }
+        
+        // 检查僵尸是否死亡
+        if (zombie.hp <= 0) {
+          this.zombies.splice(i, 1)
+          this.score += 10
+          this.zombiesKilled++
+          this.playSound('zombieDeath')
+          this.addDeathAnimation(zombie.x, zombie.y)
+        } else {
+          this.playSound('hit')
+        }
+      }
+    }
+    
+    this.playSound('explode')
+    
+    // 添加爆炸动画
+    this.animations.push({
+      type: 'potatoMineExplode',
+      x: centerX,
+      y: centerY,
+      time: 0,
+      duration: 0.5
     })
   }
   
@@ -1365,7 +1603,10 @@ export class GameEngine {
     const index = this.plants.indexOf(plant)
     if (index > -1) {
       this.plants.splice(index, 1)
-      this.grid.removePlant(plant.col, plant.row)
+      // 使用多格子移除方法
+      const gridWidth = plant.gridWidth || 1
+      const gridHeight = plant.gridHeight || 1
+      this.grid.removePlant(plant.col, plant.row, gridWidth, gridHeight)
     }
   }
   
@@ -1412,10 +1653,21 @@ export class GameEngine {
     })
   }
   
+  // 设置自定义植物列表
+  setCustomPlants(plants) {
+    // 将植物列表转换为植物ID集合，便于快速查找
+    this.allowedPlants = plants.map(plant => plant.id)
+  }
+  
   // 选择植物
   selectPlant(plantId) {
     const remainingCooldown = this.plantCooldowns[plantId]
     if (remainingCooldown > 0) {
+      return false
+    }
+    
+    // 如果设置了允许的植物列表，检查植物是否在其中
+    if (this.allowedPlants && !this.allowedPlants.includes(plantId)) {
       return false
     }
     
@@ -1541,8 +1793,5 @@ export class GameEngine {
       duration: 0.9,
       isCenter: true
     })
-    
-    // 显示消息
-    this.showMessage('💥 玉米加农炮爆炸！', '#ff6b6b')
   }
 }

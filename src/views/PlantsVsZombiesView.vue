@@ -15,7 +15,7 @@
         <button @click="toggleMute" class="control-btn">{{ isMuted ? '🔇' : '🔊' }}</button>
         <button @click="showAchievements = true" class="control-btn">🏆 成就</button>
         <button @click="showStats = true" class="control-btn">📊 统计</button>
-        <button @click="startGame" class="start-btn">{{ isPlaying ? '重新开始' : '开始游戏' }}</button>
+        <button @click="goToPlantSelection" class="start-btn">{{ isPlaying ? '重新开始' : '开始游戏' }}</button>
       </div>
     </div>
 
@@ -89,7 +89,7 @@
       <p>3. 向日葵可以生产阳光，豌豆射手可以攻击僵尸。</p>
       <p>4. 点击屏幕上的阳光来收集，用阳光购买更多植物。</p>
       <p>5. 保护你的家园不让僵尸入侵，完成所有波次即可获胜！</p>
-      <p>6. 新功能：波次系统、成就系统、游戏存档、音效控制、拖拽种植</p>
+      <p>6. 新功能：波次系统、成就系统、游戏存档、音效控制、拖拽种植、自定义植物选择</p>
     </div>
     
     <!-- 成就弹窗 -->
@@ -136,26 +136,17 @@
       </div>
     </div>
 
-    <!-- Toast 提示消息 -->
-    <div class="toast-container">
-      <transition-group name="toast">
-        <div
-          v-for="toast in toasts"
-          :key="toast.id"
-          :class="['toast', `toast-${toast.type}`]"
-        >
-          <span class="toast-icon">{{ toast.icon }}</span>
-          <span class="toast-message">{{ toast.message }}</span>
-        </div>
-      </transition-group>
-    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { GameEngine } from '../pvz/engine.js'
 import { plantConfig, gameConfig } from '../pvz/config.js'
+
+const router = useRouter()
+const route = useRoute()
 
 const gameCanvas = ref(null)
 const sunEnergy = ref(10000)
@@ -176,41 +167,6 @@ const isShovelMode = ref(false)
 const showAchievements = ref(false)
 const showStats = ref(false)
 
-// Toast 提示系统
-const toasts = ref([])
-let toastId = 0
-
-// 显示 Toast 提示
-const showToast = (message, type = 'info') => {
-  const icons = {
-    success: '✅',
-    error: '❌',
-    warning: '⚠️',
-    info: 'ℹ️'
-  }
-
-  const id = toastId++
-  toasts.value.push({
-    id,
-    message,
-    type,
-    icon: icons[type]
-  })
-
-  // 3秒后自动移除
-  setTimeout(() => {
-    removeToast(id)
-  }, 3000)
-}
-
-// 移除 Toast 提示
-const removeToast = (id) => {
-  const index = toasts.value.findIndex(toast => toast.id === id)
-  if (index > -1) {
-    toasts.value.splice(index, 1)
-  }
-}
-
 // 成就和统计
 const achievements = ref({})
 const stats = ref({
@@ -226,6 +182,7 @@ const updateInterval = ref(null)
 const selectedPlants = ref([
   { id: 'sunflower', ...plantConfig.sunflower },
   { id: 'peashooter', ...plantConfig.peashooter },
+  { id: 'repeater', ...plantConfig.repeater },
   { id: 'snowPea', ...plantConfig.snowPea },
   { id: 'nutWall', ...plantConfig.nutWall },
   { id: 'cherryBomb', ...plantConfig.cherryBomb },
@@ -234,7 +191,9 @@ const selectedPlants = ref([
   { id: 'kiwi', ...plantConfig.kiwi },
   { id: 'cannon', ...plantConfig.cannon },
   { id: 'fireStump', ...plantConfig.fireStump },
-  { id: 'jalapeno', ...plantConfig.jalapeno }
+  { id: 'jalapeno', ...plantConfig.jalapeno },
+  { id: 'squash', ...plantConfig.squash },
+  { id: 'potatoMine', ...plantConfig.potatoMine }
 ])
 
 // 暂停/继续
@@ -321,10 +280,8 @@ const toggleShovelMode = () => {
     selectedPlantId.value = null
     gameEngine.value.selectedPlant = null
     gameEngine.value.isShovelMode = true
-    gameEngine.value.showMessage('铲除模式已开启，点击植物进行铲除', '#fbbf24')
   } else {
     gameEngine.value.isShovelMode = false
-    gameEngine.value.showMessage('铲除模式已关闭', '#22c55e')
   }
 }
 
@@ -336,13 +293,11 @@ const selectPlant = (plantId) => {
   
   // 检查阳光
   if (sunEnergy.value < config.cost) {
-    showToast(`阳光不足！需要 ${config.cost} 阳光，当前只有 ${sunEnergy.value} 阳光`, 'warning')
     return
   }
   
   // 检查冷却
   if (plantCooldowns.value[plantId] > 0) {
-    showToast(`${config.name} 还在冷却中，还需 ${plantCooldowns.value[plantId].toFixed(1)} 秒`, 'warning')
     return
   }
   
@@ -383,6 +338,13 @@ const refreshStats = async () => {
   }
 }
 
+// 跳转到植物选择页面
+const goToPlantSelection = () => {
+  router.push({
+    name: 'PlantSelection'
+  })
+}
+
 // 开始游戏
 const startGame = () => {
   if (!gameCanvas.value) return
@@ -390,6 +352,16 @@ const startGame = () => {
   // 如果游戏已开始，先停止
   if (gameEngine.value) {
     gameEngine.value.stop()
+  }
+  
+  // 检查路由参数中是否有植物列表
+  let plantsToUse = selectedPlants.value
+  if (route.query.plants) {
+    const plantIds = route.query.plants.split(',')
+    plantsToUse = plantIds.map(id => ({
+      id,
+      ...plantConfig[id]
+    }))
   }
   
   // 初始化画布尺寸
@@ -404,6 +376,11 @@ const startGame = () => {
     canvasWidth,
     canvasHeight
   )
+  
+  // 设置自定义植物列表
+  if (route.query.plants) {
+    gameEngine.value.setCustomPlants(plantsToUse)
+  }
   
   // 启动游戏
   gameEngine.value.start()
@@ -433,6 +410,20 @@ const initGame = () => {
     const canvasHeight = gameConfig.gridRows * gameConfig.cellHeight
     gameCanvas.value.width = canvasWidth
     gameCanvas.value.height = canvasHeight
+  }
+  
+  // 检查路由参数中是否有植物列表
+  if (route.query.plants) {
+    const plantIds = route.query.plants.split(',')
+    selectedPlants.value = plantIds.map(id => ({
+      id,
+      ...plantConfig[id]
+    }))
+    
+    // 自动开始游戏
+    setTimeout(() => {
+      startGame()
+    }, 100)
   }
 }
 
@@ -864,94 +855,6 @@ onUnmounted(() => {
 
 .auto-collect-active {
   background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%) !important;
-}
-
-/* Toast 提示样式 */
-.toast-container {
-  position: fixed;
-  top: 80px;
-  right: 20px;
-  z-index: 9999;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.toast {
-  padding: 16px 20px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 300px;
-  max-width: 400px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-  animation: slideIn 0.3s ease-out;
-  backdrop-filter: blur(10px);
-}
-
-.toast-success {
-  background: rgba(34, 197, 94, 0.95);
-  border: 2px solid #22c55e;
-}
-
-.toast-error {
-  background: rgba(239, 68, 68, 0.95);
-  border: 2px solid #ef4444;
-}
-
-.toast-warning {
-  background: rgba(251, 191, 36, 0.95);
-  border: 2px solid #fbbf24;
-}
-
-.toast-info {
-  background: rgba(99, 102, 241, 0.95);
-  border: 2px solid #6366f1;
-}
-
-.toast-icon {
-  font-size: 1.5rem;
-  flex-shrink: 0;
-}
-
-.toast-message {
-  color: white;
-  font-weight: 600;
-  font-size: 0.95rem;
-  line-height: 1.4;
-  flex: 1;
-}
-
-/* Toast 动画 */
-.toast-enter-active {
-  animation: slideIn 0.3s ease-out;
-}
-
-.toast-leave-active {
-  animation: slideOut 0.3s ease-in;
-}
-
-@keyframes slideIn {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-@keyframes slideOut {
-  from {
-    transform: translateX(0);
-    opacity: 1;
-  }
-  to {
-    transform: translateX(100%);
-    opacity: 0;
-  }
 }
 
 /* 铲子按钮样式 */

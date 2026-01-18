@@ -82,6 +82,14 @@ export class Renderer {
           bgColor = '#ff4500'
           borderColor = '#dc2626'
           break
+        case 'squash':
+          bgColor = '#f97316'
+          borderColor = '#ea580c'
+          break
+        case 'potatoMine':
+          bgColor = '#eab308'
+          borderColor = '#ca8a04'
+          break
         default:
           bgColor = '#4ade80'
           borderColor = '#22c55e'
@@ -95,6 +103,30 @@ export class Renderer {
       this.ctx.strokeStyle = borderColor
       this.ctx.lineWidth = 2
       this.ctx.strokeRect(plant.x, plant.y, plant.width, plant.height)
+      
+      // 如果是多格子植物，绘制格子分割线（辅助视觉）
+      if ((plant.gridWidth > 1 || plant.gridHeight > 1) && plant.type !== 'cannon') {
+        this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)'
+        this.ctx.lineWidth = 1
+        
+        // 绘制垂直分割线
+        for (let i = 1; i < plant.gridWidth; i++) {
+          const x = plant.x + i * (plant.width / plant.gridWidth)
+          this.ctx.beginPath()
+          this.ctx.moveTo(x, plant.y)
+          this.ctx.lineTo(x, plant.y + plant.height)
+          this.ctx.stroke()
+        }
+        
+        // 绘制水平分割线
+        for (let i = 1; i < plant.gridHeight; i++) {
+          const y = plant.y + i * (plant.height / plant.gridHeight)
+          this.ctx.beginPath()
+          this.ctx.moveTo(plant.x, y)
+          this.ctx.lineTo(plant.x + plant.width, y)
+          this.ctx.stroke()
+        }
+      }
       
       // 如果是玉米加农炮且在沉睡状态，添加视觉效果
       if (plant.type === 'cannon' && plant.isSleeping) {
@@ -111,6 +143,46 @@ export class Renderer {
         
         // 恢复透明度
         this.ctx.globalAlpha = 1
+      }
+      
+      // 如果是土豆地雷且在沉睡状态，添加视觉效果
+      if (plant.type === 'potatoMine' && plant.isSleeping) {
+        this.ctx.globalAlpha = 0.6 // 半透明效果
+        
+        // 绘制沉睡 Zzz 动画
+        const sleepTime = Date.now() / 1000
+        const zOffset = Math.sin(sleepTime * 2) * 5
+        this.ctx.font = '24px Arial'
+        this.ctx.fillStyle = '#ffffff'
+        this.ctx.fillText('Z', plant.x + plant.width / 2 - 15, plant.y - 10 + zOffset)
+        this.ctx.fillText('z', plant.x + plant.width / 2, plant.y - 20 + zOffset)
+        this.ctx.fillText('z', plant.x + plant.width / 2 + 15, plant.y - 10 + zOffset)
+        
+        // 显示沉睡倒计时
+        this.ctx.font = '14px Arial'
+        this.ctx.fillStyle = '#ffffff'
+        this.ctx.fillText(`沉睡中 ${Math.ceil(plant.sleepTimer)}s`, plant.x + plant.width / 2, plant.y + plant.height + 20)
+        
+        // 恢复透明度
+        this.ctx.globalAlpha = 1
+      }
+      
+      // 如果是土豆地雷且已苏醒（isReady=true），添加闪烁效果提示
+      if (plant.type === 'potatoMine' && plant.isReady) {
+        const blinkAlpha = 0.6 + Math.sin(Date.now() / 200) * 0.4
+        
+        this.ctx.save()
+        this.ctx.fillStyle = `rgba(251, 191, 36, ${blinkAlpha})`
+        this.ctx.strokeStyle = `rgba(251, 191, 36, ${blinkAlpha})`
+        this.ctx.lineWidth = 3
+        this.ctx.strokeRect(plant.x - 2, plant.y - 2, plant.width + 4, plant.height + 4)
+        
+        // 显示"准备就绪"
+        this.ctx.font = '14px Arial'
+        this.ctx.fillStyle = `rgba(251, 191, 36, ${blinkAlpha})`
+        this.ctx.textAlign = 'center'
+        this.ctx.fillText('准备就绪!', plant.x + plant.width / 2, plant.y + plant.height + 20)
+        this.ctx.restore()
       }
       
       // 绘制emoji
@@ -720,8 +792,66 @@ export class Renderer {
         case 'jalapenoExplode':
           this.drawJalapenoExplodeAnimation(anim, progress)
           break
+        case 'squashHit':
+          this.drawSquashHitAnimation(anim, progress)
+          break
+        case 'potatoMineExplode':
+          this.drawPotatoMineExplodeAnimation(anim, progress)
+          break
       }
     }
+  }
+  
+  // 土豆地雷爆炸动画
+  drawPotatoMineExplodeAnimation(anim, progress) {
+    const alpha = 1 - progress
+    const scale = 0.5 + progress * 3
+    
+    this.ctx.save()
+    this.ctx.globalAlpha = alpha
+    this.ctx.translate(anim.x, anim.y)
+    this.ctx.scale(scale, scale)
+    
+    // 绘制爆炸圆圈
+    const gradient = this.ctx.createRadialGradient(0, 0, 0, 0, 0, 60)
+    gradient.addColorStop(0, 'rgba(251, 191, 36, 0.8)')  // 金黄色中心
+    gradient.addColorStop(0.5, 'rgba(245, 158, 11, 0.6)')  // 金橙色
+    gradient.addColorStop(1, 'rgba(202, 138, 4, 0)')  // 渐变到透明
+    
+    this.ctx.fillStyle = gradient
+    this.ctx.beginPath()
+    this.ctx.arc(0, 0, 60, 0, Math.PI * 2)
+    this.ctx.fill()
+    
+    // 绘制爆炸文字
+    this.ctx.font = 'bold 36px Arial'
+    this.ctx.textAlign = 'center'
+    this.ctx.textBaseline = 'middle'
+    this.ctx.fillStyle = '#fbbf24'
+    this.ctx.fillText('💥', 0, 0)
+    
+    // 绘制冲击波
+    this.ctx.strokeStyle = '#fbbf24'
+    this.ctx.lineWidth = 3 * (1 - progress)
+    this.ctx.beginPath()
+    this.ctx.arc(0, 0, 40 * progress, 0, Math.PI * 2)
+    this.ctx.stroke()
+    
+    // 绘制粒子效果
+    const particleCount = 8
+    for (let i = 0; i < particleCount; i++) {
+      const angle = (i / particleCount) * Math.PI * 2
+      const distance = 30 + progress * 50
+      const x = Math.cos(angle) * distance
+      const y = Math.sin(angle) * distance
+      
+      this.ctx.fillStyle = '#fbbf24'
+      this.ctx.beginPath()
+      this.ctx.arc(x, y, 6, 0, Math.PI * 2)
+      this.ctx.fill()
+    }
+    
+    this.ctx.restore()
   }
   // 绘制金箍棒
   drawWeaponStaffs(staffs) {
@@ -1008,6 +1138,45 @@ export class Renderer {
       // 恢复之前的状态
       this.ctx.restore()
     }
+  }
+  
+  // 倭瓜压击动画
+  drawSquashHitAnimation(anim, progress) {
+    const alpha = 1 - progress
+    const scale = 1 + progress * 0.5
+    
+    this.ctx.save()
+    this.ctx.globalAlpha = alpha
+    this.ctx.translate(anim.x, anim.y)
+    this.ctx.scale(scale, scale)
+    
+    // 绘制倭瓜图标
+    this.ctx.font = '48px Arial'
+    this.ctx.textAlign = 'center'
+    this.ctx.textBaseline = 'middle'
+    this.ctx.fillText('🎃', 0, 0)
+    
+    // 绘制冲击波
+    this.ctx.strokeStyle = '#f97316'
+    this.ctx.lineWidth = 3
+    this.ctx.beginPath()
+    this.ctx.arc(0, 0, 30 * progress, 0, Math.PI * 2)
+    this.ctx.stroke()
+    
+    // 绘制粒子效果
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2
+      const distance = 40 + progress * 30
+      const x = Math.cos(angle) * distance
+      const y = Math.sin(angle) * distance
+      
+      this.ctx.fillStyle = '#fbbf24'
+      this.ctx.beginPath()
+      this.ctx.arc(x, y, 5, 0, Math.PI * 2)
+      this.ctx.fill()
+    }
+    
+    this.ctx.restore()
   }
   
   // 玉米加农炮爆炸动画（强烈破坏效果）

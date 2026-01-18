@@ -121,7 +121,9 @@ export const plantConfig = {
     projectileSpeed: 15, // 炮弹速度
     cooldown: 40,        // 很长的冷却时间
     sleepDuration: 20,   // 发射后沉睡时间（秒）
-    width: 104,
+    gridWidth: 2,        // 占用2个格子宽度
+    gridHeight: 1,       // 占用1个格子高度
+    width: 104,          // 单个格子宽度（会在engine中动态设置为2倍）
     height: 130
   },
   fireStump: {
@@ -149,6 +151,47 @@ export const plantConfig = {
     explodeDelay: 0.3,    // 爆炸延迟（秒）
     damage: 2000,         // 爆炸伤害
     cooldown: 15,         // 冷却时间（秒）
+    width: 104,
+    height: 130
+  },
+  squash: {
+    id: 'squash',
+    name: '倭瓜',
+    icon: '🎃',
+    cost: 50,
+    hp: 1000,
+    damage: 500,          // 压击伤害
+    triggerDistance: 120, // 触发距离（像素）
+    jumpDuration: 0.3,    // 跳跃持续时间（秒）
+    cooldown: 20,         // 冷却时间（秒）
+    width: 104,
+    height: 130
+  },
+  potatoMine: {
+    id: 'potatoMine',
+    name: '土豆地雷',
+    icon: '🌰',
+    cost: 25,             // 低消耗
+    hp: 300,              // 低生命值
+    damage: 1000,         // 爆炸伤害
+    sleepDuration: 6,     // 沉睡时间（秒）
+    triggerDistance: 80,  // 触发距离（像素）
+    cooldown: 15,         // 冷却时间（秒）
+    width: 104,
+    height: 130
+  },
+  repeater: {
+    id: 'repeater',
+    name: '机枪射手',
+    icon: '🔫',
+    cost: 250,           // 比豌豆射手贵2.5倍（因为发射4颗子弹）
+    hp: 300,
+    attackInterval: 1.5, // 攻击间隔和豌豆射手一样
+    damage: 30,          // 每颗子弹伤害和豌豆射手一样
+    projectileSpeed: 10, // 子弹速度和豌豆射手一样
+    projectileCount: 4,  // 发射4颗子弹
+    projectileDelay: 0.1, // 每颗子弹之间的间隔（秒）
+    cooldown: 7,         // 冷却时间
     width: 104,
     height: 130
   }

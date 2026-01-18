@@ -36,6 +36,11 @@ export class InputHandler {
   placePlantAtPosition(x, y, plantId) {
     const { col, row } = this.engine.grid.pixelToGrid(x, y)
     
+    // 获取植物配置
+    const config = plantConfig[plantId]
+    const gridWidth = config.gridWidth || 1
+    const gridHeight = config.gridHeight || 1
+    
     // 检查是否在网格范围内
     if (col < 0 || col >= gameConfig.gridCols || 
         row < 0 || row >= gameConfig.gridRows) {
@@ -43,20 +48,33 @@ export class InputHandler {
       return
     }
     
-    // 检查是否在小推车所在的格子
-    if (col === gameConfig.lawnMowers.col) {
-      this.engine.showMessage('这里是小推车位置，不能种植植物', '#f87171')
+    // 检查是否超出右边界（针对多格子植物）
+    if (col + gridWidth > gameConfig.gridCols) {
+      this.engine.showMessage('空间不足,无法种植', '#f87171')
       return
     }
     
-    // 检查格子是否为空
-    if (!this.engine.grid.isEmpty(col, row)) {
+    // 检查是否在下边界（针对多格子植物）
+    if (row + gridHeight > gameConfig.gridRows) {
+      this.engine.showMessage('空间不足,无法种植', '#f87171')
+      return
+    }
+    
+    // 检查是否在小推车所在的格子或其占用的格子
+    for (let c = col; c < col + gridWidth; c++) {
+      if (c === gameConfig.lawnMowers.col) {
+        this.engine.showMessage('这里是小推车位置,不能种植植物', '#f87171')
+        return
+      }
+    }
+    
+    // 检查格子是否为空（针对多格子植物）
+    if (!this.engine.grid.isAreaEmpty(col, row, gridWidth, gridHeight)) {
       this.engine.showMessage('格子已被占用', '#f87171')
       return
     }
     
     // 检查阳光是否足够
-    const config = plantConfig[plantId]
     if (this.engine.sunEnergy < config.cost) {
       this.engine.showMessage('阳光不足', '#f87171')
       return
@@ -135,7 +153,7 @@ export class InputHandler {
         row >= 0 && row < gameConfig.gridRows) {
       const plant = this.engine.grid.getPlant(col, row)
       
-      // 如果点击的是玉米加农炮
+      // 如果点击的是玉米加农炮（支持点击多格子植物的任何部分）
       if (plant && plant.type === 'cannon') {
         // 检查是否处于沉睡状态
         if (plant.isSleeping) {
@@ -190,21 +208,27 @@ export class InputHandler {
       return
     }
     
-    // 检查是否在小推车所在的格子
-    if (col === gameConfig.lawnMowers.col) {
-      this.engine.showMessage('这里是小推车位置，不能种植植物', '#f87171')
-      return
+    // 获取选中的植物配置
+    const config = plantConfig[this.engine.selectedPlant]
+    const gridWidth = config.gridWidth || 1
+    const gridHeight = config.gridHeight || 1
+    
+    // 检查是否在小推车所在的格子（针对多格子植物）
+    for (let c = col; c < col + gridWidth; c++) {
+      if (c === gameConfig.lawnMowers.col) {
+        this.engine.showMessage('这里是小推车位置，不能种植植物', '#f87171')
+        return
+      }
     }
     
-    // 检查格子是否为空
-    if (!this.engine.grid.isEmpty(col, row)) {
+    // 检查格子是否为空（针对多格子植物）
+    if (!this.engine.grid.isAreaEmpty(col, row, gridWidth, gridHeight)) {
       // 格子已被占用，显示红色提示
       this.engine.showMessage('格子已被占用', '#f87171')
       return
     }
     
     // 检查阳光是否足够
-    const config = plantConfig[this.engine.selectedPlant]
     if (this.engine.sunEnergy < config.cost) {
       // 阳光不足，显示红色提示
       this.engine.showMessage('阳光不足', '#f87171')

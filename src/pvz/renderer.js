@@ -62,6 +62,18 @@ export class Renderer {
           bgColor = '#ef4444'
           borderColor = '#dc2626'
           break
+        case 'watermelon':
+          bgColor = '#16a34a'
+          borderColor = '#15803d'
+          break
+        case 'iceWatermelon':
+          bgColor = '#60a5fa'
+          borderColor = '#2563eb'
+          break
+        case 'kiwi':
+          bgColor = '#a3e635'
+          borderColor = '#84cc16'
+          break
         default:
           bgColor = '#4ade80'
           borderColor = '#22c55e'
@@ -167,26 +179,71 @@ export class Renderer {
   // 绘制子弹
   drawProjectiles(projectiles) {
     for (const projectile of projectiles) {
-      // 根据子弹类型选择颜色
-      let bgColor
-      let borderColor
-      if (projectile.type === 'icePea') {
-        bgColor = '#3b82f6' // 蓝色
-        borderColor = '#1d4ed8'
-      } else {
-        bgColor = '#22c55e' // 绿色
-        borderColor = '#16a34a'
+      // 西瓜子弹（抛物线，旋转）
+      if (projectile.type === 'watermelon' || projectile.type === 'iceWatermelon') {
+        this.ctx.save()
+        this.ctx.translate(projectile.x, projectile.y)
+        this.ctx.rotate(projectile.rotation || 0)
+        
+        // 绘制西瓜
+        this.ctx.fillStyle = projectile.type === 'iceWatermelon' ? '#93c5fd' : '#16a34a'
+        this.ctx.beginPath()
+        this.ctx.arc(0, 0, 20, 0, Math.PI * 2)
+        this.ctx.fill()
+        
+        // 绘制西瓜纹理
+        this.ctx.strokeStyle = '#0f766e'
+        this.ctx.lineWidth = 2
+        this.ctx.beginPath()
+        this.ctx.arc(0, 0, 20, 0, Math.PI * 2)
+        this.ctx.stroke()
+        
+        // 绘制花纹
+        this.ctx.strokeStyle = projectile.type === 'iceWatermelon' ? '#2563eb' : '#064e3b'
+        this.ctx.lineWidth = 1
+        for (let i = 0; i < 6; i++) {
+          const angle = (i / 6) * Math.PI * 2
+          this.ctx.beginPath()
+          this.ctx.moveTo(0, 0)
+          this.ctx.lineTo(Math.cos(angle) * 15, Math.sin(angle) * 15)
+          this.ctx.stroke()
+        }
+        
+        // 如果是寒冰西瓜，添加冰霜效果
+        if (projectile.type === 'iceWatermelon') {
+          this.ctx.globalAlpha = 0.6
+          this.ctx.fillStyle = '#bfdbfe'
+          this.ctx.beginPath()
+          this.ctx.arc(-5, -5, 8, 0, Math.PI * 2)
+          this.ctx.fill()
+          this.ctx.beginPath()
+          this.ctx.arc(8, 6, 5, 0, Math.PI * 2)
+          this.ctx.fill()
+        }
+        
+        this.ctx.restore()
       }
-      
-      this.ctx.fillStyle = bgColor
-      this.ctx.beginPath()
-      this.ctx.arc(projectile.x, projectile.y, 8, 0, Math.PI * 2)
-      this.ctx.fill()
-      
-      // 绘制边框
-      this.ctx.strokeStyle = borderColor
-      this.ctx.lineWidth = 2
-      this.ctx.stroke()
+      // 普通豌豆
+      else if (projectile.type === 'icePea' || projectile.type === 'pea') {
+        let bgColor, borderColor
+        if (projectile.type === 'icePea') {
+          bgColor = '#3b82f6' // 蓝色
+          borderColor = '#1d4ed8'
+        } else {
+          bgColor = '#22c55e' // 绿色
+          borderColor = '#16a34a'
+        }
+        
+        this.ctx.fillStyle = bgColor
+        this.ctx.beginPath()
+        this.ctx.arc(projectile.x, projectile.y, 8, 0, Math.PI * 2)
+        this.ctx.fill()
+        
+        // 绘制边框
+        this.ctx.strokeStyle = borderColor
+        this.ctx.lineWidth = 2
+        this.ctx.stroke()
+      }
     }
   }
   
@@ -245,8 +302,129 @@ export class Renderer {
         case 'plant':
           this.drawPlantAnimation(anim, progress)
           break
+        case 'staffHit':
+          this.drawStaffHitAnimation(anim, progress)
+          break
+        case 'watermelonHit':
+          this.drawWatermelonHitAnimation(anim, progress)
+          break
       }
     }
+  }
+  // 绘制金箍棒
+  drawWeaponStaffs(staffs) {
+    for (const staff of staffs) {
+      this.ctx.save()
+      this.ctx.translate(staff.x, staff.y)
+      this.ctx.rotate(staff.rotation || 0)
+      
+      // 绘制金箍棒主体
+      this.ctx.strokeStyle = '#fbbf24'
+      this.ctx.lineWidth = 4
+      this.ctx.beginPath()
+      this.ctx.moveTo(-30, 0)
+      this.ctx.lineTo(30, 0)
+      this.ctx.stroke()
+      
+      // 绘制金箍
+      this.ctx.strokeStyle = '#ffd700'
+      this.ctx.lineWidth = 2
+      this.ctx.beginPath()
+      this.ctx.arc(-15, 0, 8, 0, Math.PI * 2)
+      this.ctx.stroke()
+      this.ctx.beginPath()
+      this.ctx.arc(15, 0, 8, 0, Math.PI * 2)
+      this.ctx.stroke()
+      
+      // 绘制金色光圈
+      if (staff.state === 'spinning') {
+        this.ctx.globalAlpha = 0.4
+        const radius = 40 + Math.sin(Date.now() / 100) * 5
+        this.ctx.strokeStyle = '#ffd700'
+        this.ctx.lineWidth = 3
+        this.ctx.beginPath()
+        this.ctx.arc(0, 0, radius, 0, Math.PI * 2)
+        this.ctx.stroke()
+        
+        // 绘制旋转的光芒
+        for (let i = 0; i < 8; i++) {
+          const angle = (i / 8) * Math.PI * 2 + staff.rotation
+          this.ctx.beginPath()
+          this.ctx.moveTo(0, 0)
+          this.ctx.lineTo(Math.cos(angle) * 50, Math.sin(angle) * 50)
+          this.ctx.stroke()
+        }
+      }
+      
+      this.ctx.restore()
+    }
+  }
+  
+  // 金箍棒击中动画
+  drawStaffHitAnimation(anim, progress) {
+    const alpha = 1 - progress
+    const scale = 0.5 + progress * 1.5
+    
+    this.ctx.save()
+    this.ctx.globalAlpha = alpha
+    this.ctx.translate(anim.x, anim.y)
+    this.ctx.scale(scale, scale)
+    
+    // 绘制金色闪光
+    this.ctx.fillStyle = '#ffd700'
+    this.ctx.beginPath()
+    this.ctx.arc(0, 0, 20, 0, Math.PI * 2)
+    this.ctx.fill()
+    
+    // 绘制光芒
+    this.ctx.strokeStyle = '#fbbf24'
+    this.ctx.lineWidth = 2
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2
+      this.ctx.beginPath()
+      this.ctx.moveTo(0, 0)
+      this.ctx.lineTo(Math.cos(angle) * 30, Math.sin(angle) * 30)
+      this.ctx.stroke()
+    }
+    
+    this.ctx.restore()
+  }
+  
+  // 西瓜击中动画（破碎效果）
+  drawWatermelonHitAnimation(anim, progress) {
+    const alpha = 1 - progress
+    
+    this.ctx.save()
+    this.ctx.globalAlpha = alpha
+    this.ctx.translate(anim.x, anim.y)
+    
+    // 绘制西瓜碎片
+    this.ctx.fillStyle = anim.isIce ? '#93c5fd' : '#16a34a'
+    for (let i = 0; i < 6; i++) {
+      const angle = (i / 6) * Math.PI * 2
+      const distance = 20 + progress * 30
+      const x = Math.cos(angle) * distance
+      const y = Math.sin(angle) * distance
+      
+      this.ctx.beginPath()
+      this.ctx.arc(x, y, 8, 0, Math.PI * 2)
+      this.ctx.fill()
+    }
+    
+    // 绘制汁液
+    this.ctx.fillStyle = anim.isIce ? '#bfdbfe' : '#22c55e'
+    for (let i = 0; i < 3; i++) {
+      const angle = Math.random() * Math.PI * 2
+      const distance = 10 + progress * 20
+      const x = Math.cos(angle) * distance
+      const y = Math.sin(angle) * distance
+      
+      this.ctx.beginPath()
+      this.ctx.arc(x, y, 5, 0, Math.PI * 2)
+      this.ctx.fill()
+    }
+    
+    this.ctx.restore()
   }
   
   // 死亡动画

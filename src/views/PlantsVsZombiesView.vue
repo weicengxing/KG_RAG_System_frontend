@@ -179,7 +179,10 @@ const selectedPlants = ref([
   { id: 'peashooter', ...plantConfig.peashooter },
   { id: 'snowPea', ...plantConfig.snowPea },
   { id: 'nutWall', ...plantConfig.nutWall },
-  { id: 'cherryBomb', ...plantConfig.cherryBomb }
+  { id: 'cherryBomb', ...plantConfig.cherryBomb },
+  { id: 'watermelon', ...plantConfig.watermelon },
+  { id: 'iceWatermelon', ...plantConfig.iceWatermelon },
+  { id: 'kiwi', ...plantConfig.kiwi }
 ])
 
 // 暂停/继续
@@ -479,17 +482,44 @@ onUnmounted(() => {
 /* 植物选择栏 */
 .plants-sidebar {
   width: 200px;
+  max-height: calc(100vh - 20px);
   padding: 20px;
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
   border-radius: 16px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  overflow-y: auto;
+}
+
+/* 自定义滚动条样式 */
+.plants-sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.plants-sidebar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+.plants-sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+}
+
+.plants-sidebar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
 }
 
 .plants-sidebar h3 {
   margin: 0 0 16px 0;
   font-size: 1.2rem;
   color: white;
+  position: sticky;
+  top: 0;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  padding: 10px 0;
+  z-index: 1;
 }
 
 .plant-slots {

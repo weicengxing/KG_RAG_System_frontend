@@ -62,6 +62,53 @@ export const plantConfig = {
     cooldown: 20,        // 很长的冷却时间
     width: 104,          // 放大到1.3倍
     height: 130          // 放大到1.3倍
+  },
+  watermelon: {
+    id: 'watermelon',
+    name: '西瓜投手',
+    icon: '🍉',
+    cost: 300,           // 高消耗
+    hp: 400,
+    attackInterval: 2.5, // 攻击间隔（秒）
+    damage: 100,          // 高伤害
+    projectileSpeed: 8,  // 较慢的子弹速度
+    gravity: 300,        // 重力加速度（像素/秒²）
+    rotationSpeed: 5,    // 旋转速度（弧度/秒）
+    cooldown: 12,        // 长冷却时间
+    width: 104,
+    height: 130
+  },
+  iceWatermelon: {
+    id: 'iceWatermelon',
+    name: '寒冰西瓜投手',
+    icon: '🧊',
+    cost: 350,           // 更高消耗
+    hp: 400,
+    attackInterval: 2.5, // 攻击间隔（秒）
+    damage: 80,          // 中等伤害
+    projectileSpeed: 8,  // 较慢的子弹速度
+    gravity: 300,        // 重力加速度（像素/秒²）
+    rotationSpeed: 5,    // 旋转速度（弧度/秒）
+    slowDuration: 3,     // 减速持续时间（秒）
+    slowFactor: 0.5,     // 减速系数（50%）
+    cooldown: 12,        // 长冷却时间
+    width: 104,
+    height: 130
+  },
+  kiwi: {
+    id: 'kiwi',
+    name: '猕猴桃',
+    icon: '🥝',
+    cost: 250,           // 中等消耗
+    hp: 350,
+    attackInterval: 8,   // 攻击间隔（秒）
+    staffDamage: 150,     // 金箍棒伤害
+    staffLifeTime: 5,    // 金箍棒存在时间（秒）
+    staffAttackInterval: 0.1, // 金箍棒攻击间隔（秒）
+    staffRadius: 50,     // 金箍棒攻击半径（像素）
+    cooldown: 10,        // 中等冷却时间
+    width: 104,
+    height: 130
   }
 }
 

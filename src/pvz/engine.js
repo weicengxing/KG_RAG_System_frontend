@@ -79,6 +79,7 @@ export class GameEngine {
     this.projectiles = []
     this.suns = []
     this.lawnMowers = []
+    this.weaponStaffs = [] // 金箍棒实体列表
     
     // 网格系统
     this.grid = new Grid(
@@ -836,32 +837,12 @@ export class GameEngine {
     this.renderer.drawGrid(this.grid)
     this.renderer.drawPlants(this.plants)
     this.renderer.drawZombies(this.zombies)
+    this.renderer.drawWeaponStaffs(this.weaponStaffs)
     this.renderer.drawProjectiles(this.projectiles)
     this.renderer.drawSuns(this.suns)
     this.renderer.drawLawnMowers(this.lawnMowers)
     this.renderer.drawAnimations(this.animations)
     this.renderer.drawMessages(this.messages)
-  }
-  
-  // 更新植物冷却
-  updateCooldowns(deltaTime) {
-    for (const plantType in this.plantCooldowns) {
-      this.plantCooldowns[plantType] -= deltaTime
-      
-      if (this.plantCooldowns[plantType] <= 0) {
-        delete this.plantCooldowns[plantType]
-      }
-    }
-  }
-  
-  // 更新阳光掉落计时
-  updateSunFall(deltaTime) {
-    this.sunFallTimer += deltaTime
-    
-    if (this.sunFallTimer >= gameConfig.sunFallInterval) {
-      this.sunFallTimer = 0
-      this.spawnSun()
-    }
   }
   
   // 更新植物
@@ -896,6 +877,215 @@ export class GameEngine {
         if (plant.explodeTimer >= config.explodeDelay) {
           this.explodeCherryBomb(plant)
           this.removePlant(plant)
+        }
+      } else if (plant.type === 'watermelon' || plant.type === 'iceWatermelon') {
+        // 西瓜投手和寒冰西瓜投手
+        plant.attackTimer += deltaTime
+        
+        if (plant.attackTimer >= config.attackInterval) {
+          const row = Math.floor((plant.y + plant.height / 2) / gameConfig.cellHeight)
+          const hasZombie = this.hasZombieInRow(row, plant.x)
+          
+          if (hasZombie) {
+            plant.attackTimer = 0
+            this.shootWatermelon(plant)
+            this.playSound('shoot')
+          }
+        }
+      } else if (plant.type === 'kiwi') {
+        // 猕猴桃投掷金箍棒
+        plant.attackTimer += deltaTime
+        
+        if (plant.attackTimer >= config.attackInterval) {
+          plant.attackTimer = 0
+          this.throwGoldenStaff(plant)
+          this.playSound('shoot')
+        }
+      }
+    }
+    
+    // 更新金箍棒
+    this.updateWeaponStaffs(deltaTime)
+  }
+  
+  // 发射西瓜（抛物线）
+  shootWatermelon(plant) {
+    const config = plantConfig[plant.type]
+    const row = Math.floor((plant.y + plant.height / 2) / gameConfig.cellHeight)
+
+    // 找到同一行中最近的僵尸作为目标
+    let targetZombie = null
+    let minDx = Infinity
+    const startX = plant.x + plant.width  // ✅ 正确的起点
+    
+    for (const zombie of this.zombies) {
+      const zombieRow = Math.floor((zombie.y + zombie.height / 2) / gameConfig.cellHeight)
+      if (zombieRow !== row) continue
+      if (zombie.x <= startX) continue
+
+      const dx = zombie.x - startX  // ✅ 正确的距离计算
+      if (dx < minDx) {
+        minDx = dx
+        targetZombie = zombie
+      }
+    }
+
+    // 如果没有找到目标僵尸，不发射
+    if (!targetZombie) return
+
+    const startY = plant.y + plant.height / 2
+    const targetX = targetZombie.x + targetZombie.width / 2
+    const targetY = targetZombie.y + targetZombie.height / 2
+
+    // ✅ 统一单位：px/s
+    const projectileVx = config.projectileSpeed * 60  // px/frame → px/s
+    const zombieVx = -zombieConfig[targetZombie.type].speed * 60  // px/frame → px/s，向左为负
+
+    // ✅ 闭合速度（两者接近的速度）
+    const dx = targetX - startX
+    const closingSpeed = projectileVx - zombieVx  // = projectileVx + |zombieVx|
+    
+    if (dx <= 0 || closingSpeed <= 1e-6) return
+    
+    const t = dx / closingSpeed  // 飞行时间（秒）
+    if (!isFinite(t) || t <= 0) return
+
+    const dy = targetY - startY
+    const g = config.gravity  // 已经是px/s²
+
+    // ✅ 修复抛物线公式：y向下、g为正，用减号
+    const vy0 = (dy - 0.5 * g * t * t) / t
+
+    const projectile = {
+      x: startX,
+      y: startY,
+      vx: projectileVx,  // px/s
+      vy: vy0,  // px/s
+      type: plant.type === 'iceWatermelon' ? 'iceWatermelon' : 'watermelon',
+      damage: config.damage,
+      gravity: g,  // px/s²
+      rotation: 0,
+      rotationSpeed: config.rotationSpeed,  // 弧度/秒
+      row,
+      slowDuration: config.slowDuration,
+      slowFactor: config.slowFactor,
+      collisionRadius: 80
+    }
+
+    this.projectiles.push(projectile)
+  }
+  
+  // 投掷金箍棒
+  throwGoldenStaff(plant) {
+    const config = plantConfig.kiwi
+    
+    const staff = {
+      x: plant.x + plant.width,
+      y: plant.y + plant.height / 2,
+      damage: config.staffDamage,
+      lifeTime: config.staffLifeTime,
+      attackInterval: config.staffAttackInterval,
+      attackTimer: 0,
+      radius: config.staffRadius,
+      rotation: 0,
+      rotationSpeed: 10,
+      state: 'flying', // flying, spinning
+      targetX: null,
+      targetY: null,
+      speed: 15
+    }
+    
+    this.weaponStaffs.push(staff)
+  }
+  
+  // 更新金箍棒
+  updateWeaponStaffs(deltaTime) {
+    for (let i = this.weaponStaffs.length - 1; i >= 0; i--) {
+      const staff = this.weaponStaffs[i]
+      
+      if (staff.state === 'flying') {
+        // 飞行阶段，向右移动
+        staff.x += staff.speed * deltaTime * 60
+        
+        // 检查是否遇到僵尸
+        for (const zombie of this.zombies) {
+          const zombieCenterX = zombie.x + zombie.width / 2
+          const zombieCenterY = zombie.y + zombie.height / 2
+          
+          const distance = Math.sqrt(
+            (staff.x - zombieCenterX) ** 2 + (staff.y - zombieCenterY) ** 2
+          )
+          
+          if (distance < 30) {
+            // 碰到僵尸，开始旋转攻击
+            staff.state = 'spinning'
+            staff.targetX = zombie.x
+            staff.targetY = zombie.y
+            staff.rotation = 0
+            break
+          }
+        }
+        
+        // 如果飞出屏幕，移除
+        if (staff.x > this.width) {
+          this.weaponStaffs.splice(i, 1)
+        }
+      } else if (staff.state === 'spinning') {
+        // 旋转攻击阶段
+        staff.rotation += staff.rotationSpeed * deltaTime
+        staff.lifeTime -= deltaTime
+        
+        // 旋转攻击周围僵尸
+        staff.attackTimer += deltaTime
+        if (staff.attackTimer >= staff.attackInterval) {
+          staff.attackTimer = 0
+          
+          for (let j = this.zombies.length - 1; j >= 0; j--) {
+            const zombie = this.zombies[j]
+            const zombieCenterX = zombie.x + zombie.width / 2
+            const zombieCenterY = zombie.y + zombie.height / 2
+            
+            const distance = Math.sqrt(
+              (staff.x - zombieCenterX) ** 2 + (staff.y - zombieCenterY) ** 2
+            )
+            
+            if (distance <= staff.radius) {
+              // 造成伤害
+              if (zombie.shieldHp > 0) {
+                zombie.shieldHp -= staff.damage
+                if (zombie.shieldHp < 0) {
+                  zombie.hp += zombie.shieldHp
+                  zombie.shieldHp = 0
+                }
+              } else {
+                zombie.hp -= staff.damage
+              }
+              
+              this.playSound('hit')
+              
+              // 添加击中动画
+              this.animations.push({
+                type: 'staffHit',
+                x: zombie.x + zombie.width / 2,
+                y: zombie.y + zombie.height / 2,
+                time: 0,
+                duration: 0.3
+              })
+              
+              if (zombie.hp <= 0) {
+                this.zombies.splice(j, 1)
+                this.score += 10
+                this.zombiesKilled++
+                this.playSound('zombieDeath')
+                this.addDeathAnimation(zombie.x, zombie.y)
+              }
+            }
+          }
+        }
+        
+        // 存在时间到，移除
+        if (staff.lifeTime <= 0) {
+          this.weaponStaffs.splice(i, 1)
         }
       }
     }
@@ -960,9 +1150,29 @@ export class GameEngine {
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const projectile = this.projectiles[i]
       
-      projectile.x += projectile.speed * deltaTime * 60
+      // 如果是西瓜，使用抛物线运动
+      if (projectile.type === 'watermelon' || projectile.type === 'iceWatermelon') {
+        // 水平运动
+        projectile.x += projectile.vx * deltaTime
+        // 垂直运动（抛物线）：vy 受重力影响
+        projectile.vy += projectile.gravity * deltaTime
+        projectile.y += projectile.vy * deltaTime
+        // 旋转
+        projectile.rotation += projectile.rotationSpeed * deltaTime
+      } else {
+        // 普通子弹直线运动
+        projectile.x += projectile.speed * deltaTime * 60
+      }
       
-      if (projectile.x > this.width) {
+      // 检查是否飞出屏幕
+      if (projectile.x > this.width + 100) { // 允许稍微飞出屏幕
+        this.projectiles.splice(i, 1)
+        continue
+      }
+      
+      // 如果西瓜掉落到地面以下，移除
+      if ((projectile.type === 'watermelon' || projectile.type === 'iceWatermelon') && 
+          projectile.y > this.height + 50) {
         this.projectiles.splice(i, 1)
         continue
       }
@@ -970,12 +1180,21 @@ export class GameEngine {
       let hit = false
       for (const zombie of this.zombies) {
         const zombieRow = Math.floor((zombie.y + zombie.height / 2) / gameConfig.cellHeight)
+        const zombieCenterY = zombie.y + zombie.height / 2
+        const zombieCenterX = zombie.x + zombie.width / 2
         
-        if (zombieRow === projectile.row && 
-            projectile.x >= zombie.x && 
-            projectile.x <= zombie.x + zombie.width) {
-          
-          if (projectile.type === 'icePea' || projectile.type === 'pea') {
+        // 碰撞检测
+        const distance = Math.sqrt(
+          (projectile.x - zombieCenterX) ** 2 + 
+          (projectile.y - zombieCenterY) ** 2
+        )
+        
+        // 普通豌豆只检测同一行
+        if (projectile.type === 'icePea' || projectile.type === 'pea') {
+          if (zombieRow === projectile.row && 
+              projectile.x >= zombie.x && 
+              projectile.x <= zombie.x + zombie.width) {
+            
             if (zombie.shieldHp > 0) {
               zombie.shieldHp -= projectile.damage
               if (zombie.shieldHp < 0) {
@@ -990,11 +1209,46 @@ export class GameEngine {
               zombie.slowDuration = projectile.slowDuration || 3
               zombie.slowFactor = projectile.slowFactor || 0.5
             }
+            
+            this.playSound('hit')
+            hit = true
+            break
           }
-          
-          this.playSound('hit')
-          hit = true
-          break
+        } 
+        // 西瓜使用圆形碰撞检测
+        else if (projectile.type === 'watermelon' || projectile.type === 'iceWatermelon') {
+          const collisionRadius = projectile.collisionRadius || 80
+          if (distance < collisionRadius) { // 使用增大的碰撞半径
+            if (zombie.shieldHp > 0) {
+              zombie.shieldHp -= projectile.damage
+              if (zombie.shieldHp < 0) {
+                zombie.hp += zombie.shieldHp
+                zombie.shieldHp = 0
+              }
+            } else {
+              zombie.hp -= projectile.damage
+            }
+            
+            if (projectile.type === 'iceWatermelon') {
+              zombie.slowDuration = projectile.slowDuration || 3
+              zombie.slowFactor = projectile.slowFactor || 0.5
+            }
+            
+            this.playSound('hit')
+            
+            // 添加西瓜破碎动画
+            this.animations.push({
+              type: 'watermelonHit',
+              x: zombieCenterX,
+              y: zombieCenterY,
+              isIce: projectile.type === 'iceWatermelon',
+              time: 0,
+              duration: 0.4
+            })
+            
+            hit = true
+            break
+          }
         }
       }
       
@@ -1266,6 +1520,27 @@ export class GameEngine {
     if (index > -1) {
       this.plants.splice(index, 1)
       this.grid.removePlant(plant.col, plant.row)
+    }
+  }
+  
+  // 更新植物冷却
+  updateCooldowns(deltaTime) {
+    for (const plantType in this.plantCooldowns) {
+      this.plantCooldowns[plantType] -= deltaTime
+      
+      if (this.plantCooldowns[plantType] <= 0) {
+        delete this.plantCooldowns[plantType]
+      }
+    }
+  }
+  
+  // 更新阳光掉落计时
+  updateSunFall(deltaTime) {
+    this.sunFallTimer += deltaTime
+    
+    if (this.sunFallTimer >= gameConfig.sunFallInterval) {
+      this.sunFallTimer = 0
+      this.spawnSun()
     }
   }
   

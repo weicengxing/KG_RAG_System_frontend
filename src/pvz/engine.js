@@ -1,6 +1,7 @@
 import { gameConfig, plantConfig, zombieConfig } from './config.js'
 import { Renderer } from './renderer.js'
 import { InputHandler } from './input.js'
+import { ProjectileManager } from './projectileManager.js'
 import request from '../utils/request.js'
 
 // 网格类
@@ -150,6 +151,9 @@ export class GameEngine {
     
     // 动画系统
     this.animations = []
+    
+    // 子弹管理器
+    this.projectileManager = new ProjectileManager(this)
   }
   
   // 启动游戏
@@ -444,8 +448,8 @@ export class GameEngine {
     // 更新小推车
     this.updateLawnMowers(deltaTime)
     
-    // 更新子弹
-    this.updateProjectiles(deltaTime)
+    // 更新子弹（使用 projectileManager）
+    this.projectileManager.updateProjectiles(deltaTime)
     
     // 更新阳光
     this.updateSuns(deltaTime)
@@ -841,8 +845,9 @@ export class GameEngine {
     this.renderer.drawGrid(this.grid)
     this.renderer.drawPlants(this.plants)
     this.renderer.drawZombies(this.zombies)
-    this.renderer.drawWeaponStaffs(this.weaponStaffs)
-    this.renderer.drawProjectiles(this.projectiles)
+    this.renderer.drawWeaponStaffs(this.projectileManager.getWeaponStaffs())
+    this.renderer.drawProjectiles(this.projectileManager.getProjectiles())
+    this.renderer.drawParticles(this.projectileManager.getParticleSystem().getParticles())
     this.renderer.drawSuns(this.suns)
     this.renderer.drawLawnMowers(this.lawnMowers)
     this.renderer.drawAnimations(this.animations)
@@ -895,6 +900,13 @@ export class GameEngine {
           this.explodeCherryBomb(plant)
           this.removePlant(plant)
         }
+      } else if (plant.type === 'jalapeno') {
+        plant.explodeTimer = (plant.explodeTimer || 0) + deltaTime
+        
+        if (plant.explodeTimer >= config.explodeDelay) {
+          this.explodeJalapeno(plant)
+          this.removePlant(plant)
+        }
       } else if (plant.type === 'watermelon' || plant.type === 'iceWatermelon') {
         // 西瓜投手和寒冰西瓜投手
         plant.attackTimer += deltaTime
@@ -925,193 +937,18 @@ export class GameEngine {
         }
       }
     }
-    
-    // 更新金箍棒
-    this.updateWeaponStaffs(deltaTime)
   }
   
   // 发射西瓜（抛物线）
   shootWatermelon(plant) {
-    const config = plantConfig[plant.type]
-    const row = Math.floor((plant.y + plant.height / 2) / gameConfig.cellHeight)
-
-    // 找到同一行中最近的僵尸作为目标
-    let targetZombie = null
-    let minDx = Infinity
-    const startX = plant.x + plant.width  // ✅ 正确的起点
-    
-    for (const zombie of this.zombies) {
-      const zombieRow = Math.floor((zombie.y + zombie.height / 2) / gameConfig.cellHeight)
-      if (zombieRow !== row) continue
-      if (zombie.x <= startX) continue
-
-      const dx = zombie.x - startX  // ✅ 正确的距离计算
-      if (dx < minDx) {
-        minDx = dx
-        targetZombie = zombie
-      }
-    }
-
-    // 如果没有找到目标僵尸，不发射
-    if (!targetZombie) return
-
-    const startY = plant.y + plant.height / 2
-    const targetX = targetZombie.x + targetZombie.width / 2
-    const targetY = targetZombie.y + targetZombie.height / 2
-
-    // ✅ 统一单位：px/s
-    const projectileVx = config.projectileSpeed * 60  // px/frame → px/s
-    const zombieVx = -zombieConfig[targetZombie.type].speed * 60  // px/frame → px/s，向左为负
-
-    // ✅ 闭合速度（两者接近的速度）
-    const dx = targetX - startX
-    const closingSpeed = projectileVx - zombieVx  // = projectileVx + |zombieVx|
-    
-    if (dx <= 0 || closingSpeed <= 1e-6) return
-    
-    const t = dx / closingSpeed  // 飞行时间（秒）
-    if (!isFinite(t) || t <= 0) return
-
-    const dy = targetY - startY
-    const g = config.gravity  // 已经是px/s²
-
-    // ✅ 修复抛物线公式：y向下、g为正，用减号
-    const vy0 = (dy - 0.5 * g * t * t) / t
-
-    const projectile = {
-      x: startX,
-      y: startY,
-      vx: projectileVx,  // px/s
-      vy: vy0,  // px/s
-      type: plant.type === 'iceWatermelon' ? 'iceWatermelon' : 'watermelon',
-      damage: config.damage,
-      gravity: g,  // px/s²
-      rotation: 0,
-      rotationSpeed: config.rotationSpeed,  // 弧度/秒
-      row,
-      slowDuration: config.slowDuration,
-      slowFactor: config.slowFactor,
-      collisionRadius: 80
-    }
-
-    this.projectiles.push(projectile)
+    this.projectileManager.shootWatermelon(plant)
   }
   
   // 投掷金箍棒
   throwGoldenStaff(plant) {
-    const config = plantConfig.kiwi
-    
-    const staff = {
-      x: plant.x + plant.width,
-      y: plant.y + plant.height / 2,
-      damage: config.staffDamage,
-      lifeTime: config.staffLifeTime,
-      attackInterval: config.staffAttackInterval,
-      attackTimer: 0,
-      radius: config.staffRadius,
-      rotation: 0,
-      rotationSpeed: 10,
-      state: 'flying', // flying, spinning
-      targetX: null,
-      targetY: null,
-      speed: 15
-    }
-    
-    this.weaponStaffs.push(staff)
+    this.projectileManager.throwGoldenStaff(plant)
   }
   
-  // 更新金箍棒
-  updateWeaponStaffs(deltaTime) {
-    for (let i = this.weaponStaffs.length - 1; i >= 0; i--) {
-      const staff = this.weaponStaffs[i]
-      
-      if (staff.state === 'flying') {
-        // 飞行阶段，向右移动
-        staff.x += staff.speed * deltaTime * 60
-        
-        // 检查是否遇到僵尸
-        for (const zombie of this.zombies) {
-          const zombieCenterX = zombie.x + zombie.width / 2
-          const zombieCenterY = zombie.y + zombie.height / 2
-          
-          const distance = Math.sqrt(
-            (staff.x - zombieCenterX) ** 2 + (staff.y - zombieCenterY) ** 2
-          )
-          
-          if (distance < 30) {
-            // 碰到僵尸，开始旋转攻击
-            staff.state = 'spinning'
-            staff.targetX = zombie.x
-            staff.targetY = zombie.y
-            staff.rotation = 0
-            break
-          }
-        }
-        
-        // 如果飞出屏幕，移除
-        if (staff.x > this.width) {
-          this.weaponStaffs.splice(i, 1)
-        }
-      } else if (staff.state === 'spinning') {
-        // 旋转攻击阶段
-        staff.rotation += staff.rotationSpeed * deltaTime
-        staff.lifeTime -= deltaTime
-        
-        // 旋转攻击周围僵尸
-        staff.attackTimer += deltaTime
-        if (staff.attackTimer >= staff.attackInterval) {
-          staff.attackTimer = 0
-          
-          for (let j = this.zombies.length - 1; j >= 0; j--) {
-            const zombie = this.zombies[j]
-            const zombieCenterX = zombie.x + zombie.width / 2
-            const zombieCenterY = zombie.y + zombie.height / 2
-            
-            const distance = Math.sqrt(
-              (staff.x - zombieCenterX) ** 2 + (staff.y - zombieCenterY) ** 2
-            )
-            
-            if (distance <= staff.radius) {
-              // 造成伤害
-              if (zombie.shieldHp > 0) {
-                zombie.shieldHp -= staff.damage
-                if (zombie.shieldHp < 0) {
-                  zombie.hp += zombie.shieldHp
-                  zombie.shieldHp = 0
-                }
-              } else {
-                zombie.hp -= staff.damage
-              }
-              
-              this.playSound('hit')
-              
-              // 添加击中动画
-              this.animations.push({
-                type: 'staffHit',
-                x: zombie.x + zombie.width / 2,
-                y: zombie.y + zombie.height / 2,
-                time: 0,
-                duration: 0.3
-              })
-              
-              if (zombie.hp <= 0) {
-                this.zombies.splice(j, 1)
-                this.score += 10
-                this.zombiesKilled++
-                this.playSound('zombieDeath')
-                this.addDeathAnimation(zombie.x, zombie.y)
-              }
-            }
-          }
-        }
-        
-        // 存在时间到，移除
-        if (staff.lifeTime <= 0) {
-          this.weaponStaffs.splice(i, 1)
-        }
-      }
-    }
-  }
   
   // 更新僵尸
   updateZombies(deltaTime) {
@@ -1183,159 +1020,6 @@ export class GameEngine {
         this.zombiesKilled++
         this.playSound('zombieDeath')
         this.addDeathAnimation(zombie.x, zombie.y)
-      }
-    }
-  }
-  
-  // 更新子弹
-  updateProjectiles(deltaTime) {
-    for (let i = this.projectiles.length - 1; i >= 0; i--) {
-      const projectile = this.projectiles[i]
-      
-      // 如果是玉米加农炮炮弹，使用两段式动画
-      if (projectile.type === 'cannon') {
-        projectile.phaseTimer += deltaTime
-        
-        // 更新旋转角度
-        projectile.rotation += projectile.rotationSpeed * deltaTime
-        
-        // 记录尾迹位置（每帧记录一次，最多保留30个点）
-        projectile.trail.push({ x: projectile.x, y: projectile.y })
-        if (projectile.trail.length > 30) {
-          projectile.trail.shift()
-        }
-        
-        if (projectile.phase === 'rising') {
-          // 第一阶段：垂直向上
-          projectile.y += projectile.vy * deltaTime
-          
-          // 检查是否到达天空顶部
-          if (projectile.y <= projectile.skyHeight || projectile.phaseTimer >= projectile.riseTime) {
-            // 切换到下降阶段
-            projectile.phase = 'falling'
-            // 从目标点正上方落下
-            projectile.x = projectile.targetX
-            projectile.y = projectile.skyHeight
-            projectile.vy = projectile.fallSpeed
-            projectile.phaseTimer = 0
-          }
-        } else if (projectile.phase === 'falling') {
-          // 第二阶段：从天而降
-          projectile.y += projectile.vy * deltaTime
-          
-          // 检查是否到达目标位置
-          if (projectile.y >= projectile.targetY || projectile.phaseTimer >= projectile.fallTime) {
-            // 爆炸
-            this.explodeCannonProjectile(projectile)
-            this.projectiles.splice(i, 1)
-            continue
-          }
-        }
-      }
-      // 如果是西瓜，使用抛物线运动
-      else if (projectile.type === 'watermelon' || projectile.type === 'iceWatermelon') {
-        // 水平运动
-        projectile.x += projectile.vx * deltaTime
-        // 垂直运动（抛物线）：vy 受重力影响
-        projectile.vy += projectile.gravity * deltaTime
-        projectile.y += projectile.vy * deltaTime
-        // 旋转
-        projectile.rotation += projectile.rotationSpeed * deltaTime
-      } else {
-        // 普通子弹直线运动
-        projectile.x += projectile.speed * deltaTime * 60
-      }
-      
-      // 检查是否飞出屏幕（普通子弹）
-      if (projectile.type !== 'cannon' && projectile.x > this.width + 100) { // 允许稍微飞出屏幕
-        this.projectiles.splice(i, 1)
-        continue
-      }
-      
-      // 如果西瓜掉落到地面以下，移除
-      if ((projectile.type === 'watermelon' || projectile.type === 'iceWatermelon') && 
-          projectile.y > this.height + 50) {
-        this.projectiles.splice(i, 1)
-        continue
-      }
-      
-      let hit = false
-      for (const zombie of this.zombies) {
-        const zombieRow = Math.floor((zombie.y + zombie.height / 2) / gameConfig.cellHeight)
-        const zombieCenterY = zombie.y + zombie.height / 2
-        const zombieCenterX = zombie.x + zombie.width / 2
-        
-        // 碰撞检测
-        const distance = Math.sqrt(
-          (projectile.x - zombieCenterX) ** 2 + 
-          (projectile.y - zombieCenterY) ** 2
-        )
-        
-        // 普通豌豆只检测同一行
-        if (projectile.type === 'icePea' || projectile.type === 'pea') {
-          if (zombieRow === projectile.row && 
-              projectile.x >= zombie.x && 
-              projectile.x <= zombie.x + zombie.width) {
-            
-            if (zombie.shieldHp > 0) {
-              zombie.shieldHp -= projectile.damage
-              if (zombie.shieldHp < 0) {
-                zombie.hp += zombie.shieldHp
-                zombie.shieldHp = 0
-              }
-            } else {
-              zombie.hp -= projectile.damage
-            }
-            
-            if (projectile.type === 'icePea') {
-              zombie.slowDuration = projectile.slowDuration || 3
-              zombie.slowFactor = projectile.slowFactor || 0.5
-            }
-            
-            this.playSound('hit')
-            hit = true
-            break
-          }
-        } 
-        // 西瓜使用圆形碰撞检测
-        else if (projectile.type === 'watermelon' || projectile.type === 'iceWatermelon') {
-          const collisionRadius = projectile.collisionRadius || 80
-          if (distance < collisionRadius) { // 使用增大的碰撞半径
-            if (zombie.shieldHp > 0) {
-              zombie.shieldHp -= projectile.damage
-              if (zombie.shieldHp < 0) {
-                zombie.hp += zombie.shieldHp
-                zombie.shieldHp = 0
-              }
-            } else {
-              zombie.hp -= projectile.damage
-            }
-            
-            if (projectile.type === 'iceWatermelon') {
-              zombie.slowDuration = projectile.slowDuration || 3
-              zombie.slowFactor = projectile.slowFactor || 0.5
-            }
-            
-            this.playSound('hit')
-            
-            // 添加西瓜破碎动画
-            this.animations.push({
-              type: 'watermelonHit',
-              x: zombieCenterX,
-              y: zombieCenterY,
-              isIce: projectile.type === 'iceWatermelon',
-              time: 0,
-              duration: 0.4
-            })
-            
-            hit = true
-            break
-          }
-        }
-      }
-      
-      if (hit) {
-        this.projectiles.splice(i, 1)
       }
     }
   }
@@ -1465,20 +1149,7 @@ export class GameEngine {
   
   // 发射子弹
   shootProjectile(plant) {
-    const config = plantConfig[plant.type]
-    
-    const projectile = {
-      x: plant.x + plant.width,
-      y: plant.y + plant.height / 2,
-      type: plant.type === 'snowPea' ? 'icePea' : 'pea',
-      damage: config.damage,
-      speed: config.projectileSpeed,
-      row: Math.floor((plant.y + plant.height / 2) / gameConfig.cellHeight),
-      slowDuration: config.slowDuration,
-      slowFactor: config.slowFactor
-    }
-    
-    this.projectiles.push(projectile)
+    this.projectileManager.shootProjectile(plant)
   }
   
   // 生成阳光
@@ -1637,6 +1308,58 @@ export class GameEngine {
     })
   }
   
+  // 火爆辣椒爆炸（整行攻击）
+  explodeJalapeno(jalapeno) {
+    const config = plantConfig.jalapeno
+    const row = jalapeno.row
+    const centerX = jalapeno.x + jalapeno.width / 2
+    const centerY = jalapeno.y + jalapeno.height / 2
+    
+    // 对整行的所有僵尸造成伤害
+    for (let i = this.zombies.length - 1; i >= 0; i--) {
+      const zombie = this.zombies[i]
+      const zombieRow = Math.floor((zombie.y + zombie.height / 2) / gameConfig.cellHeight)
+      
+      // 检查是否在同一行
+      if (zombieRow === row) {
+        // 对该行僵尸造成巨额伤害
+        if (zombie.shieldHp > 0) {
+          zombie.shieldHp -= config.damage
+          if (zombie.shieldHp < 0) {
+            zombie.hp += zombie.shieldHp
+            zombie.shieldHp = 0
+          }
+        } else {
+          zombie.hp -= config.damage
+        }
+        
+        // 检查僵尸是否死亡
+        if (zombie.hp <= 0) {
+          this.zombies.splice(i, 1)
+          this.score += 10
+          this.zombiesKilled++
+          this.playSound('zombieDeath')
+          this.addDeathAnimation(zombie.x, zombie.y)
+        } else {
+          this.playSound('hit')
+        }
+      }
+    }
+    
+    this.playSound('explode')
+    this.showMessage('🔥 火爆辣椒 explodes！整行被灼烧！', '#ff4500')
+    
+    // 添加整行火焰爆炸动画（延长到2秒）
+    this.animations.push({
+      type: 'jalapenoExplode',
+      x: centerX,
+      y: centerY,
+      row: row,
+      time: 0,
+      duration: 2.0
+    })
+  }
+  
   // 移除植物
   removePlant(plant) {
     const index = this.plants.indexOf(plant)
@@ -1747,60 +1470,7 @@ export class GameEngine {
   
   // 玉米加农炮发射炮弹
   fireCannonProjectile(cannon, targetX, targetY) {
-    // 检查玉米加农炮是否处于沉睡状态
-    if (cannon.isSleeping) {
-      this.showMessage('玉米加农炮正在沉睡中，无法发射！', '#f87171')
-      return false
-    }
-    
-    const config = plantConfig.cannon
-    const startX = cannon.x + cannon.width / 2
-    const startY = cannon.y + cannon.height / 2
-    
-    // 计算飞行到天空顶部的高度（屏幕上方 50px，降低高度以加快动画）
-    const skyAboveHeight = 50
-    const skyY = -skyAboveHeight // 屏幕上方50px（负值）
-    
-    // 第一阶段：垂直向上飞到屏幕上方（提速以加快动画）
-    const upSpeed = 400 // px/s（提速3.75倍）
-    const upDistance = startY - skyY // 从startY到-skyY的距离
-    const upTime = upDistance / upSpeed
-    
-    // 第二阶段：从天而降到目标点（提速以加快动画）
-    const fallTargetY = targetY
-    const fallSpeed = 500 // px/s（提速4倍）
-    const fallDistance = fallTargetY - skyY
-    const fallTime = fallDistance / fallSpeed
-    
-    // 设置沉睡状态
-    cannon.isSleeping = true
-    cannon.sleepTimer = config.sleepDuration
-    
-    const projectile = {
-      x: startX,
-      y: startY,
-      vx: 0,
-      vy: -upSpeed, // 初始向上速度
-      type: 'cannon',
-      damage: config.damage,
-      explodeRadius: config.explodeRadius,
-      targetX: targetX,
-      targetY: targetY,
-      phase: 'rising', // rising（上升）或 falling（下降）
-      riseTime: upTime,
-      fallTime: fallTime,
-      phaseTimer: 0,
-      skyHeight: skyY, // ✅ 修复：使用正确的天空高度 -200
-      fallSpeed: fallSpeed, // ✅ 保存下降速度
-      rotation: 0,
-      rotationSpeed: 3, // 旋转速度（弧度/秒）
-      trail: []
-    }
-    
-    this.projectiles.push(projectile)
-    this.playSound('shoot')
-    this.showMessage('🌽 玉米加农炮发射！', '#fbbf24')
-    return true
+    this.projectileManager.fireCannonProjectile(cannon, targetX, targetY)
   }
   
   // 玉米加农炮炮弹爆炸

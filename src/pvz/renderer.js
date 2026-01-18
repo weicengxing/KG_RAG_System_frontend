@@ -78,6 +78,10 @@ export class Renderer {
           bgColor = '#fbbf24'
           borderColor = '#f59e0b'
           break
+        case 'jalapeno':
+          bgColor = '#ff4500'
+          borderColor = '#dc2626'
+          break
         default:
           bgColor = '#4ade80'
           borderColor = '#22c55e'
@@ -113,7 +117,67 @@ export class Renderer {
       this.ctx.font = '48px Arial'
       this.ctx.textAlign = 'center'
       this.ctx.textBaseline = 'middle'
-      this.ctx.fillText(config.icon, plant.x + plant.width / 2, plant.y + plant.height / 2)
+      
+      // 如果是冒火树桩，绘制特殊的火焰效果
+      if (plant.type === 'fireStump') {
+        // 绘制树桩主体（棕色圆形）
+        this.ctx.fillStyle = '#8b4513'
+        this.ctx.beginPath()
+        this.ctx.arc(plant.x + plant.width / 2, plant.y + plant.height / 2 + 10, 35, 0, Math.PI * 2)
+        this.ctx.fill()
+        
+        this.ctx.strokeStyle = '#654321'
+        this.ctx.lineWidth = 3
+        this.ctx.stroke()
+        
+        // 绘制火焰动画
+        const time = Date.now() / 1000
+        const flameOffset = Math.sin(time * 3) * 5
+        
+        // 绘制多层火焰
+        for (let i = 0; i < 3; i++) {
+          this.ctx.save()
+          this.ctx.translate(plant.x + plant.width / 2, plant.y + plant.height / 2 - 20 + flameOffset)
+          
+          const flameHeight = 20 + i * 10
+          const alpha = (3 - i) / 3 * 0.7
+          
+          // 火焰渐变
+          const flameGradient = this.ctx.createRadialGradient(
+            0, -flameHeight / 2, 0,
+            0, 0, flameHeight
+          )
+          flameGradient.addColorStop(0, `rgba(255, 255, 0, ${alpha})`)
+          flameGradient.addColorStop(0.5, `rgba(255, 165, 0, ${alpha})`)
+          flameGradient.addColorStop(1, `rgba(255, 0, 0, ${alpha})`)
+          
+          this.ctx.fillStyle = flameGradient
+          this.ctx.beginPath()
+          this.ctx.moveTo(-15 - i * 5, 0)
+          this.ctx.quadraticCurveTo(-10 - i * 3, -flameHeight * 0.5, -5 - i, -flameHeight)
+          this.ctx.quadraticCurveTo(0, -flameHeight * 0.5, 5 + i, -flameHeight)
+          this.ctx.quadraticCurveTo(10 + i * 3, -flameHeight * 0.5, 15 + i * 5, 0)
+          this.ctx.fill()
+          
+          this.ctx.restore()
+        }
+        
+        // 绘制小火星粒子
+        for (let j = 0; j < 5; j++) {
+          const sparkAngle = (j / 5) * Math.PI * 2 + time * 2
+          const sparkDistance = 25 + Math.sin(time * 5 + j) * 10
+          const sparkX = plant.x + plant.width / 2 + Math.cos(sparkAngle) * sparkDistance
+          const sparkY = plant.y + plant.height / 2 - 30 + Math.sin(sparkAngle) * sparkDistance * 0.3
+          const sparkSize = 3 + Math.sin(time * 3 + j) * 2
+          
+          this.ctx.fillStyle = `rgba(255, 200, 0, ${0.6 + Math.sin(time * 4 + j) * 0.4})`
+          this.ctx.beginPath()
+          this.ctx.arc(sparkX, sparkY, sparkSize, 0, Math.PI * 2)
+          this.ctx.fill()
+        }
+      } else {
+        this.ctx.fillText(config.icon, plant.x + plant.width / 2, plant.y + plant.height / 2)
+      }
       
       // 绘制血条
       this.drawHealthBar(plant.x, plant.y, plant.width, 10, plant.hp, plant.maxHp)
@@ -129,6 +193,20 @@ export class Renderer {
         this.ctx.fillRect(plant.x + 5, plant.y + plant.height - 8, plant.width - 10, 4)
         
         this.ctx.fillStyle = '#ef4444'
+        this.ctx.fillRect(plant.x + 5, plant.y + plant.height - 8, (plant.width - 10) * progress, 4)
+      }
+      
+      // 如果是火爆辣椒，显示倒计时
+      if (plant.type === 'jalapeno' && plant.explodeTimer > 0) {
+        const explodeConfig = plantConfig.jalapeno
+        const timeLeft = explodeConfig.explodeDelay - plant.explodeTimer
+        const progress = timeLeft / explodeConfig.explodeDelay
+        
+        // 绘制倒计时进度条
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'
+        this.ctx.fillRect(plant.x + 5, plant.y + plant.height - 8, plant.width - 10, 4)
+        
+        this.ctx.fillStyle = '#ff4500'
         this.ctx.fillRect(plant.x + 5, plant.y + plant.height - 8, (plant.width - 10) * progress, 4)
       }
     }
@@ -197,6 +275,41 @@ export class Renderer {
     }
   }
   
+  // 绘制粒子
+  drawParticles(particles) {
+    for (const particle of particles) {
+      if (particle.type === 'fire') {
+        // 火焰粒子
+        const lifeRatio = particle.lifeTime / particle.maxLifeTime
+        const alpha = lifeRatio
+        const size = 3 + lifeRatio * 4
+        
+        // 绘制火焰粒子（颜色渐变）
+        const gradient = this.ctx.createRadialGradient(
+          particle.x, particle.y, 0,
+          particle.x, particle.y, size
+        )
+        gradient.addColorStop(0, `rgba(255, 255, 0, ${alpha})`)
+        gradient.addColorStop(0.5, `rgba(255, 165, 0, ${alpha * 0.8})`)
+        gradient.addColorStop(1, `rgba(255, 0, 0, ${alpha * 0.4})`)
+        
+        this.ctx.fillStyle = gradient
+        this.ctx.beginPath()
+        this.ctx.arc(particle.x, particle.y, size, 0, Math.PI * 2)
+        this.ctx.fill()
+        
+        // 添加发光效果
+        this.ctx.shadowColor = '#ff4500'
+        this.ctx.shadowBlur = 5
+        this.ctx.fillStyle = `rgba(255, 69, 0, ${alpha * 0.3})`
+        this.ctx.beginPath()
+        this.ctx.arc(particle.x, particle.y, size * 1.5, 0, Math.PI * 2)
+        this.ctx.fill()
+        this.ctx.shadowBlur = 0
+      }
+    }
+  }
+  
   // 绘制子弹
   drawProjectiles(projectiles) {
     for (const projectile of projectiles) {
@@ -243,6 +356,47 @@ export class Renderer {
         }
         
         this.ctx.restore()
+      }
+      // 火焰豌豆
+      else if (projectile.type === 'firePea') {
+        // 绘制火焰尾迹
+        const trailCount = 3
+        for (let i = 0; i < trailCount; i++) {
+          const trailAlpha = (trailCount - i) / trailCount * 0.4
+          const trailSize = 8 - i * 2
+          this.ctx.fillStyle = `rgba(255, 100, 0, ${trailAlpha})`
+          this.ctx.beginPath()
+          this.ctx.arc(projectile.x - i * 10, projectile.y, trailSize, 0, Math.PI * 2)
+          this.ctx.fill()
+        }
+        
+        // 绘制火焰豌豆主体（颜色渐变）
+        const gradient = this.ctx.createRadialGradient(
+          projectile.x - 2, projectile.y - 2, 0,
+          projectile.x, projectile.y, 10
+        )
+        gradient.addColorStop(0, '#ffff00') // 黄色核心
+        gradient.addColorStop(0.5, '#ff6b00') // 橙红色
+        gradient.addColorStop(1, '#ff0000') // 红色边缘
+        
+        this.ctx.fillStyle = gradient
+        this.ctx.beginPath()
+        this.ctx.arc(projectile.x, projectile.y, 8, 0, Math.PI * 2)
+        this.ctx.fill()
+        
+        // 绘制边框
+        this.ctx.strokeStyle = '#ff4500'
+        this.ctx.lineWidth = 2
+        this.ctx.stroke()
+        
+        // 添加发光效果
+        this.ctx.shadowColor = '#ff4500'
+        this.ctx.shadowBlur = 10
+        this.ctx.fillStyle = 'rgba(255, 69, 0, 0.3)'
+        this.ctx.beginPath()
+        this.ctx.arc(projectile.x, projectile.y, 12, 0, Math.PI * 2)
+        this.ctx.fill()
+        this.ctx.shadowBlur = 0
       }
       // 普通豌豆
       else if (projectile.type === 'icePea' || projectile.type === 'pea') {
@@ -343,6 +497,162 @@ export class Renderer {
     }
   }
   
+  // 火爆辣椒爆炸动画（整行波浪形火焰）
+  drawJalapenoExplodeAnimation(anim, progress) {
+    const rowY = anim.y
+    const alpha = 1 - progress
+    
+    this.ctx.save()
+    this.ctx.globalAlpha = alpha
+    
+    // 获取实际画布宽度（9列 × 104像素 = 936像素）
+    const screenWidth = gameConfig.gridCols * gameConfig.cellWidth
+    const fireHeight = 100 + progress * 50
+    const time = Date.now() / 1000 // 动态时间
+    
+    // 1. 绘制多层波浪形火焰背景
+    const waveLayers = [
+      { amplitude: 20, frequency: 0.05, speed: 8, offset: 0, color: 'rgba(255, 100, 0, 0.6)' },
+      { amplitude: 25, frequency: 0.07, speed: 6, offset: 2, color: 'rgba(255, 140, 0, 0.7)' },
+      { amplitude: 30, frequency: 0.04, speed: 10, offset: 4, color: 'rgba(255, 180, 0, 0.5)' },
+      { amplitude: 22, frequency: 0.06, speed: 7, offset: 6, color: 'rgba(255, 60, 0, 0.5)' }
+    ]
+    
+    for (const layer of waveLayers) {
+      this.ctx.globalAlpha = alpha * 0.8
+      this.ctx.fillStyle = layer.color
+      
+      this.ctx.beginPath()
+      this.ctx.moveTo(0, rowY + fireHeight / 2)
+      
+      // 绘制波浪顶部（参差不齐的效果）
+      for (let x = 0; x <= screenWidth; x += 5) {
+        const waveY = rowY - fireHeight / 2 + 
+                      Math.sin(x * layer.frequency + time * layer.speed + layer.offset) * layer.amplitude +
+                      Math.sin(x * layer.frequency * 2 + time * layer.speed * 1.5) * (layer.amplitude * 0.3)
+        this.ctx.lineTo(x, waveY)
+      }
+      
+      this.ctx.lineTo(screenWidth, rowY + fireHeight / 2)
+      this.ctx.closePath()
+      this.ctx.fill()
+    }
+    
+    // 2. 绘制波浪形火焰波纹（参差不齐的效果）
+    for (let i = 0; i < 4; i++) {
+      const waveAlpha = Math.max(0, 0.7 - progress * (0.5 + i * 0.15))
+      this.ctx.globalAlpha = waveAlpha
+      this.ctx.strokeStyle = i === 0 ? '#ffff00' : i === 1 ? '#ff8c00' : i === 2 ? '#ff4500' : '#ff0000'
+      this.ctx.lineWidth = 3 - i * 0.5
+      
+      // 绘制波浪形波纹
+      this.ctx.beginPath()
+      
+      const baseY = rowY - fireHeight / 3 + (i * fireHeight / 6)
+      for (let x = 0; x <= screenWidth; x += 8) {
+        const waveY = baseY + 
+                      Math.sin(x * 0.03 + time * 12 + i) * (15 + i * 5) +
+                      Math.sin(x * 0.06 + time * 8 + i * 2) * (8 + i * 2)
+        
+        if (x === 0) {
+          this.ctx.moveTo(x, waveY)
+        } else {
+          this.ctx.lineTo(x, waveY)
+        }
+      }
+      this.ctx.stroke()
+    }
+    
+    // 3. 绘制上升火焰粒子（跟随波浪分布）
+    const particleCount = 60
+    for (let i = 0; i < particleCount; i++) {
+      // 粒子均匀分布在整个屏幕宽度上
+      const x = Math.random() * screenWidth
+      const particleProgress = Math.min(1, progress * 2 * (0.5 + Math.random() * 0.5))
+      
+      // 计算粒子的波浪偏移
+      const waveOffset = Math.sin(x * 0.05 + time * 10) * 10 + Math.sin(x * 0.1 + time * 15) * 5
+      const y = rowY + waveOffset + (Math.random() - 0.5) * fireHeight - particleProgress * 100
+      const size = 2 + Math.random() * 6 * particleProgress
+      const particleAlpha = Math.max(0, 1 - particleProgress) * 0.9
+      
+      this.ctx.globalAlpha = particleAlpha
+      
+      // 绘制火焰粒子
+      const particleGradient = this.ctx.createRadialGradient(x, y, 0, x, y, size)
+      particleGradient.addColorStop(0, 'rgba(255, 255, 0, 1)')
+      particleGradient.addColorStop(0.4, 'rgba(255, 165, 0, 0.9)')
+      particleGradient.addColorStop(0.7, 'rgba(255, 69, 0, 0.6)')
+      particleGradient.addColorStop(1, 'rgba(255, 0, 0, 0)')
+      
+      this.ctx.fillStyle = particleGradient
+      this.ctx.beginPath()
+      this.ctx.arc(x, y, size, 0, Math.PI * 2)
+      this.ctx.fill()
+    }
+    
+    // 4. 绘制中心爆炸
+    const centerScale = progress * 2
+    const centerAlpha = Math.max(0, 1 - progress * 1.5)
+    
+    this.ctx.globalAlpha = centerAlpha
+    
+    // 火焰中心
+    const centerGradient = this.ctx.createRadialGradient(anim.x, rowY, 0, anim.x, rowY, 50 * centerScale)
+    centerGradient.addColorStop(0, 'rgba(255, 255, 255, 0.9)')
+    centerGradient.addColorStop(0.3, 'rgba(255, 255, 0, 0.8)')
+    centerGradient.addColorStop(0.6, 'rgba(255, 165, 0, 0.5)')
+    centerGradient.addColorStop(1, 'rgba(255, 69, 0, 0)')
+    
+    this.ctx.fillStyle = centerGradient
+    this.ctx.beginPath()
+    this.ctx.arc(anim.x, rowY, 50 * centerScale, 0, Math.PI * 2)
+    this.ctx.fill()
+    
+    // 5. 绘制辣椒图标
+    if (progress < 0.3) {
+      this.ctx.globalAlpha = (1 - progress / 0.3) * alpha
+      this.ctx.font = '48px Arial'
+      this.ctx.textAlign = 'center'
+      this.ctx.textBaseline = 'middle'
+      this.ctx.fillText('🌶️', anim.x, rowY)
+    }
+    
+    // 6. 绘制波浪形冲击波（从屏幕边缘向内收缩）
+    const shockwaveAlpha = Math.max(0, 1 - progress * 2)
+    const shockwaveOffset = screenWidth * 0.1 * (1 - progress)
+    
+    this.ctx.globalAlpha = shockwaveAlpha * 0.5
+    this.ctx.strokeStyle = '#ff4500'
+    this.ctx.lineWidth = 4 * (1 - progress)
+    
+    // 左侧波浪形冲击波
+    this.ctx.beginPath()
+    for (let y = rowY - 40; y <= rowY + 40; y += 5) {
+      const x = shockwaveOffset + Math.sin(y * 0.1 + time * 15) * 10
+      if (y === rowY - 40) {
+        this.ctx.moveTo(x, y)
+      } else {
+        this.ctx.lineTo(x, y)
+      }
+    }
+    this.ctx.stroke()
+    
+    // 右侧波浪形冲击波
+    this.ctx.beginPath()
+    for (let y = rowY - 40; y <= rowY + 40; y += 5) {
+      const x = screenWidth - shockwaveOffset + Math.sin(y * 0.1 + time * 15 + Math.PI) * 10
+      if (y === rowY - 40) {
+        this.ctx.moveTo(x, y)
+      } else {
+        this.ctx.lineTo(x, y)
+      }
+    }
+    this.ctx.stroke()
+    
+    this.ctx.restore()
+  }
+  
   // 绘制阳光
   drawSuns(suns) {
     for (const sun of suns) {
@@ -406,6 +716,9 @@ export class Renderer {
           break
         case 'cannonExplode':
           this.drawCannonExplodeAnimation(anim, progress)
+          break
+        case 'jalapenoExplode':
+          this.drawJalapenoExplodeAnimation(anim, progress)
           break
       }
     }

@@ -232,7 +232,9 @@ const selectedPlants = ref([
   { id: 'watermelon', ...plantConfig.watermelon },
   { id: 'iceWatermelon', ...plantConfig.iceWatermelon },
   { id: 'kiwi', ...plantConfig.kiwi },
-  { id: 'cannon', ...plantConfig.cannon }
+  { id: 'cannon', ...plantConfig.cannon },
+  { id: 'fireStump', ...plantConfig.fireStump },
+  { id: 'jalapeno', ...plantConfig.jalapeno }
 ])
 
 // 暂停/继续

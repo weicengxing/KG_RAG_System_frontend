@@ -123,6 +123,34 @@ export const plantConfig = {
     sleepDuration: 20,   // 发射后沉睡时间（秒）
     width: 104,
     height: 130
+  },
+  fireStump: {
+    id: 'fireStump',
+    name: '冒火的树桩',
+    icon: '🔥',
+    cost: 150,           // 中等消耗
+    hp: 1000,            // 中等生命值
+    cooldown: 10,        // 冷却时间（秒）
+    width: 104,
+    height: 130,
+    // 增强效果配置
+    fireBonus: {
+      speedMultiplier: 1.3,      // 速度提升30%
+      damageMultiplier: 2.5,     // 伤害增加150%（即变成原来的2.5倍）
+      convertIceToFire: true     // 转换寒冰子弹为火焰子弹
+    }
+  },
+  jalapeno: {
+    id: 'jalapeno',
+    name: '火爆辣椒',
+    icon: '🌶️',
+    cost: 150,
+    hp: 1000,
+    explodeDelay: 0.3,    // 爆炸延迟（秒）
+    damage: 2000,         // 爆炸伤害
+    cooldown: 15,         // 冷却时间（秒）
+    width: 104,
+    height: 130
   }
 }
 

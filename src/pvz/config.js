@@ -194,6 +194,22 @@ export const plantConfig = {
     cooldown: 7,         // 冷却时间
     width: 104,
     height: 130
+  },
+  hypnoShroom: {
+    id: 'hypnoShroom',
+    name: '魅惑菇',
+    icon: '🍄',
+    cost: 125,           // 中等消耗
+    hp: 200,             // 较低生命值（容易被吃掉）
+    cooldown: 15,        // 冷却时间（秒）
+    width: 104,
+    height: 130,
+    // 魅惑效果配置
+    hypnosisEffect: {
+      hpMultiplier: 3,      // 血量提升200%（变成3倍）
+      attackMultiplier: 2,  // 攻击提升100%（变成2倍）
+      color: '#a855f7'      // 紫色（魅惑颜色）
+    }
   }
 }
 

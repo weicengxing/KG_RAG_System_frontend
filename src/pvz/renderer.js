@@ -284,10 +284,82 @@ export class Renderer {
     }
   }
   
+  // 绘制被魅惑僵尸的紫色光环
+  drawCharmedAura(zombie) {
+    const centerX = zombie.x + zombie.width / 2
+    const centerY = zombie.y + zombie.height / 2
+    const time = Date.now() / 1000
+    
+    this.ctx.save()
+    
+    // 绘制多层紫色光环
+    for (let i = 0; i < 3; i++) {
+      const baseRadius = 50 + i * 15
+      const pulse = Math.sin(time * 3 + i) * 10
+      const radius = baseRadius + pulse
+      const alpha = 0.3 - i * 0.1
+      
+      // 创建径向渐变
+      const gradient = this.ctx.createRadialGradient(
+        centerX, centerY, radius * 0.5,
+        centerX, centerY, radius
+      )
+      gradient.addColorStop(0, `rgba(168, 85, 247, 0)`)
+      gradient.addColorStop(0.5, `rgba(168, 85, 247, ${alpha})`)
+      gradient.addColorStop(1, `rgba(147, 51, 234, 0)`)
+      
+      this.ctx.fillStyle = gradient
+      this.ctx.beginPath()
+      this.ctx.arc(centerX, centerY, radius, 0, Math.PI * 2)
+      this.ctx.fill()
+    }
+    
+    // 绘制旋转的紫色粒子
+    const particleCount = 8
+    for (let i = 0; i < particleCount; i++) {
+      const angle = (i / particleCount) * Math.PI * 2 + time * 2
+      const distance = 40 + Math.sin(time * 4 + i) * 10
+      const x = centerX + Math.cos(angle) * distance
+      const y = centerY + Math.sin(angle) * distance
+      const size = 3 + Math.sin(time * 3 + i) * 2
+      
+      // 粒子渐变
+      const particleGradient = this.ctx.createRadialGradient(x, y, 0, x, y, size)
+      particleGradient.addColorStop(0, 'rgba(255, 255, 255, 1)')
+      particleGradient.addColorStop(0.5, 'rgba(168, 85, 247, 0.8)')
+      particleGradient.addColorStop(1, 'rgba(147, 51, 234, 0)')
+      
+      this.ctx.fillStyle = particleGradient
+      this.ctx.beginPath()
+      this.ctx.arc(x, y, size, 0, Math.PI * 2)
+      this.ctx.fill()
+    }
+    
+    // 绘制向上的紫色迷雾
+    for (let j = 0; j < 3; j++) {
+      const mistX = centerX + (Math.random() - 0.5) * 40
+      const mistY = centerY - 20 - j * 15
+      const mistSize = 5 + Math.random() * 10
+      const mistAlpha = 0.3 + Math.sin(time * 5 + j) * 0.2
+      
+      this.ctx.fillStyle = `rgba(168, 85, 247, ${mistAlpha})`
+      this.ctx.beginPath()
+      this.ctx.arc(mistX, mistY + time * 10, mistSize, 0, Math.PI * 2)
+      this.ctx.fill()
+    }
+    
+    this.ctx.restore()
+  }
+  
   // 绘制僵尸
   drawZombies(zombies) {
     for (const zombie of zombies) {
       const config = zombieConfig[zombie.type]
+      
+      // 如果被魅惑，绘制紫色光环动画
+      if (zombie.isCharmed) {
+        this.drawCharmedAura(zombie)
+      }
       
       // 如果有护盾，显示护盾效果
       if (zombie.shieldHp > 0) {
@@ -297,12 +369,12 @@ export class Renderer {
         this.ctx.strokeRect(zombie.x - 2, zombie.y - 2, zombie.width + 4, zombie.height + 4)
       }
       
-      // 绘制背景
-      this.ctx.fillStyle = '#f87171'
+      // 绘制背景（被魅惑的僵尸用紫色）
+      this.ctx.fillStyle = zombie.isCharmed ? '#a855f7' : '#f87171'
       this.ctx.fillRect(zombie.x, zombie.y, zombie.width, zombie.height)
       
-      // 绘制边框
-      this.ctx.strokeStyle = '#ef4444'
+      // 绘制边框（被魅惑的僵尸用紫色边框）
+      this.ctx.strokeStyle = zombie.isCharmed ? '#9333ea' : '#ef4444'
       this.ctx.lineWidth = 2
       this.ctx.strokeRect(zombie.x, zombie.y, zombie.width, zombie.height)
       

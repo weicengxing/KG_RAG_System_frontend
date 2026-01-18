@@ -881,9 +881,42 @@ export class GameEngine {
   
   // 更新植物
   updatePlants(deltaTime) {
-    for (let i = this.plants.length - 1; i >= 0; i--) {
+    // 使用标签支持提前跳出当前迭代
+    plantLoop: for (let i = this.plants.length - 1; i >= 0; i--) {
       const plant = this.plants[i]
       const config = plantConfig[plant.type]
+      
+      // 魅惑菇逻辑：检测僵尸接触
+      if (plant.type === 'hypnoShroom' && !plant.hasTriggered) {
+        const row = plant.row
+        const col = plant.col
+        
+        // 检测同一格内是否有僵尸
+        for (const zombie of this.zombies) {
+          if (zombie.isCharmed) continue  // 跳过已被魅惑的僵尸
+          
+          const zombieRow = Math.floor((zombie.y + zombie.height / 2) / gameConfig.cellHeight)
+          const zombieCol = Math.floor((zombie.x + zombie.width / 2) / gameConfig.cellHeight)
+          
+          // 如果僵尸在魅惑菇的格子内
+          if (zombieRow === row && zombieCol === col) {
+            // 计算僵尸与魅惑菇的距离（僵尸左边到魅惑菇右边的距离）
+            const distance = plant.x + plant.width - zombie.x
+            
+            // 只有当僵尸足够接近时才触发（距离小于30像素）
+            if (distance > 0 && distance < 30) {
+              // 触发魅惑效果（charmZombie 会重置僵尸状态和目标）
+              this.charmZombie(zombie, plant)
+              
+              // 移除魅惑菇
+              this.removePlant(plant)
+              
+              // 跳过当前植物的剩余逻辑，继续下一个植物
+              continue plantLoop
+            }
+          }
+        }
+      }
       
       // 玉米加农炮沉睡逻辑
       if (plant.type === 'cannon') {
@@ -1065,48 +1098,185 @@ export class GameEngine {
       
       if (zombie.state === 'WALKING') {
         const row = Math.floor(zombie.y / gameConfig.cellHeight)
-        const moveStep = actualSpeed * deltaTime * 60
-        const nextX = zombie.x - moveStep
         
-        // 找到同一行中在僵尸前进方向上的最近植物
-        const targetPlant = this.findNearestPlantAhead(zombie.x, nextX, row)
-        
-        if (targetPlant) {
-          // 计算僵尸应该停止的位置：僵尸左边界在植物右边界左侧1/4，露出植物左边3/4
-          // 添加宽度字段fallback，防止NaN
-          const plantW = targetPlant.width || gameConfig.cellWidth
-          const zombieW = zombie.width || gameConfig.cellWidth
-          // zombie.x是僵尸左边界,不需要再减zombieW
-          const stopPosition = targetPlant.x + (plantW * 0.75)
+        if (zombie.isCharmed) {
+          // 被魅惑的僵尸：向右移动
+          const moveStep = actualSpeed * deltaTime * 60
+          const nextX = zombie.x + moveStep
           
-          // 跨越检测：这一帧是否会到达或越过 stopPosition
-          if (nextX <= stopPosition) {
-            // 会到达或越过，精确停止
-            zombie.x = stopPosition
-            zombie.state = 'EATING'
-            zombie.targetPlant = targetPlant
+          // 检测是否与其他正常僵尸碰撞
+          const targetZombie = this.findNearestZombieBehind(zombie.x, nextX, row)
+          
+          if (targetZombie && targetZombie !== zombie) {
+            // 停止移动，攻击僵尸
+            zombie.x = targetZombie.x - zombie.width
+            zombie.state = 'ATTACKING_ZOMBIE'
+            zombie.targetZombie = targetZombie
             zombie.attackTimer = 0
           } else {
-            // 还未到达，继续移动
+            // 没有僵尸，继续向右移动
             zombie.x = nextX
+            
+            // 到达最右边时移除
+            if (zombie.x >= this.width) {
+              this.zombies.splice(i, 1)
+              continue
+            }
           }
         } else {
-          // 没有植物，继续移动
-          zombie.x = nextX
+          // 正常僵尸：向左移动
+          const moveStep = actualSpeed * deltaTime * 60
+          const nextX = zombie.x - moveStep
+          
+          // 找到同一行中在僵尸前进方向上的最近植物
+          const targetPlant = this.findNearestPlantAhead(zombie.x, nextX, row)
+          
+          if (targetPlant) {
+            // 计算僵尸应该停止的位置：僵尸左边界在植物右边界左侧1/4，露出植物左边3/4
+            // 添加宽度字段fallback，防止NaN
+            const plantW = targetPlant.width || gameConfig.cellWidth
+            const zombieW = zombie.width || gameConfig.cellWidth
+            // zombie.x是僵尸左边界,不需要再减zombieW
+            const stopPosition = targetPlant.x + (plantW * 0.75)
+            
+            // 跨越检测：这一帧是否会到达或越过 stopPosition
+            if (nextX <= stopPosition) {
+              // 会到达或越过，精确停止
+              zombie.x = stopPosition
+              zombie.state = 'EATING'
+              zombie.targetPlant = targetPlant
+              zombie.attackTimer = 0
+            } else {
+              // 还未到达，继续移动
+              zombie.x = nextX
+            }
+          } else {
+            // 没有植物，继续移动
+            zombie.x = nextX
+          }
         }
       } else if (zombie.state === 'EATING') {
         zombie.attackTimer += deltaTime
+        
+        // 检查目标植物是否仍然存在（可能已被删除）
+        if (zombie.targetPlant && !this.plants.includes(zombie.targetPlant)) {
+          // 目标植物已不存在，重置状态
+          zombie.state = 'WALKING'
+          zombie.targetPlant = null
+          zombie.attackTimer = 0
+          continue
+        }
         
         if (zombie.attackTimer >= config.attackInterval) {
           zombie.attackTimer = 0
           
           if (zombie.targetPlant) {
-            zombie.targetPlant.hp -= config.attackDamage * 60
-            
-            if (zombie.targetPlant.hp <= 0) {
+            // 检查是否是魅惑菇
+            if (zombie.targetPlant.type === 'hypnoShroom' && !zombie.isCharmed) {
+              // 触发魅惑效果
+              this.charmZombie(zombie, zombie.targetPlant)
+              // 移除魅惑菇
               this.removePlant(zombie.targetPlant)
+            } else if (zombie.isCharmed && zombie.targetZombie) {
+              // 魅惑僵尸攻击其他僵尸
+              const attackDamage = zombie.originalDamage * 60
+              
+              if (zombie.targetZombie.shieldHp > 0) {
+                zombie.targetZombie.shieldHp -= attackDamage
+                if (zombie.targetZombie.shieldHp < 0) {
+                  zombie.targetZombie.hp += zombie.targetZombie.shieldHp
+                  zombie.targetZombie.shieldHp = 0
+                }
+              } else {
+                zombie.targetZombie.hp -= attackDamage
+              }
+              
+              this.playSound('hit')
+              
+              // 检查目标僵尸是否死亡
+              if (zombie.targetZombie.hp <= 0) {
+                const targetIndex = this.zombies.indexOf(zombie.targetZombie)
+                if (targetIndex > -1) {
+                  if (zombie.targetZombie !== zombie) {
+                    this.zombies.splice(targetIndex, 1)
+                    this.score += 10
+                    this.zombiesKilled++
+                    this.playSound('zombieDeath')
+                    this.addDeathAnimation(zombie.targetZombie.x, zombie.targetZombie.y)
+                  }
+                }
+              }
+              
+              // 攻击完成后检查目标是否死亡，如果死亡则继续行走
+              if (!zombie.targetZombie || zombie.targetZombie.hp <= 0) {
+                zombie.state = 'WALKING'
+                zombie.targetZombie = null
+              }
+            } else {
+              // 正常吃植物
+              zombie.targetPlant.hp -= zombie.isCharmed ? (config.attackDamage * zombie.originalDamage) : config.attackDamage * 60
+              
+              if (zombie.targetPlant.hp <= 0) {
+                this.removePlant(zombie.targetPlant)
+                zombie.state = 'WALKING'
+                zombie.targetPlant = null
+              }
+            }
+            
+            // 重置状态（魅惑菇触发后或正常吃植物后）
+            if (zombie.state === 'EATING' && zombie.targetPlant && zombie.targetPlant.type !== 'hypnoShroom') {
+              // 只有在非魅惑菇且未被移除的情况下才保持 targeting 状态
+              if (zombie.targetPlant.hp <= 0) {
+                zombie.state = 'WALKING'
+                zombie.targetPlant = null
+              }
+            } else if (zombie.targetPlant && zombie.targetPlant.type === 'hypnoShroom') {
+              // 魅惑菇触发后重置状态
               zombie.state = 'WALKING'
               zombie.targetPlant = null
+            }
+          }
+        }
+      } else if (zombie.state === 'ATTACKING_ZOMBIE') {
+        // 魅惑僵尸攻击其他僵尸
+        zombie.attackTimer += deltaTime
+        
+        if (zombie.attackTimer >= config.attackInterval) {
+          zombie.attackTimer = 0
+          
+          if (zombie.targetZombie) {
+            // 造成伤害
+            const attackDamage = zombie.originalDamage * 60 // 将每帧伤害转换为总伤害
+            
+            if (zombie.targetZombie.shieldHp > 0) {
+              zombie.targetZombie.shieldHp -= attackDamage
+              if (zombie.targetZombie.shieldHp < 0) {
+                zombie.targetZombie.hp += zombie.targetZombie.shieldHp
+                zombie.targetZombie.shieldHp = 0
+              }
+            } else {
+              zombie.targetZombie.hp -= attackDamage
+            }
+            
+            this.playSound('hit')
+            
+            // 检查目标僵尸是否死亡
+            if (zombie.targetZombie.hp <= 0) {
+              const targetIndex = this.zombies.indexOf(zombie.targetZombie)
+              if (targetIndex > -1) {
+                // 确保不删除自己
+                if (zombie.targetZombie !== zombie) {
+                  this.zombies.splice(targetIndex, 1)
+                  this.score += 10
+                  this.zombiesKilled++
+                  this.playSound('zombieDeath')
+                  this.addDeathAnimation(zombie.targetZombie.x, zombie.targetZombie.y)
+                }
+              }
+              
+              // 目标死亡后，继续行走寻找下一个目标
+              zombie.state = 'WALKING'
+              zombie.targetZombie = null
             }
           }
         }
@@ -1153,6 +1323,46 @@ export class GameEngine {
         this.animations.splice(i, 1)
       }
     }
+  }
+  
+  // 魅惑僵尸
+  charmZombie(zombie, plant) {
+    const hypnosisConfig = plantConfig.hypnoShroom.hypnosisEffect
+    
+    // 标记为已魅惑
+    zombie.isCharmed = true
+    
+    // 提升血量和攻击力
+    zombie.hp = zombie.originalHp * hypnosisConfig.hpMultiplier
+    zombie.maxHp = zombie.hp  // 更新最大血量
+    zombie.originalDamage = zombieConfig[zombie.type].attackDamage * hypnosisConfig.attackMultiplier
+    
+    // 清除护盾（魅惑后不需要护盾）
+    zombie.shieldHp = 0
+    
+    // 设置状态为行走
+    zombie.state = 'WALKING'
+    zombie.targetPlant = null
+    zombie.attackTimer = 0
+    
+    // 停止减速效果
+    zombie.slowDuration = 0
+    zombie.slowFactor = 1
+    
+    // 播放魅惑音效
+    this.playSound('explode')
+    
+    // 添加魅惑动画
+    this.animations.push({
+      type: 'hypoCharm',
+      x: zombie.x + zombie.width / 2,
+      y: zombie.y + zombie.height / 2,
+      time: 0,
+      duration: 1.0
+    })
+    
+    // 移除魅惑菇
+    this.removePlant(plant)
   }
   
   // 添加死亡动画
@@ -1317,6 +1527,41 @@ export class GameEngine {
     return nearestPlant
   }
   
+  // 查找同一行中在魅惑僵尸后方的最近正常僵尸（用于魅惑僵尸攻击）
+  findNearestZombieBehind(currentX, nextX, row) {
+    let nearestZombie = null
+    let minDistance = Infinity
+    
+    for (const otherZombie of this.zombies) {
+      // 跳过自己和其他魅惑僵尸
+      if (otherZombie.isCharmed || otherZombie === this.zombies.find(z => z.x === currentX)) {
+        continue
+      }
+      
+      const zombieRow = Math.floor((otherZombie.y + otherZombie.height / 2) / gameConfig.cellHeight)
+      
+      // 检查是否在同一行
+      if (zombieRow === row) {
+        // 检查正常僵尸是否在魅惑僵尸的右方（后方）
+        if (otherZombie.x > currentX) {
+          // 计算距离
+          const distance = otherZombie.x - currentX
+          
+          // 检查是否会碰撞
+          if (nextX >= otherZombie.x - (otherZombie.width || zombie.width || gameConfig.cellWidth)) {
+            // 找到最近的正常僵尸
+            if (distance < minDistance) {
+              minDistance = distance
+              nearestZombie = otherZombie
+            }
+          }
+        }
+      }
+    }
+    
+    return nearestZombie
+  }
+  
   // 发射子弹
   shootProjectile(plant) {
     this.projectileManager.shootProjectile(plant)
@@ -1391,7 +1636,13 @@ export class GameEngine {
       attackTimer: 0,
       targetPlant: null,
       slowDuration: 0,
-      slowFactor: 1
+      slowFactor: 1,
+      // 魅惑相关字段
+      isCharmed: false,        // 是否被魅惑
+      originalHp: config.hp,   // 原始血量（用于恢复）
+      originalDamage: config.attackDamage,  // 原始攻击力
+      charmedSpeed: config.speed,  // 魅惑后的速度（向右移动）
+      attackZombieTimer: 0     // 攻击其他僵尸的计时器
     }
     
     this.zombies.push(zombie)

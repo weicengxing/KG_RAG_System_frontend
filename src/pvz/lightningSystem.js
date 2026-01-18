@@ -20,7 +20,7 @@ export class LightningChain {
       jumps: [],
       currentJump: 0,
       damage: config.damage,
-      jumpDelay: 0.3, // 每次跳跃之间的延迟（秒） - 增加延迟让动画更明显
+      jumpDelay: 0.1, // 每次跳跃之间的延迟（秒） - 增加延迟让动画更明显
       delayTimer: 0,
       isComplete: false
     }
@@ -97,7 +97,7 @@ export class LightningChain {
   generateLightningPath(startX, startY, endX, endY) {
     const segments = []
     const distance = Math.sqrt((endX - startX) ** 2 + (endY - startY) ** 2)
-    const segmentCount = Math.max(3, Math.floor(distance / 30)) // 每30像素一段
+    const segmentCount = Math.max(3, Math.floor(distance / 45)) // 每45像素一段，减少段数提升性能
     
     let currentX = startX
     let currentY = startY
@@ -107,8 +107,8 @@ export class LightningChain {
       const targetX = startX + (endX - startX) * progress
       const targetY = startY + (endY - startY) * progress
       
-      // 添加随机偏移，形成折线效果
-      const offsetAmount = 100 * (1 - Math.abs(progress - 0.5) * 2) // 中间偏移较大，大幅度增加折线波动
+      // 添加随机偏移，形成折线效果 - 优化偏移量
+      const offsetAmount = 60 * (1 - Math.abs(progress - 0.5) * 2) // 减小偏移量提升性能
       const offsetX = (Math.random() - 0.5) * offsetAmount
       const offsetY = (Math.random() - 0.5) * offsetAmount * 0.8
       
@@ -261,24 +261,25 @@ export class LightningChain {
     }
   }
 
-  // 更新跳跃动画
+  // 更新跳跃动画 - 优化版本
   updateJumpAnimation(jump, deltaTime) {
     const segments = jump.segments
-    const totalSegments = segments.length
     
     // 更新当前段
     if (jump.segmentIndex < segments.length) {
-      jump.segmentProgress += deltaTime * 300 // 大幅提高闪电延伸速度
+      // 提高闪电延伸速度
+      const speed = deltaTime * 800 // 从300提升到800
+      jump.segmentProgress += speed
       
-      // 如果当前段完成，快速跳过多个段以支持极快速度
-      while (jump.segmentProgress >= 1 && jump.segmentIndex < segments.length) {
-        jump.segmentProgress -= 1
+      // 如果当前段完成，跳到下一段
+      if (jump.segmentProgress >= 1 && jump.segmentIndex < segments.length - 1) {
+        jump.segmentProgress = 0
         jump.segmentIndex++
       }
-      
       // 如果所有段都完成了
-      if (jump.segmentIndex >= segments.length) {
+      else if (jump.segmentIndex >= segments.length - 1 && jump.segmentProgress >= 1) {
         jump.isComplete = true
+        jump.segmentIndex = segments.length
         jump.segmentProgress = 1
       }
     }
@@ -334,24 +335,27 @@ export class LightningRenderer {
           endY = segment.startY + (segment.endY - segment.startY) * partialProgress
         }
         
-        this.drawLightningSegment(ctx, segment.startX, segment.startY, endX, endY, i)
+        // 优化：只在当前跳跃的最后一段启用shadowBlur
+        const enableBlur = isCurrentJump && i === Math.floor(progress)
+        this.drawLightningSegment(ctx, segment.startX, segment.startY, endX, endY, i, enableBlur)
       }
     }
   }
 
   // 绘制单段闪电
-  static drawLightningSegment(ctx, startX, startY, endX, endY, segmentIndex) {
+  static drawLightningSegment(ctx, startX, startY, endX, endY, segmentIndex, enableBlur = false) {
     ctx.save()
     
-    // 设置发光效果 - 金色光晕
-    ctx.shadowColor = '#ffd700'
-    ctx.shadowBlur = 15
+    // 优化：只在启用时使用shadowBlur，并大幅降低blur值
+    if (enableBlur) {
+      ctx.shadowColor = '#ffd700'
+      ctx.shadowBlur = 6 // 从15降到6，显著提升性能
+    }
     
-    // 多层闪电效果 - 金色系，更细
+    // 优化：从3层减少到2层
     const layers = [
       { width: 1, color: '#ffffff', alpha: 1 },
-      { width: 2, color: '#ffd700', alpha: 0.9 },
-      { width: 3, color: '#ffaa00', alpha: 0.7 }
+      { width: 2, color: '#ffd700', alpha: 0.85 }
     ]
     
     for (const layer of layers) {
@@ -370,7 +374,7 @@ export class LightningRenderer {
     ctx.restore()
   }
 
-  // 绘制僵尸周围的闪电缠绕效果
+  // 绘制僵尸周围的闪电缠绕效果 - 优化版本
   static drawLightningSurround(ctx, anim, progress) {
     const centerX = anim.x
     const centerY = anim.y
@@ -379,8 +383,8 @@ export class LightningRenderer {
     ctx.save()
     ctx.globalAlpha = alpha
     
-    // 绘制多层旋转闪电
-    const numLayers = 3
+    // 优化：从3层减少到2层
+    const numLayers = 2
     const segmentsPerLayer = 6
     
     for (let layer = 0; layer < numLayers; layer++) {
@@ -389,10 +393,10 @@ export class LightningRenderer {
       const layerAlpha = (numLayers - layer) / numLayers * 0.8
       
       ctx.globalAlpha = layerAlpha * alpha
-      ctx.strokeStyle = layer === 0 ? '#ffffff' : layer === 1 ? '#00ffff' : '#0099ff'
+      ctx.strokeStyle = layer === 0 ? '#ffffff' : '#00ffff'
       ctx.lineWidth = 3 - layer * 0.5
       ctx.shadowColor = '#00d4ff'
-      ctx.shadowBlur = 10
+      ctx.shadowBlur = 5 // 从10降到5
       
       for (let i = 0; i < segmentsPerLayer; i++) {
         const startAngle = (i / segmentsPerLayer) * Math.PI * 2 + rotationOffset + progress * 2
@@ -419,8 +423,8 @@ export class LightningRenderer {
       }
     }
     
-    // 绘制闪电粒子
-    const particleCount = 8
+    // 优化：从8个粒子减少到4个
+    const particleCount = 4
     for (let i = 0; i < particleCount; i++) {
       const angle = (i / particleCount) * Math.PI * 2 + progress * 3
       const distance = 20 + Math.sin(progress * 5 + i) * 10
@@ -431,7 +435,7 @@ export class LightningRenderer {
       ctx.globalAlpha = 0.8 * alpha
       ctx.fillStyle = '#00ffff'
       ctx.shadowColor = '#00d4ff'
-      ctx.shadowBlur = 8
+      ctx.shadowBlur = 4 // 从8降到4
       ctx.beginPath()
       ctx.arc(x, y, size, 0, Math.PI * 2)
       ctx.fill()

@@ -108,6 +108,43 @@ export class ProjectileManager {
               projectile.y += (dy / dist) * step
             }
             
+            // 镜面反射：检测是否超出当前行的边界
+            const rowTop = projectile.row * gameConfig.cellHeight
+            const rowBottom = (projectile.row + 1) * gameConfig.cellHeight
+            const buffer = 8 // 缓冲区，避免连续反射
+            
+            if (projectile.y < rowTop + buffer) {
+              // 超出上界，反向偏移角度（反射）
+              if (!projectile.isReflecting) {
+                projectile.angleOffset += Math.PI // 反向偏移（180度）
+                projectile.isReflecting = true // 标记正在反射
+                
+                // 设置反射冷却计时器
+                projectile.reflectionCooldown = 0.2
+              }
+              // 将位置推回边界内
+              projectile.y = rowTop + buffer
+            } else if (projectile.y > rowBottom - buffer) {
+              // 超出下界，反向偏移角度（反射）
+              if (!projectile.isReflecting) {
+                projectile.angleOffset += Math.PI // 反向偏移（180度）
+                projectile.isReflecting = true // 标记正在反射
+                
+                // 设置反射冷却计时器
+                projectile.reflectionCooldown = 0.2
+              }
+              // 将位置推回边界内
+              projectile.y = rowBottom - buffer
+            }
+            
+            // 更新反射冷却计时器
+            if (projectile.reflectionCooldown !== undefined) {
+              projectile.reflectionCooldown -= deltaTime
+              if (projectile.reflectionCooldown <= 0) {
+                projectile.isReflecting = false
+              }
+            }
+            
             // 到达目标附近，开始穿刺
             if (dist < projectile.pierceDistance * 1.5) {
               projectile.phase = 'piercing'
@@ -126,7 +163,7 @@ export class ProjectileManager {
               // 初始化穿刺参数
               projectile.pierceIndex = 0 // 0→1→2 (共3次穿刺)
               projectile.pierceTimer = 0
-              projectile.pierceTime = 3.0 // 单次穿刺时间（秒）- 慢10倍
+              projectile.pierceTime = 0.5 // 单次穿刺时间（秒）
               projectile.pierceDistance = 100 // 穿刺距离
             }
           } else {
@@ -164,7 +201,7 @@ export class ProjectileManager {
             projectile.pierceTimer = projectile.pierceTimer ?? 0
 
             projectile.pierceDistance = 60
-            projectile.pierceTime = 3.0
+            projectile.pierceTime = 0.5
             projectile.pauseTime = 1.0
             projectile.maxPierces = 3
 
@@ -1072,6 +1109,9 @@ export class ProjectileManager {
         y: startY,
         type: 'dragonBlade',
         
+        // 行号信息（用于边界反射）
+        row: plant.row,
+        
         // 身份标签（用于独立运动轨迹）
         bladeId: i, // 0, 1, 2
         angleOffset: angleOffset, // 角度偏移：0°, 120°, 240° 弧度
@@ -1094,8 +1134,8 @@ export class ProjectileManager {
         speed: config.bladeSpeed,
         
         // 生命周期
-        lifeTime: 3.0, // 刀片存在时间（秒）
-        maxLifeTime: 3.0,
+        lifeTime: 1.05, // 刀片存在时间（秒）- 改为原来的0.7倍
+        maxLifeTime: 1.05,
         damageCooldown: 0.2, // 造成伤害的冷却时间（秒）
         damageTimer: 0,
         
@@ -1151,7 +1191,7 @@ export class ProjectileManager {
     const skyY = -skyAboveHeight
     
     // 下降阶段的参数
-    const fallSpeed = 400
+    const fallSpeed = 400 * 1.8  // 速度加快到原来的1.8倍
     const fallDistance = targetY - skyY
     const fallTime = fallDistance / fallSpeed
     
@@ -1184,7 +1224,6 @@ export class ProjectileManager {
     })
     
     this.engine.playSound('shoot')
-    this.engine.showMessage('🐉 冰龙降临！', '#3b82f6')
   }
   
   // 冰龙爆炸

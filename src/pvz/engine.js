@@ -115,7 +115,7 @@ export class GameEngine {
     )
     
     // 游戏数据
-    this.sunEnergy = 10000
+    this.sunEnergy = 1800
     this.score = 0
     this.wave = 1
     this.totalScore = 0
@@ -190,7 +190,7 @@ export class GameEngine {
   start() {
     this.isPlaying = true
     this.gameOver = false
-    this.sunEnergy = 10000
+    this.sunEnergy = 1800
     this.score = 0
     this.wave = 1
     this.zombiesKilled = 0

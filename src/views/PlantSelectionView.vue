@@ -123,7 +123,7 @@ const getPlantDescription = (plantId) => {
     squash: '压扁邻近的僵尸',
     potatoMine: '需要准备时间，然后炸毁接触的僵尸',
     hypnoShroom: '接触僵尸让其为你而战，血量x3，攻击力x2',
-    thunderMelon: '发射闪电链，在多个僵尸之间跳跃传播，伤害递增并减速',
+    thunderMelon: '发射闪电五连鞭，在多个僵尸之间跳跃传播，伤害递增并减速',
     dragonKale: '发射三枚螺旋刀片（破甲x2），击中后召唤冰龙造成范围冰冻伤害'
   }
   return descriptions[plantId] || '强大的植物'

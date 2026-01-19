@@ -458,14 +458,17 @@ export class Renderer {
   // 绘制子弹
   drawProjectiles(projectiles) {
     for (const projectile of projectiles) {
-      // 龙葵草刀片（螺旋旋转）
+      // 龙葵草刀片（螺旋旋转）- 缩小到0.7倍
       if (projectile.type === 'dragonBlade') {
         this.ctx.save()
         this.ctx.translate(projectile.x, projectile.y)
         this.ctx.rotate(projectile.angle)
+        this.ctx.scale(0.7, 0.7)  // 缩小到原来的0.7倍
         
         // 绘制螺旋轨迹
         if (projectile.trail && projectile.trail.length > 1) {
+          this.ctx.save()
+          this.ctx.scale(1/0.7, 1/0.7)  // 抵消缩放，轨迹保持原始大小
           this.ctx.globalAlpha = 0.3
           this.ctx.strokeStyle = '#60a5fa'
           this.ctx.lineWidth = 2
@@ -479,6 +482,7 @@ export class Renderer {
             }
           }
           this.ctx.stroke()
+          this.ctx.restore()
           this.ctx.globalAlpha = 1
         }
         
@@ -487,126 +491,162 @@ export class Renderer {
         
         this.ctx.beginPath()
         // 外弧
-        this.ctx.moveTo(-15, 0)
-        this.ctx.quadraticCurveTo(0, -10, 15, 0)
-        this.ctx.quadraticCurveTo(0, -5, -15, 0)
+        this.ctx.moveTo(-30, 0)
+        this.ctx.quadraticCurveTo(0, -20, 30, 0)
+        this.ctx.quadraticCurveTo(0, -10, -30, 0)
         this.ctx.fill()
         
         // 刀片边缘（蓝色光效）
         this.ctx.strokeStyle = '#3b82f6'
-        this.ctx.lineWidth = 2
+        this.ctx.lineWidth = 4
         this.ctx.stroke()
         
         // 刀片中心线
         this.ctx.strokeStyle = '#94a3b8'
-        this.ctx.lineWidth = 1
+        this.ctx.lineWidth = 2
         this.ctx.beginPath()
-        this.ctx.moveTo(-15, 0)
-        this.ctx.lineTo(15, 0)
+        this.ctx.moveTo(-30, 0)
+        this.ctx.lineTo(30, 0)
         this.ctx.stroke()
         
         // 蓝色能量光晕
         const pulse = Math.sin(Date.now() / 100) * 0.3 + 0.7
         this.ctx.globalAlpha = 0.3 * pulse
-        const glowGradient = this.ctx.createRadialGradient(0, 0, 5, 0, 0, 20)
+        const glowGradient = this.ctx.createRadialGradient(0, 0, 10, 0, 0, 40)
         glowGradient.addColorStop(0, 'rgba(59, 130, 246, 0.8)')
         glowGradient.addColorStop(1, 'rgba(59, 130, 246, 0)')
         this.ctx.fillStyle = glowGradient
-        this.ctx.beginPath()
-        this.ctx.arc(0, 0, 20, 0, Math.PI * 2)
-        this.ctx.fill()
-        
-        this.ctx.restore()
-      }
-      // 冰龙（垂直下降）
-      else if (projectile.type === 'iceDragon') {
-        this.ctx.save()
-        this.ctx.translate(projectile.x, projectile.y)
-        this.ctx.rotate(projectile.rotation)
-        
-        // 绘制冰龙尾迹
-        if (projectile.trail && projectile.trail.length > 1) {
-          this.ctx.globalAlpha = 0.4
-          this.ctx.strokeStyle = '#93c5fd'
-          this.ctx.lineWidth = 3
-          this.ctx.setLineDash([5, 5])
-          this.ctx.beginPath()
-          for (let i = 0; i < projectile.trail.length; i++) {
-            const point = projectile.trail[i]
-            if (i === 0) {
-              this.ctx.moveTo(point.x - projectile.x, point.y - projectile.y)
-            } else {
-              this.ctx.lineTo(point.x - projectile.x, point.y - projectile.y)
-            }
-          }
-          this.ctx.stroke()
-          this.ctx.setLineDash([])
-          this.ctx.globalAlpha = 1
-        }
-        
-        // 绘制冰龙（蓝色龙形）
-        // 龙身
-        this.ctx.fillStyle = '#3b82f6'
-        this.ctx.beginPath()
-        this.ctx.ellipse(0, 0, 25, 15, 0, 0, Math.PI * 2)
-        this.ctx.fill()
-        
-        // 龙鳞纹理
-        this.ctx.fillStyle = '#60a5fa'
-        for (let i = 0; i < 5; i++) {
-          const angle = (i / 5) * Math.PI
-          const x = Math.cos(angle) * 15
-          const y = Math.sin(angle) * 8
-          this.ctx.beginPath()
-          this.ctx.arc(x, y, 4, 0, Math.PI * 2)
-          this.ctx.fill()
-        }
-        
-        // 龙头
-        this.ctx.fillStyle = '#2563eb'
-        this.ctx.beginPath()
-        this.ctx.moveTo(0, -18)
-        this.ctx.lineTo(-8, -28)
-        this.ctx.lineTo(0, -25)
-        this.ctx.lineTo(8, -28)
-        this.ctx.closePath()
-        this.ctx.fill()
-        
-        // 龙眼
-        this.ctx.fillStyle = '#ffffff'
-        this.ctx.beginPath()
-        this.ctx.arc(-3, -24, 2, 0, Math.PI * 2)
-        this.ctx.arc(3, -24, 2, 0, Math.PI * 2)
-        this.ctx.fill()
-        
-        // 龙翼
-        this.ctx.fillStyle = '#93c5fd'
-        this.ctx.globalAlpha = 0.8
-        this.ctx.beginPath()
-        this.ctx.moveTo(-20, -5)
-        this.ctx.quadraticCurveTo(-40, -25, -45, -10)
-        this.ctx.quadraticCurveTo(-35, 0, -20, 5)
-        this.ctx.fill()
-        
-        this.ctx.beginPath()
-        this.ctx.moveTo(20, -5)
-        this.ctx.quadraticCurveTo(40, -25, 45, -10)
-        this.ctx.quadraticCurveTo(35, 0, 20, 5)
-        this.ctx.fill()
-        
-        // 冰霜发光效果
-        this.ctx.globalAlpha = 0.4
-        const iceGlow = this.ctx.createRadialGradient(0, 0, 10, 0, 0, 40)
-        iceGlow.addColorStop(0, 'rgba(147, 197, 253, 0.8)')
-        iceGlow.addColorStop(0.5, 'rgba(59, 130, 246, 0.4)')
-        iceGlow.addColorStop(1, 'rgba(37, 99, 235, 0)')
-        this.ctx.fillStyle = iceGlow
         this.ctx.beginPath()
         this.ctx.arc(0, 0, 40, 0, Math.PI * 2)
         this.ctx.fill()
         
         this.ctx.restore()
       }
+      // 冰龙（放大1.5倍 + 细节优化版）
+      else if (projectile.type === 'iceDragon') {
+        const ctx = this.ctx
+        // 【关键修改】基础缩放乘以 1.5
+        const s = (projectile.scale ?? 1) * 1.5 
+        // 动画时间
+        const age = projectile.age || (Date.now() / 1000)
+        const t = age * 8 
+
+        ctx.save()
+        
+        // 启用叠加发光模式（性能极好且炫酷）
+        ctx.globalCompositeOperation = 'lighter'
+        
+        // =========================
+        // 1. 绘制拖尾（根据体型加长了拖尾）
+        // =========================
+        if (projectile.trail && projectile.trail.length > 0) {
+          // 限制点数，防止卡顿，但因为变大了，稍微多画几个点(10个)
+          const trailLen = Math.min(projectile.trail.length, 10) 
+          for (let i = 0; i < trailLen; i++) {
+              // 倒序取点
+              const point = projectile.trail[projectile.trail.length - 1 - i]
+              const alpha = 0.4 - (i * 0.04) // 初始透明度提高
+              if (alpha <= 0) break
+              
+              ctx.beginPath()
+              ctx.fillStyle = `rgba(103, 232, 249, ${alpha})`
+              // 拖尾圆点大小也随比例放大
+              ctx.arc(point.x, point.y, (7 - i * 0.6) * s, 0, Math.PI * 2)
+              ctx.fill()
+          }
+        }
+
+        // 坐标变换
+        ctx.translate(projectile.x, projectile.y)
+        ctx.rotate(projectile.rotation)
+
+        // =========================
+        // 2. 寒冰光晕（范围扩大）
+        // =========================
+        // 外层大光圈
+        ctx.fillStyle = 'rgba(6, 182, 212, 0.15)' 
+        ctx.beginPath()
+        ctx.arc(0, 0, 32 * s, 0, Math.PI * 2) // 32px 半径
+        ctx.fill()
+        
+        // 内层亮光圈
+        ctx.fillStyle = 'rgba(165, 243, 252, 0.3)'
+        ctx.beginPath()
+        ctx.arc(0, 0, 14 * s, 0, Math.PI * 2)
+        ctx.fill()
+
+        // =========================
+        // 3. 龙体结构（增加脊柱细节）
+        // =========================
+        const wingY = Math.sin(t) * 6 * s // 翅膀扇动幅度加大
+        
+        // 3.1 身体主体
+        ctx.beginPath()
+        ctx.moveTo(0, -18 * s)  // 头顶
+        ctx.lineTo(10 * s, 0)   // 右腰
+        ctx.lineTo(0, 30 * s)   // 尾尖（拉长）
+        ctx.lineTo(-10 * s, 0)  // 左腰
+        ctx.closePath()
+
+        // 填充高亮冰色
+        ctx.fillStyle = 'rgba(240, 253, 255, 0.95)'
+        ctx.fill()
+        
+        // 3.2 脊柱线（因为变大了，加一条中线更有质感）
+        ctx.beginPath()
+        ctx.moveTo(0, -12 * s)
+        ctx.lineTo(0, 20 * s)
+        ctx.lineWidth = 1.5 * s
+        ctx.strokeStyle = 'rgba(34, 211, 238, 0.6)' // 青色中线
+        ctx.stroke()
+        
+        // 3.3 身体轮廓描边
+        ctx.lineWidth = 2 * s
+        ctx.strokeStyle = '#22d3ee' // 亮青色边框
+        ctx.stroke()
+
+        // =========================
+        // 4. 冰翼（调整比例）
+        // =========================
+        ctx.fillStyle = 'rgba(103, 232, 249, 0.5)' // 半透明翼
+        
+        // 右翼
+        ctx.beginPath()
+        ctx.moveTo(8 * s, 0)
+        ctx.lineTo(42 * s, -12 * s + wingY) // 翼展更宽
+        ctx.lineTo(10 * s, 12 * s)
+        ctx.fill()
+        
+        // 左翼
+        ctx.beginPath()
+        ctx.moveTo(-8 * s, 0)
+        ctx.lineTo(-42 * s, -12 * s + wingY)
+        ctx.lineTo(-10 * s, 12 * s)
+        ctx.fill()
+        
+        // =========================
+        // 5. 龙角与眼睛（增加面部细节）
+        // =========================
+        // 龙角
+        ctx.beginPath()
+        ctx.moveTo(4 * s, -12 * s)
+        ctx.lineTo(6 * s, -26 * s) 
+        ctx.moveTo(-4 * s, -12 * s)
+        ctx.lineTo(-6 * s, -26 * s)
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)'
+        ctx.lineWidth = 1.8 * s
+        ctx.stroke()
+        
+        // 眼睛（两个发光蓝点）
+        ctx.fillStyle = '#0ea5e9'
+        ctx.beginPath()
+        ctx.arc(-3.5 * s, -10 * s, 1.2 * s, 0, Math.PI * 2)
+        ctx.arc(3.5 * s, -10 * s, 1.2 * s, 0, Math.PI * 2)
+        ctx.fill()
+
+        ctx.restore()
+      }
+
       // 西瓜子弹（抛物线，旋转）
       else if (projectile.type === 'watermelon' || projectile.type === 'iceWatermelon') {
         this.ctx.save()
@@ -984,14 +1024,14 @@ export class Renderer {
     this.ctx.arc(0, 0, 40, 0, Math.PI * 2)
     this.ctx.fill()
     
-    // 2. 绘制多层冰晶圆环
+    // 2. 绘制多层冰晶圆环 - 减小到1/2
     this.ctx.globalAlpha = alpha * 0.6
     for (let i = 0; i < 4; i++) {
-      const ringRadius = 30 + i * 15 + progress * 20
+      const ringRadius = 15 + i * 7.5 + progress * 10
       const ringAlpha = Math.max(0, 0.6 - i * 0.1)
       
       this.ctx.strokeStyle = `rgba(147, 197, 253, ${ringAlpha})`
-      this.ctx.lineWidth = 3 - i * 0.5
+      this.ctx.lineWidth = 1.5 - i * 0.25
       
       // 绘制六边形冰晶
       this.ctx.beginPath()
@@ -1010,15 +1050,15 @@ export class Renderer {
       this.ctx.stroke()
     }
     
-    // 3. 绘制冰霜粒子
+    // 3. 绘制冰霜粒子 - 减小到1/2
     this.ctx.globalAlpha = alpha * 0.8
     const particleCount = 12
     for (let i = 0; i < particleCount; i++) {
       const angle = (i / particleCount) * Math.PI * 2 + progress * 5
-      const distance = 30 + progress * 60 * (0.5 + Math.random() * 0.5)
+      const distance = 15 + progress * 30 * (0.5 + Math.random() * 0.5)
       const x = Math.cos(angle) * distance
       const y = Math.sin(angle) * distance
-      const size = 4 + Math.random() * 4
+      const size = 2 + Math.random() * 2
       
       // 绘制六边形冰晶粒子
       this.ctx.fillStyle = '#bfdbfe'
@@ -1038,19 +1078,19 @@ export class Renderer {
       this.ctx.fill()
     }
     
-    // 4. 绘制冻结效果（中心如果是主爆炸点）
+    // 4. 绘制冻结效果（中心如果是主爆炸点）- 减小到1/2
     if (anim.isCenter) {
       this.ctx.globalAlpha = alpha * 0.5
       
       // 绘制冰霜覆盖层
-      const frostGradient = this.ctx.createRadialGradient(0, 0, 0, 0, 0, 80)
+      const frostGradient = this.ctx.createRadialGradient(0, 0, 0, 0, 0, 40)
       frostGradient.addColorStop(0, 'rgba(255, 255, 255, 0.6)')
       frostGradient.addColorStop(0.5, 'rgba(147, 197, 253, 0.4)')
       frostGradient.addColorStop(1, 'rgba(59, 130, 246, 0)')
       
       this.ctx.fillStyle = frostGradient
       this.ctx.beginPath()
-      this.ctx.arc(0, 0, 80, 0, Math.PI * 2)
+      this.ctx.arc(0, 0, 40, 0, Math.PI * 2)
       this.ctx.fill()
       
       // 绘制冻结符号

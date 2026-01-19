@@ -149,7 +149,7 @@ const router = useRouter()
 const route = useRoute()
 
 const gameCanvas = ref(null)
-const sunEnergy = ref(10000)
+const sunEnergy = ref(1800)
 const score = ref(0)
 const wave = ref(1)
 const maxWaves = ref(gameConfig.waveConfigs.length)
@@ -193,7 +193,10 @@ const selectedPlants = ref([
   { id: 'fireStump', ...plantConfig.fireStump },
   { id: 'jalapeno', ...plantConfig.jalapeno },
   { id: 'squash', ...plantConfig.squash },
-  { id: 'potatoMine', ...plantConfig.potatoMine }
+  { id: 'potatoMine', ...plantConfig.potatoMine },
+  { id: 'thunderMelon', ...plantConfig.thunderMelon },
+  { id: 'dragonKale', ...plantConfig.dragonKale },
+  { id: 'hypnoShroom', ...plantConfig.hypnoShroom }
 ])
 
 // 暂停/继续

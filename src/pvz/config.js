@@ -6,7 +6,7 @@ export const plantConfig = {
     icon: '🌻',
     cost: 50,
     hp: 300,
-    produceInterval: 10,  // 生产阳光间隔（秒）
+    produceInterval: 8,  // 生产阳光间隔（秒）
     produceAmount: 25,    // 产生阳光数量
     cooldown: 5,          // 冷却时间（秒）
     width: 104,           // 放大到1.3倍
@@ -74,7 +74,7 @@ export const plantConfig = {
     projectileSpeed: 8,  // 较慢的子弹速度
     gravity: 300,        // 重力加速度（像素/秒²）
     rotationSpeed: 5,    // 旋转速度（弧度/秒）
-    cooldown: 0,       // 长冷却时间
+    cooldown: 6,       // 长冷却时间
     width: 104,
     height: 130
   },
@@ -99,7 +99,7 @@ export const plantConfig = {
     id: 'kiwi',
     name: '猕猴桃',
     icon: '🥝',
-    cost: 250,           // 中等消耗
+    cost: 600,           // 超高消耗
     hp: 350,
     attackInterval: 4,   // 攻击间隔（秒）
     staffDamage: 150,     // 金箍棒伤害
@@ -234,16 +234,16 @@ export const plantConfig = {
     icon: '🐉',
     cost: 400,               // 高消耗
     hp: 400,
-    attackInterval: 5,       // 攻击间隔（秒）
+    attackInterval: 3,     // 攻击间隔（秒）
     bladeDamage: 10,         // 刀片伤害
     bladeCount: 3,           // 刀片数量
     shieldDamageMultiplier: 2.0,  // 护盾伤害倍数（破甲效果）
     dragonDamage: 50,       // 冰龙伤害
-    dragonRadius: 150,       // 冰龙伤害范围（像素）
+    dragonRadius: 75,        // 冰龙伤害范围（像素）
     bladeSpeed: 12,          // 刀片飞行速度（像素/帧）
     bladeRotationSpeed: 8,   // 刀片旋转速度（弧度/秒）
     bladeAngleChange: 15,    // 每帧角度变化（螺旋效果，度）
-    cooldown: 0,            // 冷却时间（秒）
+    cooldown: 9,            // 冷却时间（秒）
     width: 104,
     height: 130
   }

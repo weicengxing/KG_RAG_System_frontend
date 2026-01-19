@@ -1108,6 +1108,21 @@ export class GameEngine {
             }
           }
         }
+      } else if (plant.type === 'dragonKale') {
+        // 龙葵草：发射螺旋刀片 + 冰龙
+        plant.attackTimer += deltaTime
+        
+        if (plant.attackTimer >= config.attackInterval) {
+          const row = Math.floor((plant.y + plant.height / 2) / gameConfig.cellHeight)
+          const hasZombie = this.hasZombieInRow(row, plant.x)
+          
+          if (hasZombie) {
+            plant.attackTimer = 0
+            // 发射螺旋刀片
+            this.projectileManager.shootDragonBlade(plant)
+            this.playSound('shoot')
+          }
+        }
       }
     }
   }

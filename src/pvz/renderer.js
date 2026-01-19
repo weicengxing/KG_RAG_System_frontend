@@ -458,8 +458,157 @@ export class Renderer {
   // 绘制子弹
   drawProjectiles(projectiles) {
     for (const projectile of projectiles) {
+      // 龙葵草刀片（螺旋旋转）
+      if (projectile.type === 'dragonBlade') {
+        this.ctx.save()
+        this.ctx.translate(projectile.x, projectile.y)
+        this.ctx.rotate(projectile.angle)
+        
+        // 绘制螺旋轨迹
+        if (projectile.trail && projectile.trail.length > 1) {
+          this.ctx.globalAlpha = 0.3
+          this.ctx.strokeStyle = '#60a5fa'
+          this.ctx.lineWidth = 2
+          this.ctx.beginPath()
+          for (let i = 0; i < projectile.trail.length; i++) {
+            const point = projectile.trail[i]
+            if (i === 0) {
+              this.ctx.moveTo(point.x - projectile.x, point.y - projectile.y)
+            } else {
+              this.ctx.lineTo(point.x - projectile.x, point.y - projectile.y)
+            }
+          }
+          this.ctx.stroke()
+          this.ctx.globalAlpha = 1
+        }
+        
+        // 绘制刀片（弯曲的半月形）
+        this.ctx.fillStyle = '#e2e8f0' // 银白色
+        
+        this.ctx.beginPath()
+        // 外弧
+        this.ctx.moveTo(-15, 0)
+        this.ctx.quadraticCurveTo(0, -10, 15, 0)
+        this.ctx.quadraticCurveTo(0, -5, -15, 0)
+        this.ctx.fill()
+        
+        // 刀片边缘（蓝色光效）
+        this.ctx.strokeStyle = '#3b82f6'
+        this.ctx.lineWidth = 2
+        this.ctx.stroke()
+        
+        // 刀片中心线
+        this.ctx.strokeStyle = '#94a3b8'
+        this.ctx.lineWidth = 1
+        this.ctx.beginPath()
+        this.ctx.moveTo(-15, 0)
+        this.ctx.lineTo(15, 0)
+        this.ctx.stroke()
+        
+        // 蓝色能量光晕
+        const pulse = Math.sin(Date.now() / 100) * 0.3 + 0.7
+        this.ctx.globalAlpha = 0.3 * pulse
+        const glowGradient = this.ctx.createRadialGradient(0, 0, 5, 0, 0, 20)
+        glowGradient.addColorStop(0, 'rgba(59, 130, 246, 0.8)')
+        glowGradient.addColorStop(1, 'rgba(59, 130, 246, 0)')
+        this.ctx.fillStyle = glowGradient
+        this.ctx.beginPath()
+        this.ctx.arc(0, 0, 20, 0, Math.PI * 2)
+        this.ctx.fill()
+        
+        this.ctx.restore()
+      }
+      // 冰龙（垂直下降）
+      else if (projectile.type === 'iceDragon') {
+        this.ctx.save()
+        this.ctx.translate(projectile.x, projectile.y)
+        this.ctx.rotate(projectile.rotation)
+        
+        // 绘制冰龙尾迹
+        if (projectile.trail && projectile.trail.length > 1) {
+          this.ctx.globalAlpha = 0.4
+          this.ctx.strokeStyle = '#93c5fd'
+          this.ctx.lineWidth = 3
+          this.ctx.setLineDash([5, 5])
+          this.ctx.beginPath()
+          for (let i = 0; i < projectile.trail.length; i++) {
+            const point = projectile.trail[i]
+            if (i === 0) {
+              this.ctx.moveTo(point.x - projectile.x, point.y - projectile.y)
+            } else {
+              this.ctx.lineTo(point.x - projectile.x, point.y - projectile.y)
+            }
+          }
+          this.ctx.stroke()
+          this.ctx.setLineDash([])
+          this.ctx.globalAlpha = 1
+        }
+        
+        // 绘制冰龙（蓝色龙形）
+        // 龙身
+        this.ctx.fillStyle = '#3b82f6'
+        this.ctx.beginPath()
+        this.ctx.ellipse(0, 0, 25, 15, 0, 0, Math.PI * 2)
+        this.ctx.fill()
+        
+        // 龙鳞纹理
+        this.ctx.fillStyle = '#60a5fa'
+        for (let i = 0; i < 5; i++) {
+          const angle = (i / 5) * Math.PI
+          const x = Math.cos(angle) * 15
+          const y = Math.sin(angle) * 8
+          this.ctx.beginPath()
+          this.ctx.arc(x, y, 4, 0, Math.PI * 2)
+          this.ctx.fill()
+        }
+        
+        // 龙头
+        this.ctx.fillStyle = '#2563eb'
+        this.ctx.beginPath()
+        this.ctx.moveTo(0, -18)
+        this.ctx.lineTo(-8, -28)
+        this.ctx.lineTo(0, -25)
+        this.ctx.lineTo(8, -28)
+        this.ctx.closePath()
+        this.ctx.fill()
+        
+        // 龙眼
+        this.ctx.fillStyle = '#ffffff'
+        this.ctx.beginPath()
+        this.ctx.arc(-3, -24, 2, 0, Math.PI * 2)
+        this.ctx.arc(3, -24, 2, 0, Math.PI * 2)
+        this.ctx.fill()
+        
+        // 龙翼
+        this.ctx.fillStyle = '#93c5fd'
+        this.ctx.globalAlpha = 0.8
+        this.ctx.beginPath()
+        this.ctx.moveTo(-20, -5)
+        this.ctx.quadraticCurveTo(-40, -25, -45, -10)
+        this.ctx.quadraticCurveTo(-35, 0, -20, 5)
+        this.ctx.fill()
+        
+        this.ctx.beginPath()
+        this.ctx.moveTo(20, -5)
+        this.ctx.quadraticCurveTo(40, -25, 45, -10)
+        this.ctx.quadraticCurveTo(35, 0, 20, 5)
+        this.ctx.fill()
+        
+        // 冰霜发光效果
+        this.ctx.globalAlpha = 0.4
+        const iceGlow = this.ctx.createRadialGradient(0, 0, 10, 0, 0, 40)
+        iceGlow.addColorStop(0, 'rgba(147, 197, 253, 0.8)')
+        iceGlow.addColorStop(0.5, 'rgba(59, 130, 246, 0.4)')
+        iceGlow.addColorStop(1, 'rgba(37, 99, 235, 0)')
+        this.ctx.fillStyle = iceGlow
+        this.ctx.beginPath()
+        this.ctx.arc(0, 0, 40, 0, Math.PI * 2)
+        this.ctx.fill()
+        
+        this.ctx.restore()
+      }
       // 西瓜子弹（抛物线，旋转）
-      if (projectile.type === 'watermelon' || projectile.type === 'iceWatermelon') {
+      else if (projectile.type === 'watermelon' || projectile.type === 'iceWatermelon') {
         this.ctx.save()
         this.ctx.translate(projectile.x, projectile.y)
         this.ctx.rotate(projectile.rotation || 0)
@@ -639,7 +788,282 @@ export class Renderer {
         
         this.ctx.restore()
       }
+      // 普通豌豆
+      else if (projectile.type === 'icePea' || projectile.type === 'pea') {
+        let bgColor, borderColor
+        if (projectile.type === 'icePea') {
+          bgColor = '#3b82f6' // 蓝色
+          borderColor = '#1d4ed8'
+        } else {
+          bgColor = '#22c55e' // 绿色
+          borderColor = '#16a34a'
+        }
+        
+        this.ctx.fillStyle = bgColor
+        this.ctx.beginPath()
+        this.ctx.arc(projectile.x, projectile.y, 8, 0, Math.PI * 2)
+        this.ctx.fill()
+        
+        // 绘制边框
+        this.ctx.strokeStyle = borderColor
+        this.ctx.lineWidth = 2
+        this.ctx.stroke()
+      }
+      // 火焰豌豆
+      else if (projectile.type === 'firePea') {
+        // 绘制火焰尾迹
+        const trailCount = 3
+        for (let i = 0; i < trailCount; i++) {
+          const trailAlpha = (trailCount - i) / trailCount * 0.4
+          const trailSize = 8 - i * 2
+          this.ctx.fillStyle = `rgba(255, 100, 0, ${trailAlpha})`
+          this.ctx.beginPath()
+          this.ctx.arc(projectile.x - i * 10, projectile.y, trailSize, 0, Math.PI * 2)
+          this.ctx.fill()
+        }
+        
+        // 绘制火焰豌豆主体（颜色渐变）
+        const gradient = this.ctx.createRadialGradient(
+          projectile.x - 2, projectile.y - 2, 0,
+          projectile.x, projectile.y, 10
+        )
+        gradient.addColorStop(0, '#ffff00') // 黄色核心
+        gradient.addColorStop(0.5, '#ff6b00') // 橙红色
+        gradient.addColorStop(1, '#ff0000') // 红色边缘
+        
+        this.ctx.fillStyle = gradient
+        this.ctx.beginPath()
+        this.ctx.arc(projectile.x, projectile.y, 8, 0, Math.PI * 2)
+        this.ctx.fill()
+        
+        // 绘制边框
+        this.ctx.strokeStyle = '#ff4500'
+        this.ctx.lineWidth = 2
+        this.ctx.stroke()
+        
+        // 添加发光效果
+        this.ctx.shadowColor = '#ff4500'
+        this.ctx.shadowBlur = 10
+        this.ctx.fillStyle = 'rgba(255, 69, 0, 0.3)'
+        this.ctx.beginPath()
+        this.ctx.arc(projectile.x, projectile.y, 12, 0, Math.PI * 2)
+        this.ctx.fill()
+        this.ctx.shadowBlur = 0
+      }
     }
+  }
+  
+  // 龙葵草刀片切割动画
+  drawBladeCutAnimation(anim, progress) {
+    const alpha = 1 - progress
+    const scale = 0.5 + progress * 1.5
+    
+    this.ctx.save()
+    this.ctx.globalAlpha = alpha
+    this.ctx.translate(anim.x, anim.y)
+    this.ctx.rotate(anim.angle || 0)
+    this.ctx.scale(scale, scale)
+    
+    // 绘制旋转切割效果（多个圆弧）
+    this.ctx.globalAlpha = 0.6
+    for (let i = 0; i < 4; i++) {
+      const angle = (i / 4) * Math.PI * 2 + progress * Math.PI
+      this.ctx.beginPath()
+      this.ctx.strokeStyle = '#60a5fa'
+      this.ctx.lineWidth = 3
+      this.ctx.arc(0, 0, 20 + i * 10, angle, angle + Math.PI / 2)
+      this.ctx.stroke()
+    }
+    
+    // 绘制切割闪光
+    this.ctx.globalAlpha = alpha
+    this.ctx.fillStyle = '#e2e8f0'
+    this.ctx.beginPath()
+    this.ctx.moveTo(-10, -10)
+    this.ctx.lineTo(10, 10)
+    this.ctx.lineWidth = 2
+    this.ctx.strokeStyle = '#3b82f6'
+    this.ctx.stroke()
+    
+    // 绘制蓝色能量粒子
+    const particleCount = 8
+    for (let i = 0; i < particleCount; i++) {
+      const angle = (i / particleCount) * Math.PI * 2 + progress * 5
+      const distance = 25 + progress * 15
+      const x = Math.cos(angle) * distance
+      const y = Math.sin(angle) * distance
+      const size = 3 + Math.random() * 2
+      
+      this.ctx.fillStyle = '#93c5fd'
+      this.ctx.beginPath()
+      this.ctx.arc(x, y, size, 0, Math.PI * 2)
+      this.ctx.fill()
+    }
+    
+    this.ctx.restore()
+  }
+  
+  // 破甲特效动画
+  drawShieldBreakAnimation(anim, progress) {
+    const alpha = 1 - progress
+    const scale = 0.5 + progress * 2
+    
+    this.ctx.save()
+    this.ctx.globalAlpha = alpha
+    this.ctx.translate(anim.x, anim.y)
+    this.ctx.scale(scale, scale)
+    
+    // 绘制金色破甲效果
+    this.ctx.strokeStyle = '#fbbf24'
+    this.ctx.lineWidth = 4
+    
+    // 绘制破裂的护盾碎片
+    for (let i = 0; i < 6; i++) {
+      const angle = (i / 6) * Math.PI * 2
+      const distance = 20 + progress * 30
+      const x = Math.cos(angle) * distance
+      const y = Math.sin(angle) * distance
+      
+      this.ctx.beginPath()
+      this.ctx.moveTo(0, 0)
+      this.ctx.lineTo(x, y)
+      this.ctx.stroke()
+      
+      // 碎片
+      this.ctx.fillStyle = '#fbbf24'
+      this.ctx.beginPath()
+      this.ctx.arc(x, y, 5, 0, Math.PI * 2)
+      this.ctx.fill()
+    }
+    
+    // 绘制中心闪光
+    this.ctx.globalAlpha = alpha * 0.8
+    const glowGradient = this.ctx.createRadialGradient(0, 0, 0, 0, 0, 30)
+    glowGradient.addColorStop(0, 'rgba(251, 191, 36, 0.9)')
+    glowGradient.addColorStop(0.5, 'rgba(251, 191, 36, 0.5)')
+    glowGradient.addColorStop(1, 'rgba(251, 191, 36, 0)')
+    this.ctx.fillStyle = glowGradient
+    this.ctx.beginPath()
+    this.ctx.arc(0, 0, 30, 0, Math.PI * 2)
+    this.ctx.fill()
+    
+    // 绘制"破甲"文字
+    if (progress < 0.5) {
+      this.ctx.globalAlpha = (1 - progress / 0.5) * alpha
+      this.ctx.font = 'bold 20px Arial'
+      this.ctx.textAlign = 'center'
+      this.ctx.textBaseline = 'middle'
+      this.ctx.fillStyle = '#fbbf24'
+      this.ctx.fillText('💥 破甲!', 0, 0)
+    }
+    
+    this.ctx.restore()
+  }
+  
+  // 冰龙爆炸动画
+  drawIceDragonExplodeAnimation(anim, progress) {
+    const alpha = 1 - progress
+    const scale = 1 + progress * 4
+    
+    this.ctx.save()
+    this.ctx.translate(anim.x, anim.y)
+    this.ctx.scale(scale, scale)
+    
+    // 1. 绘制中心冰冻效果
+    const coreAlpha = Math.max(0, 1 - progress * 1.5)
+    this.ctx.globalAlpha = coreAlpha
+    
+    const iceGradient = this.ctx.createRadialGradient(0, 0, 0, 0, 0, 40)
+    iceGradient.addColorStop(0, 'rgba(255, 255, 255, 0.9)')
+    iceGradient.addColorStop(0.3, 'rgba(147, 197, 253, 0.8)')
+    iceGradient.addColorStop(0.6, 'rgba(59, 130, 246, 0.6)')
+    iceGradient.addColorStop(1, 'rgba(37, 99, 235, 0)')
+    
+    this.ctx.fillStyle = iceGradient
+    this.ctx.beginPath()
+    this.ctx.arc(0, 0, 40, 0, Math.PI * 2)
+    this.ctx.fill()
+    
+    // 2. 绘制多层冰晶圆环
+    this.ctx.globalAlpha = alpha * 0.6
+    for (let i = 0; i < 4; i++) {
+      const ringRadius = 30 + i * 15 + progress * 20
+      const ringAlpha = Math.max(0, 0.6 - i * 0.1)
+      
+      this.ctx.strokeStyle = `rgba(147, 197, 253, ${ringAlpha})`
+      this.ctx.lineWidth = 3 - i * 0.5
+      
+      // 绘制六边形冰晶
+      this.ctx.beginPath()
+      for (let j = 0; j <= 6; j++) {
+        const angle = (j / 6) * Math.PI * 2 - Math.PI / 2
+        const x = Math.cos(angle) * ringRadius
+        const y = Math.sin(angle) * ringRadius
+        
+        if (j === 0) {
+          this.ctx.moveTo(x, y)
+        } else {
+          this.ctx.lineTo(x, y)
+        }
+      }
+      this.ctx.closePath()
+      this.ctx.stroke()
+    }
+    
+    // 3. 绘制冰霜粒子
+    this.ctx.globalAlpha = alpha * 0.8
+    const particleCount = 12
+    for (let i = 0; i < particleCount; i++) {
+      const angle = (i / particleCount) * Math.PI * 2 + progress * 5
+      const distance = 30 + progress * 60 * (0.5 + Math.random() * 0.5)
+      const x = Math.cos(angle) * distance
+      const y = Math.sin(angle) * distance
+      const size = 4 + Math.random() * 4
+      
+      // 绘制六边形冰晶粒子
+      this.ctx.fillStyle = '#bfdbfe'
+      this.ctx.beginPath()
+      for (let j = 0; j <= 6; j++) {
+        const hexAngle = (j / 6) * Math.PI * 2 - Math.PI / 2
+        const hx = x + Math.cos(hexAngle) * size
+        const hy = y + Math.sin(hexAngle) * size
+        
+        if (j === 0) {
+          this.ctx.moveTo(hx, hy)
+        } else {
+          this.ctx.lineTo(hx, hy)
+        }
+      }
+      this.ctx.closePath()
+      this.ctx.fill()
+    }
+    
+    // 4. 绘制冻结效果（中心如果是主爆炸点）
+    if (anim.isCenter) {
+      this.ctx.globalAlpha = alpha * 0.5
+      
+      // 绘制冰霜覆盖层
+      const frostGradient = this.ctx.createRadialGradient(0, 0, 0, 0, 0, 80)
+      frostGradient.addColorStop(0, 'rgba(255, 255, 255, 0.6)')
+      frostGradient.addColorStop(0.5, 'rgba(147, 197, 253, 0.4)')
+      frostGradient.addColorStop(1, 'rgba(59, 130, 246, 0)')
+      
+      this.ctx.fillStyle = frostGradient
+      this.ctx.beginPath()
+      this.ctx.arc(0, 0, 80, 0, Math.PI * 2)
+      this.ctx.fill()
+      
+      // 绘制冻结符号
+      if (progress < 0.6) {
+        this.ctx.globalAlpha = (1 - progress / 0.6) * alpha
+        this.ctx.font = 'bold 48px Arial'
+        this.ctx.textAlign = 'center'
+        this.ctx.textBaseline = 'middle'
+        this.ctx.fillText('❄️', 0, 0)
+      }
+    }
+    
+    this.ctx.restore()
   }
   
   // 火爆辣椒爆炸动画（整行波浪形火焰）
@@ -868,8 +1292,17 @@ export class Renderer {
         case 'squashHit':
           this.drawSquashHitAnimation(anim, progress)
           break
-      case 'potatoMineExplode':
+        case 'potatoMineExplode':
           this.drawPotatoMineExplodeAnimation(anim, progress)
+          break
+        case 'bladeCut':
+          this.drawBladeCutAnimation(anim, progress)
+          break
+        case 'shieldBreak':
+          this.drawShieldBreakAnimation(anim, progress)
+          break
+        case 'iceDragonExplode':
+          this.drawIceDragonExplodeAnimation(anim, progress)
           break
         case 'lightningSurround':
           LightningRenderer.drawLightningSurround(this.ctx, anim, progress)

@@ -227,6 +227,25 @@ export const plantConfig = {
     cooldown: 8,         // 冷却时间（秒）
     width: 104,
     height: 130
+  },
+  dragonKale: {
+    id: 'dragonKale',
+    name: '龙葵草',
+    icon: '🐉',
+    cost: 400,               // 高消耗
+    hp: 400,
+    attackInterval: 5,       // 攻击间隔（秒）
+    bladeDamage: 10,         // 刀片伤害
+    bladeCount: 3,           // 刀片数量
+    shieldDamageMultiplier: 2.0,  // 护盾伤害倍数（破甲效果）
+    dragonDamage: 50,       // 冰龙伤害
+    dragonRadius: 150,       // 冰龙伤害范围（像素）
+    bladeSpeed: 12,          // 刀片飞行速度（像素/帧）
+    bladeRotationSpeed: 8,   // 刀片旋转速度（弧度/秒）
+    bladeAngleChange: 15,    // 每帧角度变化（螺旋效果，度）
+    cooldown: 0,            // 冷却时间（秒）
+    width: 104,
+    height: 130
   }
 }
 

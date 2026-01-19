@@ -68,8 +68,310 @@ export class ProjectileManager {
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const projectile = this.projectiles[i]
       
+      // 如果是龙葵草刀片，使用螺旋运动
+      if (projectile.type === 'dragonBlade') {
+        // 更新旋转角度
+        projectile.angle += projectile.rotationSpeed * deltaTime
+        
+        // 更新生命周期
+        projectile.lifeTime -= deltaTime
+        projectile.damageTimer -= deltaTime
+        
+        // 阶段1：接近僵尸（三角包抄）
+        if (projectile.phase === 'approaching') {
+          if (projectile.targetZombie) {
+            // 向量追踪目标
+            const targetCenter = {
+              x: projectile.targetZombie.x + projectile.targetZombie.width / 2,
+              y: projectile.targetZombie.y + projectile.targetZombie.height / 2
+            }
+            
+            const dx = targetCenter.x - projectile.x
+            const dy = targetCenter.y - projectile.y
+            const dist = Math.hypot(dx, dy) || 1
+            
+            const step = projectile.speed * deltaTime * 60
+            
+            // 三角包抄：距离目标 > 150px 时添加侧向偏移
+            const biasDist = 150
+            if (dist > biasDist) {
+              const biasSpeed = projectile.speed * 0.6
+              // 主追踪方向
+              projectile.x += (dx / dist) * step
+              projectile.y += (dy / dist) * step
+              // 添加基于 angleOffset 的侧向偏移
+              projectile.x += Math.cos(projectile.angleOffset) * deltaTime * biasSpeed * 60
+              projectile.y += Math.sin(projectile.angleOffset) * deltaTime * biasSpeed * 60
+            } else {
+              // 靠近目标后直接追踪，取消侧向偏移以便收敛
+              projectile.x += (dx / dist) * step
+              projectile.y += (dy / dist) * step
+            }
+            
+            // 到达目标附近，开始穿刺
+            if (dist < projectile.pierceDistance * 1.5) {
+              projectile.phase = 'piercing'
+              
+              // 计算入射方向（从刀片位置到僵尸中心的方向）
+              const toZombie = {
+                x: targetCenter.x - projectile.x,
+                y: targetCenter.y - projectile.y
+              }
+              const dirLength = Math.hypot(toZombie.x, toZombie.y) || 1
+              projectile.pierceDir = {
+                x: toZombie.x / dirLength,
+                y: toZombie.y / dirLength
+              }
+              
+              // 初始化穿刺参数
+              projectile.pierceIndex = 0 // 0→1→2 (共3次穿刺)
+              projectile.pierceTimer = 0
+              projectile.pierceTime = 3.0 // 单次穿刺时间（秒）- 慢10倍
+              projectile.pierceDistance = 100 // 穿刺距离
+            }
+          } else {
+            // 没有目标，向右飞出屏幕
+            projectile.x += projectile.speed * deltaTime * 60
+            if (projectile.x > this.engine.width) {
+              this.markBladeComplete(projectile)
+              this.projectiles.splice(i, 1)
+              continue
+            }
+          }
+        }
+        // 阶段2：穿刺往返（螺旋穿刺模型 - 改进版：锁定端点和段中心）
+        else if (projectile.phase === 'piercing') {
+          // 取中心：目标在就用实时中心，否则用 lastCenter
+          const liveCenter = projectile.targetZombie
+            ? {
+                x: projectile.targetZombie.x + projectile.targetZombie.width / 2,
+                y: projectile.targetZombie.y + projectile.targetZombie.height / 2
+              }
+            : projectile.lastCenter
+
+          if (!liveCenter) {
+            projectile.phase = 'escaping'
+            continue
+          }
+
+          // 更新 lastCenter，保证目标消失也能继续演出
+          projectile.lastCenter = liveCenter
+
+          // 初始化一次
+          if (!projectile.pierceInitialized) {
+            projectile.pierceInitialized = true
+            projectile.pierceIndex = projectile.pierceIndex ?? 0
+            projectile.pierceTimer = projectile.pierceTimer ?? 0
+
+            projectile.pierceDistance = 60
+            projectile.pierceTime = 3.0
+            projectile.pauseTime = 1.0
+            projectile.maxPierces = 3
+
+            projectile.isPaused = false
+            projectile.pauseTimer = 0
+
+            projectile.pierceSegmentLocked = false
+          }
+
+          // 目标消失：继续表演（方案B：更爽）
+          if (projectile.targetZombie) {
+            const zombieIndex = this.engine.zombies.indexOf(projectile.targetZombie)
+            if (zombieIndex === -1) {
+              projectile.targetZombie = null
+            }
+          }
+
+          // 暂停处理
+          if (projectile.isPaused) {
+            projectile.pauseTimer += deltaTime
+            if (projectile.pauseTimer >= projectile.pauseTime) {
+              projectile.pauseTimer = 0
+              projectile.isPaused = false
+              projectile.pierceTimer = 0
+
+              projectile.pierceIndex += 1
+
+              if (projectile.pierceIndex >= projectile.maxPierces) {
+                projectile.phase = 'escaping'
+                continue
+              }
+
+              // 下一段重新锁定端点
+              projectile.pierceSegmentLocked = false
+            }
+            continue
+          }
+
+          // 每段开始时锁定相对偏移（只做一次）
+          if (!projectile.pierceSegmentLocked) {
+            projectile.pierceSegmentLocked = true
+
+            const d = projectile.pierceDistance
+            if (projectile.pierceIndex % 2 === 0) {
+              projectile.pierceStartOffsetX = -d
+              projectile.pierceEndOffsetX = d
+            } else {
+              projectile.pierceStartOffsetX = d
+              projectile.pierceEndOffsetX = -d
+            }
+
+            // Y 基准偏移（可选）
+            projectile.pierceBaseOffsetY = 0
+          }
+
+          // 推进本段
+          projectile.pierceTimer += deltaTime
+          const t = Math.min(projectile.pierceTimer / projectile.pierceTime, 1)
+
+          // 相对穿刺偏移
+          const offsetX = projectile.pierceStartOffsetX + 
+            (projectile.pierceEndOffsetX - projectile.pierceStartOffsetX) * t
+
+          // 螺旋扰动（相对）- 加入相位偏移让三把刀保持120°角差
+          const amplitude = 20
+          const frequency = 2 + projectile.pierceIndex
+          const theta = t * Math.PI * frequency + projectile.orbitPhase * 2 * Math.PI
+
+          const spiralX = Math.cos(theta) * (amplitude * 0.2)
+          const spiralY = Math.sin(theta) * amplitude
+
+          // 最终位置：实时中心 + 相对偏移
+          projectile.x = liveCenter.x + offsetX + spiralX
+          projectile.y = liveCenter.y + (projectile.pierceBaseOffsetY || 0) + spiralY
+
+          // 额外角速度（保持你原本的设定）
+          const config = plantConfig.dragonKale
+          projectile.angle += config.bladeAngleChange * deltaTime
+
+          if (t >= 1) {
+            // 本段结算：使用实时中心（跟着僵尸走）
+            this.applyPierceAOE(projectile, liveCenter, projectile.aoeRadius || 80)
+
+            // 标记段末，避免同一帧重复伤害
+            projectile.justEndedSegment = true
+
+            // 进入停顿
+            projectile.isPaused = true
+            projectile.pauseTimer = 0
+          }
+        }
+        // 阶段3：逃离
+        else if (projectile.phase === 'escaping') {
+          projectile.x += projectile.speed * deltaTime * 60
+          if (projectile.x > this.engine.width) {
+            this.markBladeComplete(projectile)
+            this.projectiles.splice(i, 1)
+            continue
+          }
+        }
+        
+        // 生命周期结束，标记完成并移除
+        if (projectile.lifeTime <= 0) {
+          this.markBladeComplete(projectile)
+          this.projectiles.splice(i, 1)
+          continue
+        }
+        
+        // 记录轨迹
+        projectile.trail.push({ x: projectile.x, y: projectile.y })
+        if (projectile.trail.length > projectile.maxTrailLength) {
+          projectile.trail.shift()
+        }
+        
+        // 检测碰撞（在穿刺阶段实时检测）
+        if (projectile.phase === 'piercing' && projectile.damageTimer <= 0) {
+          // 跳过段末那一帧，避免AOE和碰撞伤害重叠
+          if (projectile.justEndedSegment) {
+            projectile.justEndedSegment = false
+            continue
+          }
+          
+          for (const zombie of this.engine.zombies) {
+            const zombieCenterX = zombie.x + zombie.width / 2
+            const zombieCenterY = zombie.y + zombie.height / 2
+            
+            const distance = Math.sqrt(
+              (projectile.x - zombieCenterX) ** 2 + 
+              (projectile.y - zombieCenterY) ** 2
+            )
+            
+            const collisionRadius = 25
+            if (distance < collisionRadius) {
+              // 破甲效果：对护盾造成双倍伤害
+              if (zombie.shieldHp > 0) {
+                zombie.shieldHp -= projectile.damage * projectile.shieldDamageMultiplier
+                if (zombie.shieldHp < 0) {
+                  zombie.hp += zombie.shieldHp
+                  zombie.shieldHp = 0
+                }
+                
+                // 添加破甲特效
+                this.engine.animations.push({
+                  type: 'shieldBreak',
+                  x: zombieCenterX,
+                  y: zombieCenterY,
+                  time: 0,
+                  duration: 0.3
+                })
+              } else {
+                zombie.hp -= projectile.damage
+              }
+              
+              this.engine.playSound('hit')
+              
+              // 添加切割动画
+              this.engine.animations.push({
+                type: 'bladeCut',
+                x: zombieCenterX,
+                y: zombieCenterY,
+                angle: projectile.angle,
+                time: 0,
+                duration: 0.4
+              })
+              
+              // 重置伤害冷却
+              projectile.damageTimer = projectile.damageCooldown
+              
+              // 标记已造成伤害
+              if (!projectile.hasHitDuringOrbit) {
+                projectile.hasHitDuringOrbit = true
+              }
+              
+              break
+            }
+          }
+        }
+        
+        // 处理完dragonBlade后跳过后续的通用更新逻辑
+        continue
+      }
+      // 如果是冰龙，使用垂直下降
+      else if (projectile.type === 'iceDragon') {
+        projectile.phaseTimer += deltaTime
+        
+        // 垂直下降
+        projectile.y += projectile.vy * deltaTime
+        
+        // 更新旋转角度
+        projectile.rotation += 2 * deltaTime
+        
+        // 记录尾迹
+        projectile.trail.push({ x: projectile.x, y: projectile.y })
+        if (projectile.trail.length > 20) {
+          projectile.trail.shift()
+        }
+        
+        // 检查是否到达目标位置
+        if (projectile.y >= projectile.targetY || projectile.phaseTimer >= projectile.fallTime) {
+          // 冰龙爆炸
+          this.explodeIceDragon(projectile)
+          this.projectiles.splice(i, 1)
+          continue
+        }
+      }
       // 如果是玉米加农炮炮弹，使用两段式动画
-      if (projectile.type === 'cannon') {
+      else if (projectile.type === 'cannon') {
         projectile.phaseTimer += deltaTime
         
         // 更新旋转角度
@@ -128,7 +430,7 @@ export class ProjectileManager {
       }
       
       // 检查是否飞出屏幕（普通子弹）
-      if (projectile.type !== 'cannon' && projectile.x > this.engine.width + 100) {
+      if (projectile.type !== 'cannon' && projectile.type !== 'dragonBlade' && projectile.x > this.engine.width + 100) {
         this.projectiles.splice(i, 1)
         continue
       }
@@ -143,108 +445,187 @@ export class ProjectileManager {
       // 检测是否经过冒火树桩并增强子弹
       this.checkFireStumpEnhancement(projectile)
       
-      // 碰撞检测
-      let hit = false
-      for (const zombie of this.engine.zombies) {
-        const zombieRow = Math.floor((zombie.y + zombie.height / 2) / gameConfig.cellHeight)
-        const zombieCenterY = zombie.y + zombie.height / 2
-        const zombieCenterX = zombie.x + zombie.width / 2
-        
-        // 碰撞检测
-        const distance = Math.sqrt(
-          (projectile.x - zombieCenterX) ** 2 + 
-          (projectile.y - zombieCenterY) ** 2
-        )
-        
-        // 普通豌豆和火焰豌豆只检测同一行
-        if (['pea', 'firePea'].includes(projectile.type)) {
-          if (zombieRow === projectile.row && 
-              projectile.x >= zombie.x && 
-              projectile.x <= zombie.x + zombie.width) {
-            
-            if (zombie.shieldHp > 0) {
-              zombie.shieldHp -= projectile.damage
-              if (zombie.shieldHp < 0) {
-                zombie.hp += zombie.shieldHp
-                zombie.shieldHp = 0
-              }
-            } else {
-              zombie.hp -= projectile.damage
-            }
-            
-            this.engine.playSound('hit')
-            hit = true
-            break
-          }
-        } 
-        // 寒冰豌豆
-        else if (projectile.type === 'icePea') {
-          if (zombieRow === projectile.row && 
-              projectile.x >= zombie.x && 
-              projectile.x <= zombie.x + zombie.width) {
-            
-            if (zombie.shieldHp > 0) {
-              zombie.shieldHp -= projectile.damage
-              if (zombie.shieldHp < 0) {
-                zombie.hp += zombie.shieldHp
-                zombie.shieldHp = 0
-              }
-            } else {
-              zombie.hp -= projectile.damage
-            }
-            
-            zombie.slowDuration = projectile.slowDuration || 3
-            zombie.slowFactor = projectile.slowFactor || 0.5
-            
-            this.engine.playSound('hit')
-            hit = true
-            break
-          }
-        }
-        // 西瓜使用圆形碰撞检测
-        else if (projectile.type === 'watermelon' || projectile.type === 'iceWatermelon') {
-          const collisionRadius = projectile.collisionRadius || 80
-          if (distance < collisionRadius) {
-            if (zombie.shieldHp > 0) {
-              zombie.shieldHp -= projectile.damage
-              if (zombie.shieldHp < 0) {
-                zombie.hp += zombie.shieldHp
-                zombie.shieldHp = 0
-              }
-            } else {
-              zombie.hp -= projectile.damage
-            }
-            
-            if (projectile.type === 'iceWatermelon') {
-              zombie.slowDuration = projectile.slowDuration || 3
-              zombie.slowFactor = projectile.slowFactor || 0.5
-            }
-            
-            this.engine.playSound('hit')
-            
-            // 添加西瓜破碎动画
-            this.engine.animations.push({
-              type: 'watermelonHit',
-              x: zombieCenterX,
-              y: zombieCenterY,
-              isIce: projectile.type === 'iceWatermelon',
-              time: 0,
-              duration: 0.4
-            })
-            
-            hit = true
-            break
-          }
-        }
-      }
-      
-      if (hit) {
-        this.projectiles.splice(i, 1)
+      // 碰撞检测（非龙葵草刀片）
+      if (projectile.type !== 'dragonBlade') {
+        this.checkNonBladeCollision(projectile, i)
       }
     }
     
     // 更新金箍棒
     this.updateWeaponStaffs(deltaTime)
+  }
+  
+  // 检查非刀片子弹的碰撞
+  checkNonBladeCollision(projectile, index) {
+    let hit = false
+    for (const zombie of this.engine.zombies) {
+      const zombieRow = Math.floor((zombie.y + zombie.height / 2) / gameConfig.cellHeight)
+      const zombieCenterY = zombie.y + zombie.height / 2
+      const zombieCenterX = zombie.x + zombie.width / 2
+      
+      // 碰撞检测
+      const distance = Math.sqrt(
+        (projectile.x - zombieCenterX) ** 2 + 
+        (projectile.y - zombieCenterY) ** 2
+      )
+      
+      // 普通豌豆和火焰豌豆只检测同一行
+      if (['pea', 'firePea'].includes(projectile.type)) {
+        if (zombieRow === projectile.row && 
+            projectile.x >= zombie.x && 
+            projectile.x <= zombie.x + zombie.width) {
+          
+          if (zombie.shieldHp > 0) {
+            zombie.shieldHp -= projectile.damage
+            if (zombie.shieldHp < 0) {
+              zombie.hp += zombie.shieldHp
+              zombie.shieldHp = 0
+            }
+          } else {
+            zombie.hp -= projectile.damage
+          }
+          
+          this.engine.playSound('hit')
+          hit = true
+          break
+        }
+      } 
+      // 寒冰豌豆
+      else if (projectile.type === 'icePea') {
+        if (zombieRow === projectile.row && 
+            projectile.x >= zombie.x && 
+            projectile.x <= zombie.x + zombie.width) {
+          
+          if (zombie.shieldHp > 0) {
+            zombie.shieldHp -= projectile.damage
+            if (zombie.shieldHp < 0) {
+              zombie.hp += zombie.shieldHp
+              zombie.shieldHp = 0
+            }
+          } else {
+            zombie.hp -= projectile.damage
+          }
+          
+          zombie.slowDuration = projectile.slowDuration || 3
+          zombie.slowFactor = projectile.slowFactor || 0.5
+          
+          this.engine.playSound('hit')
+          hit = true
+          break
+        }
+      }
+      // 西瓜使用圆形碰撞检测
+      else if (projectile.type === 'watermelon' || projectile.type === 'iceWatermelon') {
+        const collisionRadius = projectile.collisionRadius || 80
+        if (distance < collisionRadius) {
+          if (zombie.shieldHp > 0) {
+            zombie.shieldHp -= projectile.damage
+            if (zombie.shieldHp < 0) {
+              zombie.hp += zombie.shieldHp
+              zombie.shieldHp = 0
+            }
+          } else {
+            zombie.hp -= projectile.damage
+          }
+          
+          if (projectile.type === 'iceWatermelon') {
+            zombie.slowDuration = projectile.slowDuration || 3
+            zombie.slowFactor = projectile.slowFactor || 0.5
+          }
+          
+          this.engine.playSound('hit')
+          
+          // 添加西瓜破碎动画
+          this.engine.animations.push({
+            type: 'watermelonHit',
+            x: zombieCenterX,
+            y: zombieCenterY,
+            isIce: projectile.type === 'iceWatermelon',
+            time: 0,
+            duration: 0.4
+          })
+          
+          hit = true
+          break
+        }
+      }
+    }
+    
+    if (hit) {
+      this.projectiles.splice(index, 1)
+    }
+  }
+  
+  // 应用穿刺AOE范围伤害
+  applyPierceAOE(projectile, center, radius) {
+    const aoeRadius = radius || 80
+    
+    // 对范围内的所有僵尸造成伤害
+    for (let i = this.engine.zombies.length - 1; i >= 0; i--) {
+      const zombie = this.engine.zombies[i]
+      const zombieCenterX = zombie.x + zombie.width / 2
+      const zombieCenterY = zombie.y + zombie.height / 2
+      
+      const distance = Math.sqrt(
+        (zombieCenterX - center.x) ** 2 + 
+        (zombieCenterY - center.y) ** 2
+      )
+      
+      if (distance <= aoeRadius) {
+        // 造成伤害
+        if (zombie.shieldHp > 0) {
+          zombie.shieldHp -= projectile.damage * projectile.shieldDamageMultiplier
+          if (zombie.shieldHp < 0) {
+            zombie.hp += zombie.shieldHp
+            zombie.shieldHp = 0
+          }
+        } else {
+          zombie.hp -= projectile.damage
+        }
+        
+        this.engine.playSound('hit')
+        
+        // 添加穿刺动画
+        this.engine.animations.push({
+          type: 'bladeCut',
+          x: zombieCenterX,
+          y: zombieCenterY,
+          angle: projectile.angle,
+          time: 0,
+          duration: 0.3
+        })
+        
+        // 检查僵尸是否死亡
+        if (zombie.hp <= 0) {
+          this.engine.zombies.splice(i, 1)
+          this.engine.score += 10
+          this.engine.zombiesKilled++
+          this.engine.playSound('zombieDeath')
+          this.engine.addDeathAnimation(zombie.x, zombie.y)
+        }
+      }
+    }
+  }
+
+  // 标记刀片完成（用于召唤冰龙）
+  markBladeComplete(projectile) {
+    if (!projectile.hasCompleted && projectile.originPlant) {
+      projectile.hasCompleted = true
+      
+      if (projectile.originPlant.completedBladeCount !== undefined) {
+        projectile.originPlant.completedBladeCount++
+        
+        // 检查是否所有刀片都完成
+        if (projectile.originPlant.completedBladeCount >= projectile.originPlant.totalBladeCount) {
+          // 召唤冰龙
+          this.summonIceDragon(projectile.originPlant)
+          
+          // 重置计数
+          projectile.originPlant.totalBladeCount = 0
+          projectile.originPlant.completedBladeCount = 0
+        }
+      }
+    }
   }
 
   // 检查子弹是否经过冒火树桩并增强
@@ -657,6 +1038,228 @@ export class ProjectileManager {
     
   }
 
+  // 龙葵草：发射螺旋刀片
+  shootDragonBlade(plant) {
+    const config = plantConfig.dragonKale
+    
+    // 添加发射动画
+    this.engine.animations.push({
+      type: 'dragonBladeLaunch',
+      x: plant.x + plant.width / 2,
+      y: plant.y + plant.height / 2,
+      time: 0,
+      duration: 0.5
+    })
+    
+    // 找到同一行中最近的僵尸作为目标
+    const nearestZombie = this.engine.findNearestZombieInRow(plant.row, plant.x)
+    
+    // 发射三枚刀片，每个刀片有不同的初始角度和独立的身份标签
+    for (let i = 0; i < config.bladeCount; i++) {
+      const initialAngle = (i / config.bladeCount) * Math.PI * 2 // 0°, 120°, 240°
+      const spread = 18 // 初始散开距离
+      
+      // 身份标签 - 每个刀片独立
+      const angleOffset = (i * 120) * Math.PI / 180 // 角度偏移：0°, 120°, 240° 转为弧度
+      const orbitPhase = i / config.bladeCount // 轨道相位：0, 1/3, 2/3
+      
+      // 初始位置径向外放 30px，增加视觉区分度
+      const startX = plant.x + plant.width + Math.cos(initialAngle) * 30
+      const startY = plant.y + plant.height / 2 + Math.sin(initialAngle) * (spread + 30)
+      
+      const blade = {
+        x: startX,
+        y: startY,
+        type: 'dragonBlade',
+        
+        // 身份标签（用于独立运动轨迹）
+        bladeId: i, // 0, 1, 2
+        angleOffset: angleOffset, // 角度偏移：0°, 120°, 240° 弧度
+        orbitPhase: orbitPhase, // 轨道相位：0, 1/3, 2/3
+        
+        damage: config.bladeDamage,
+        shieldDamageMultiplier: config.shieldDamageMultiplier,
+        
+        // 穿刺系统参数（新）
+        pierceDir: { x: 0, y: 0 }, // 入射方向（在approaching结束时计算）
+        pierceIndex: 0, // 穿刺次数（0→1→2，共3次）
+        pierceTimer: 0, // 当前穿刺计时
+        pierceTime: 3.0, // 单次穿刺时间（秒）- 慢10倍
+        pierceDistance: 100, // 穿刺距离
+        aoeRadius: 80, // AOE范围半径
+        
+        // 运动参数
+        angle: initialAngle,
+        rotationSpeed: config.bladeRotationSpeed,
+        speed: config.bladeSpeed,
+        
+        // 生命周期
+        lifeTime: 3.0, // 刀片存在时间（秒）
+        maxLifeTime: 3.0,
+        damageCooldown: 0.2, // 造成伤害的冷却时间（秒）
+        damageTimer: 0,
+        
+        // 轨迹记录
+        trail: [],
+        maxTrailLength: 30,
+        
+        // 状态
+        phase: 'approaching', // approaching(接近), piercing(穿刺往返), escaping(逃离)
+        targetZombie: nearestZombie,
+        
+        // 标记
+        hasHitDuringOrbit: false,
+        hasCompleted: false,
+        
+        // 植物引用，用于召唤冰龙
+        originPlant: plant
+      }
+      
+      this.projectiles.push(blade)
+    }
+    
+    // 记录本次发射的刀片总数，用于检测何时召唤冰龙
+    if (!plant.totalBladeCount) {
+      plant.totalBladeCount = 0
+    }
+    plant.totalBladeCount += config.bladeCount
+    
+    if (!plant.completedBladeCount) {
+      plant.completedBladeCount = 0
+    }
+  }
+  
+  // 龙葵草：召唤冰龙
+  summonIceDragon(plant) {
+    const config = plantConfig.dragonKale
+    
+    // 找到该行中最近的僵尸
+    const nearestZombie = this.engine.findNearestZombieInRow(plant.row, plant.x)
+    
+    let targetX, targetY
+    if (nearestZombie) {
+      targetX = nearestZombie.x + nearestZombie.width / 2
+      targetY = nearestZombie.y + nearestZombie.height / 2
+    } else {
+      // 如果没有僵尸，默认攻击该行中间位置
+      targetX = this.engine.width / 2
+      targetY = plant.y + plant.height / 2
+    }
+    
+    // 计算天空高度（屏幕上方）
+    const skyAboveHeight = 100
+    const skyY = -skyAboveHeight
+    
+    // 下降阶段的参数
+    const fallSpeed = 400
+    const fallDistance = targetY - skyY
+    const fallTime = fallDistance / fallSpeed
+    
+    const dragon = {
+      x: targetX,
+      y: skyY,
+      type: 'iceDragon',
+      phase: 'falling',
+      vy: fallSpeed,
+      damage: config.dragonDamage,
+      explodeRadius: config.dragonRadius,
+      targetX: targetX,
+      targetY: targetY,
+      phaseTimer: 0,
+      fallTime: fallTime,
+      rotation: 0,
+      scale: 1,
+      trail: []
+    }
+    
+    this.projectiles.push(dragon)
+    
+    // 添加召唤动画
+    this.engine.animations.push({
+      type: 'iceDragonSummon',
+      x: targetX,
+      y: skyY,
+      time: 0,
+      duration: fallTime
+    })
+    
+    this.engine.playSound('shoot')
+    this.engine.showMessage('🐉 冰龙降临！', '#3b82f6')
+  }
+  
+  // 冰龙爆炸
+  explodeIceDragon(projectile) {
+    const centerX = projectile.targetX
+    const centerY = projectile.targetY
+    const explodeRadius = projectile.explodeRadius
+    
+    // 对爆炸范围内的所有僵尸造成伤害
+    for (let i = this.engine.zombies.length - 1; i >= 0; i--) {
+      const zombie = this.engine.zombies[i]
+      const zombieCenterX = zombie.x + zombie.width / 2
+      const zombieCenterY = zombie.y + zombie.height / 2
+      
+      const distance = Math.sqrt(
+        (zombieCenterX - centerX) ** 2 + (zombieCenterY - centerY) ** 2
+      )
+      
+      if (distance <= explodeRadius) {
+        // 造成伤害
+        if (zombie.shieldHp > 0) {
+          zombie.shieldHp -= projectile.damage
+          if (zombie.shieldHp < 0) {
+            zombie.hp += zombie.shieldHp
+            zombie.shieldHp = 0
+          }
+        } else {
+          zombie.hp -= projectile.damage
+        }
+        
+        // 冻结效果
+        zombie.slowDuration = 3
+        zombie.slowFactor = 0.3
+        
+        this.engine.playSound('hit')
+        
+        // 添加冰冻动画
+        this.engine.animations.push({
+          type: 'iceDragonExplode',
+          x: zombieCenterX,
+          y: zombieCenterY,
+          time: 0,
+          duration: 0.6
+        })
+        
+        // 检查僵尸是否死亡
+        if (zombie.hp <= 0) {
+          this.engine.zombies.splice(i, 1)
+          this.engine.score += 10
+          this.engine.zombiesKilled++
+          
+          if (i < this.engine.zombies.length) {
+            continue
+          }
+          
+          this.engine.playSound('zombieDeath')
+          this.engine.addDeathAnimation(zombie.x, zombie.y)
+        }
+      }
+    }
+    
+    // 播放爆炸音效
+    this.engine.playSound('explode')
+    
+    // 添加中心爆炸动画
+    this.engine.animations.push({
+      type: 'iceDragonExplode',
+      x: centerX,
+      y: centerY,
+      time: 0,
+      duration: 1.0,
+      isCenter: true
+    })
+  }
+  
   // 清空所有子弹
   clear() {
     this.projectiles = []

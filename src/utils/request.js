@@ -5,7 +5,7 @@ import { generateTraceId, getTraceIdFromResponse, storeTraceId, traceLog } from 
 
 // 创建 axios 实例
 const request = axios.create({
-  baseURL: 'https://647de9d2.r9.cpolar.cn', // 替换为你的后端 API 地址
+  baseURL: 'https://6b96b5c0.r9.cpolar.cn', // 替换为你的后端 API 地址
   timeout: 30000
 })
 

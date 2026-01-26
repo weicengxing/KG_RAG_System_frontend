@@ -6,7 +6,7 @@ export const plantConfig = {
     icon: '🌻',
     cost: 50,
     hp: 300,
-    produceInterval: 8,  // 生产阳光间隔（秒）
+    produceInterval: 10,  // 生产阳光间隔（秒）
     produceAmount: 25,    // 产生阳光数量
     cooldown: 5,          // 冷却时间（秒）
     width: 104,           // 放大到1.3倍
@@ -102,7 +102,7 @@ export const plantConfig = {
     cost: 600,           // 超高消耗
     hp: 350,
     attackInterval: 4,   // 攻击间隔（秒）
-    staffDamage: 150,     // 金箍棒伤害
+    staffDamage: 200,     // 金箍棒伤害
     staffLifeTime: 5,    // 金箍棒存在时间（秒）
     staffAttackInterval: 0.5, // 金箍棒攻击间隔（秒）
     staffRadius: 50,     // 金箍棒攻击半径（像素）
@@ -150,7 +150,7 @@ export const plantConfig = {
     hp: 1000,
     explodeDelay: 0.3,    // 爆炸延迟（秒）
     damage: 2000,         // 爆炸伤害
-    cooldown: 15,         // 冷却时间（秒）
+    cooldown: 0,         // 冷却时间（秒）
     width: 104,
     height: 130
   },

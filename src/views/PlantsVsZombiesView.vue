@@ -15,6 +15,7 @@
         <button @click="toggleMute" class="control-btn">{{ isMuted ? '🔇' : '🔊' }}</button>
         <button @click="showAchievements = true" class="control-btn">🏆 成就</button>
         <button @click="showStats = true" class="control-btn">📊 统计</button>
+        <button @click="goToMultiplayerRoom" class="multiplayer-btn">👥 双人模式</button>
         <button @click="goToPlantSelection" class="start-btn">{{ isPlaying ? '重新开始' : '开始游戏' }}</button>
       </div>
     </div>
@@ -348,6 +349,13 @@ const goToPlantSelection = () => {
   })
 }
 
+// 跳转到多人对战房间页面
+const goToMultiplayerRoom = () => {
+  router.push({
+    name: 'PvZMultiplayerRoom'
+  })
+}
+
 // 开始游戏
 const startGame = () => {
   if (!gameCanvas.value) return
@@ -516,6 +524,24 @@ onUnmounted(() => {
 .start-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 20px rgba(34, 197, 94, 0.5);
+}
+
+.multiplayer-btn {
+  padding: 12px 32px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: white;
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.4);
+}
+
+.multiplayer-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(249, 115, 22, 0.5);
 }
 
 /* 游戏容器 */

@@ -2,10 +2,11 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '../stores/user'
 import { generateTraceId, getTraceIdFromResponse, storeTraceId, traceLog } from './trace'
+import { API_CONFIG } from '../config.js'
 
-// 创建 axios 实例
+// 创建 axios 实例 - 使用统一的配置
 const request = axios.create({
-  baseURL: 'https://6b96b5c0.r9.cpolar.cn', // 替换为你的后端 API 地址
+  baseURL: API_CONFIG.BASE_URL,
   timeout: 30000
 })
 
@@ -105,12 +106,11 @@ request.interceptors.response.use(
   }
 )
 
-// 添加流式请求方法
+// 添加流式请求方法 - 使用统一的配置
 export function createStreamRequest(url, data) {
-  const baseURL = 'http://localhost:8000'
   const token = localStorage.getItem('token')
   
-  return fetch(`${baseURL}${url}`, {
+  return fetch(`${API_CONFIG.BASE_URL}${url}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

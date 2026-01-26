@@ -190,7 +190,7 @@ export class GameEngine {
   start() {
     this.isPlaying = true
     this.gameOver = false
-    this.sunEnergy = 1800
+    this.sunEnergy = 180000
     this.score = 0
     this.wave = 1
     this.zombiesKilled = 0

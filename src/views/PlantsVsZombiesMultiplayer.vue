@@ -39,279 +39,121 @@
       </div>
     </div>
 
-    <div class="main-content">
-      <!-- 左侧：游戏控制面板 -->
+    <div class="game-container">
+      <!-- 左侧：植物/僵尸选择栏 -->
       <div class="left-panel">
-        <!-- 植物玩家操作卡片 -->
-        <el-card class="control-card plant-card" v-if="role === 'plant'">
-          <template #header>
-            <div class="card-header">
-              <span>🌻 植物玩家操作</span>
-              <div class="stats">
-                <div class="stat-item">
-                  <el-icon><Sunny /></el-icon>
-                  <span>阳光: {{ sunEnergy }}</span>
-                </div>
-              </div>
-            </div>
-          </template>
-          
-          <div class="plant-actions">
-            <div class="action-section">
-              <h3>选择植物</h3>
-              <div class="button-grid">
-                <button 
-                  @click="selectPlant('sunflower')" 
-                  class="action-btn sunflower-btn"
-                  :class="{ active: selectedPlant === 'sunflower' }"
-                >
-                  <div class="btn-icon">🌻</div>
-                  <div class="btn-text">向日葵</div>
-                  <div class="btn-desc">生产阳光</div>
-                  <div class="btn-cost">阳光: 50</div>
-                </button>
-                <button 
-                  @click="selectPlant('peashooter')" 
-                  class="action-btn peashooter-btn"
-                  :class="{ active: selectedPlant === 'peashooter' }"
-                >
-                  <div class="btn-icon">🔫</div>
-                  <div class="btn-text">豌豆射手</div>
-                  <div class="btn-desc">远程攻击</div>
-                  <div class="btn-cost">阳光: 100</div>
-                </button>
-                <button 
-                  @click="selectPlant('wallnut')" 
-                  class="action-btn wallnut-btn"
-                  :class="{ active: selectedPlant === 'wallnut' }"
-                >
-                  <div class="btn-icon">🌰</div>
-                  <div class="btn-text">坚果墙</div>
-                  <div class="btn-desc">防御单位</div>
-                  <div class="btn-cost">阳光: 50</div>
-                </button>
-                <button 
-                  @click="selectPlant('cherrybomb')" 
-                  class="action-btn cherrybomb-btn"
-                  :class="{ active: selectedPlant === 'cherrybomb' }"
-                >
-                  <div class="btn-icon">🍒</div>
-                  <div class="btn-text">樱桃炸弹</div>
-                  <div class="btn-desc">爆炸攻击</div>
-                  <div class="btn-cost">阳光: 150</div>
-                </button>
-              </div>
-            </div>
-            
-            <div class="action-section">
-              <h3>游戏棋盘 (点击放置)</h3>
-              <div class="game-board">
-                <div 
-                  v-for="(row, rowIndex) in 5" 
-                  :key="'row-' + rowIndex"
-                  class="board-row"
-                >
-                  <div 
-                    v-for="(col, colIndex) in 9" 
-                    :key="'cell-' + rowIndex + '-' + colIndex"
-                    @click="placePlant(rowIndex, colIndex)"
-                    class="board-cell"
-                    :class="{ 
-                      'has-plant': getCellPlant(rowIndex, colIndex),
-                      'can-place': canPlacePlant(rowIndex, colIndex)
-                    }"
-                  >
-                    <div v-if="getCellPlant(rowIndex, colIndex)" class="plant-display">
-                      {{ getPlantIcon(getCellPlant(rowIndex, colIndex)) }}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <div class="action-section">
-              <h3>收集阳光</h3>
-              <div class="suns-container">
-                <div 
-                  v-for="(sun, index) in fallingSuns" 
-                  :key="sun.id"
-                  @click="collectSun(sun.id)"
-                  class="sun-item"
-                  :style="{ left: sun.x + 'px', top: sun.y + 'px' }"
-                >
-                  ☀️
-                </div>
-                <div v-if="fallingSuns.length === 0" class="no-sun">
-                  暂无阳光可收集
-                </div>
-              </div>
-            </div>
-          </div>
-        </el-card>
-
-        <!-- 僵尸玩家操作卡片 -->
-        <el-card class="control-card zombie-card" v-if="role === 'zombie'">
-          <template #header>
-            <div class="card-header">
-              <span>🧟 僵尸玩家操作</span>
-              <div class="stats">
-                <div class="stat-item">
-                  <el-icon><Lightning /></el-icon>
-                  <span>能量: {{ zombieEnergy }}</span>
-                </div>
-              </div>
-            </div>
-          </template>
-          
-          <div class="zombie-actions">
-            <div class="action-section">
-              <h3>选择僵尸</h3>
-              <div class="button-grid">
-                <button 
-                  @click="selectZombie('basic')" 
-                  class="action-btn basic-zombie-btn"
-                  :class="{ active: selectedZombie === 'basic' }"
-                >
-                  <div class="btn-icon">🧟</div>
-                  <div class="btn-text">普通僵尸</div>
-                  <div class="btn-desc">基础单位</div>
-                  <div class="btn-cost">能量: 50</div>
-                </button>
-                <button 
-                  @click="selectZombie('conehead')" 
-                  class="action-btn conehead-btn"
-                  :class="{ active: selectedZombie === 'conehead' }"
-                >
-                  <div class="btn-icon">🎩</div>
-                  <div class="btn-text">路障僵尸</div>
-                  <div class="btn-desc">防御强化</div>
-                  <div class="btn-cost">能量: 75</div>
-                </button>
-                <button 
-                  @click="selectZombie('buckethead')" 
-                  class="action-btn buckethead-btn"
-                  :class="{ active: selectedZombie === 'buckethead' }"
-                >
-                  <div class="btn-icon">🪣</div>
-                  <div class="btn-text">铁桶僵尸</div>
-                  <div class="btn-desc">超强防御</div>
-                  <div class="btn-cost">能量: 125</div>
-                </button>
-                <button 
-                  @click="selectZombie('football')" 
-                  class="action-btn football-btn"
-                  :class="{ active: selectedZombie === 'football' }"
-                >
-                  <div class="btn-icon">🏈</div>
-                  <div class="btn-text">橄榄球僵尸</div>
-                  <div class="btn-desc">快速移动</div>
-                  <div class="btn-cost">能量: 175</div>
-                </button>
-              </div>
-            </div>
-            
-            <div class="action-section">
-              <h3>生成位置 (选择行)</h3>
-              <div class="lane-selector">
-                <button 
-                  v-for="lane in 5" 
-                  :key="lane"
-                  @click="spawnZombie(lane - 1)"
-                  class="lane-btn"
-                  :disabled="!selectedZombie"
-                >
-                  第 {{ lane }} 行
-                  <span v-if="selectedZombie" class="zombie-preview">
-                    {{ getZombieIcon(selectedZombie) }}
-                  </span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </el-card>
-
-        <!-- 系统操作卡片 -->
-        <el-card class="control-card system-card">
-          <template #header>
-            <div class="card-header">
-              <span>⚙️ 系统操作</span>
-            </div>
-          </template>
-          <div class="system-buttons">
-            <el-button 
-              type="warning" 
-              @click="sendGameStateUpdate" 
-              :icon="Refresh"
-              class="system-btn"
+        <!-- 植物玩家选择栏 -->
+        <div class="plants-sidebar" v-if="role === 'plant'">
+          <h3>🌻 植物选择</h3>
+          <div class="plant-slots">
+            <div 
+              class="plant-slot" 
+              v-for="(config, type) in plantConfig" 
+              :key="type"
+              :class="{
+                'selected': selectedPlant === type,
+                'disabled': sunEnergy < config.cost
+              }"
+              @click="selectPlant(type)"
             >
-              同步游戏状态
-            </el-button>
-            <el-button 
-              type="danger" 
-              @click="declareGameOver" 
-              :icon="Warning"
-              class="system-btn"
-            >
-              结束游戏
-            </el-button>
+              <span class="plant-icon">{{ config.icon }}</span>
+              <span class="plant-name">{{ getPlantName(type) }}</span>
+              <span class="plant-cost">{{ config.cost }}</span>
+            </div>
           </div>
-        </el-card>
+          <div class="energy-display">
+            <span class="energy-label">☀️ 阳光</span>
+            <span class="energy-value">{{ sunEnergy }}</span>
+          </div>
+        </div>
+
+        <!-- 僵尸玩家选择栏 -->
+        <div class="zombies-sidebar" v-if="role === 'zombie'">
+          <h3>🧟 僵尸选择</h3>
+          <div class="zombie-slots">
+            <div 
+              class="zombie-slot" 
+              v-for="(config, type) in zombieConfig" 
+              :key="type"
+              :class="{
+                'selected': selectedZombie === type,
+                'disabled': zombieEnergy < config.cost
+              }"
+              @click="selectZombie(type)"
+            >
+              <span class="zombie-icon">{{ config.icon }}</span>
+              <span class="zombie-name">{{ getZombieName(type) }}</span>
+              <span class="zombie-cost">{{ config.cost }}</span>
+            </div>
+          </div>
+          <div class="energy-display">
+            <span class="energy-label">⚡ 能量</span>
+            <span class="energy-value">{{ zombieEnergy }}</span>
+          </div>
+        </div>
       </div>
 
-      <!-- 右侧：游戏信息面板 -->
-      <div class="right-panel">
-        <!-- 游戏日志 -->
-        <el-card class="log-card">
-          <template #header>
-            <div class="card-header">
-              <span>📜 游戏日志</span>
-              <el-badge :value="messages.length" :max="99" class="badge"></el-badge>
-            </div>
-          </template>
-          <div class="log-container" ref="logContainer">
-            <transition-group name="list" tag="div">
-              <div 
-                v-for="(msg, index) in messages" 
-                :key="msg.timestamp + index" 
-                class="log-item"
-                :class="msg.type"
-              >
-                <div class="log-header">
-                  <span class="log-time">{{ msg.timestamp }}</span>
-                  <el-tag :type="getMessageType(msg.type)" size="small" effect="plain">
-                    {{ msg.type }}
-                  </el-tag>
-                </div>
-                <div class="log-content">
-                  {{ formatMessage(msg.payload) }}
-                </div>
-              </div>
-            </transition-group>
-            <div v-if="messages.length === 0" class="empty-log">
-              <el-icon :size="48"><DocumentDelete /></el-icon>
-              <p>暂无游戏日志</p>
-            </div>
-          </div>
-        </el-card>
+      <!-- 中间：游戏画布 -->
+      <div class="game-canvas">
+        <canvas ref="gameCanvas" @click="handleCanvasClick"></canvas>
+      </div>
 
-        <!-- 游戏状态 -->
-        <el-card class="state-card">
-          <template #header>
-            <div class="card-header">
-              <span>🎮 游戏状态</span>
-            </div>
-          </template>
-          <div class="state-content">
-            <div v-if="gameState" class="state-display">
-              <pre class="state-json">{{ formatJSON(gameState) }}</pre>
-            </div>
-            <div v-else class="empty-state">
-              <el-icon :size="48"><Loading /></el-icon>
-              <p>等待游戏开始...</p>
-              <p class="hint">请等待另一位玩家加入房间</p>
-            </div>
-          </div>
-        </el-card>
+      <!-- 右侧：信息面板 -->
+      <div class="info-panel">
+        <!-- 游戏信息 -->
+        <div class="info-item">
+          <span class="info-label">房间</span>
+          <span class="info-value">{{ roomId }}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">角色</span>
+          <span class="info-value">{{ role === 'plant' ? '🌻 植物' : '🧟 僵尸' }}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">状态</span>
+          <el-tag 
+            :type="getStatusType(connectionStatus)" 
+            size="small"
+            effect="dark"
+          >
+            {{ connectionStatus }}
+          </el-tag>
+        </div>
+        <div class="info-item">
+          <span class="info-label">延迟</span>
+          <span class="info-value">{{ latency }}ms</span>
+        </div>
+        
+        <!-- 系统操作 -->
+        <div class="system-buttons">
+          <el-button
+            type="warning"
+            @click="sendGameStateUpdate"
+            :icon="Refresh"
+            class="system-btn"
+            size="small"
+          >
+            同步状态
+          </el-button>
+          <el-button
+            type="danger"
+            @click="declareGameOver"
+            :icon="Warning"
+            class="system-btn"
+            size="small"
+          >
+            结束游戏
+          </el-button>
+          <el-button
+            type="primary"
+            @click="goBack"
+            :icon="Back"
+            class="system-btn"
+            size="small"
+          >
+            返回房间
+          </el-button>
+        </div>
       </div>
     </div>
   </div>
@@ -320,12 +162,12 @@
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { 
-  House, 
-  Sunny, 
-  Moon, 
-  Connection, 
-  Back, 
+import {
+  House,
+  Sunny,
+  Moon,
+  Connection,
+  Back,
   Refresh,
   DocumentDelete,
   Loading,
@@ -334,12 +176,15 @@ import {
   Warning
 } from '@element-plus/icons-vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
+import { MultiplayerEngine } from '../pvz/multiplayerEngine.js'
+import { gameConfig } from '../pvz/config.js'
 
 const router = useRouter()
 const route = useRoute()
 
 const roomId = ref(route.params.roomId)
 const userId = ref(route.params.userId || localStorage.getItem('username'))
+const fromSelection = ref(route.query.from_selection === '1')
 const role = ref('')
 const connectionStatus = ref('连接中...')
 const messages = ref([])
@@ -352,11 +197,13 @@ const sunEnergy = ref(150)
 const selectedPlant = ref(null)
 const plants = ref([])
 const fallingSuns = ref([])
+const selectedPlantsList = ref([]) // 从选择界面传递的植物列表
 
 // 僵尸玩家状态
 const zombieEnergy = ref(200)
 const selectedZombie = ref(null)
 const zombies = ref([])
+const selectedZombiesList = ref([]) // 从选择界面传递的僵尸列表
 
 let ws = null
 let pingInterval = null
@@ -384,13 +231,6 @@ const connectWebSocket = () => {
   ws.onopen = () => {
     connectionStatus.value = '已连接'
     addMessage('system', { message: '已连接到服务器' })
-    
-    // 开始资源生成
-    if (role.value === 'plant') {
-      startSunGeneration()
-    } else if (role.value === 'zombie') {
-      startZombieEnergyGeneration()
-    }
   }
 
   ws.onmessage = (event) => {
@@ -405,12 +245,44 @@ const connectWebSocket = () => {
         } else {
           zombieEnergy.value = 200
         }
+
+        if (!fromSelection.value) {
+          // 连接成功后跳转到选择界面
+          setTimeout(() => {
+            redirectToSelection()
+          }, 500)
+        }
+        break
+        
+      case 'event.need_selection':
+        // 需要先进行选择，跳转到选择界面
+        if (!fromSelection.value) {
+          redirectToSelection()
+        }
         break
         
       case 'event.game_start':
         connectionStatus.value = '游戏中'
         gameState.value = { status: 'playing', startTime: Date.now() }
+        
+        // 接收选择信息
+        if (message.payload.plant_selection) {
+          selectedPlantsList.value = message.payload.plant_selection
+          console.log('收到植物选择:', selectedPlantsList.value)
+        }
+        if (message.payload.zombie_selection) {
+          selectedZombiesList.value = message.payload.zombie_selection
+          console.log('收到僵尸选择:', selectedZombiesList.value)
+        }
+        
         ElMessage.success('游戏开始！')
+        
+        // 开始资源生成
+        if (role.value === 'plant') {
+          startSunGeneration()
+        } else if (role.value === 'zombie') {
+          startZombieEnergyGeneration()
+        }
         break
         
       case 'event.game_over':
@@ -460,6 +332,30 @@ const connectWebSocket = () => {
     connectionStatus.value = '已断开'
     addMessage('system', { message: '连接已关闭' })
     stopResourceGeneration()
+  }
+}
+
+// 跳转到选择界面
+const redirectToSelection = () => {
+  if (role.value === 'plant') {
+    // 植物玩家跳转到植物选择界面
+    router.push({
+      name: 'PlantSelection',
+      query: {
+        room_id: roomId.value,
+        user_id: userId.value,
+        mode: 'multiplayer'
+      }
+    })
+  } else if (role.value === 'zombie') {
+    // 僵尸玩家跳转到僵尸选择界面
+    router.push({
+      name: 'ZombieSelection',
+      params: {
+        roomId: roomId.value,
+        userId: userId.value
+      }
+    })
   }
 }
 
@@ -540,6 +436,51 @@ const getPlantIcon = (plant) => {
 
 const getZombieIcon = (type) => {
   return zombieConfig[type] ? zombieConfig[type].icon : '🧟'
+}
+
+const getPlantName = (type) => {
+  const nameMap = {
+    sunflower: '向日葵',
+    peashooter: '豌豆射手',
+    wallnut: '坚果墙',
+    cherrybomb: '樱桃炸弹'
+  }
+  return nameMap[type] || type
+}
+
+const getZombieName = (type) => {
+  const nameMap = {
+    basic: '普通僵尸',
+    conehead: '路障僵尸',
+    buckethead: '铁桶僵尸',
+    football: '橄榄球僵尸'
+  }
+  return nameMap[type] || type
+}
+
+const handleCanvasClick = (event) => {
+  const canvas = event.target
+  const rect = canvas.getBoundingClientRect()
+  const x = event.clientX - rect.left
+  const y = event.clientY - rect.top
+  
+  // 计算网格位置
+  const cellWidth = 80 // 网格宽度
+  const cellHeight = 100 // 网格高度
+  const col = Math.floor(x / cellWidth)
+  const row = Math.floor(y / cellHeight)
+  
+  if (role.value === 'plant' && selectedPlant.value) {
+    // 植物玩家：种植植物
+    if (col >= 0 && col < 9 && row >= 0 && row < 5) {
+      placePlant(row, col)
+    }
+  } else if (role.value === 'zombie' && selectedZombie.value) {
+    // 僵尸玩家：在对应行生成僵尸
+    if (row >= 0 && row < 5) {
+      spawnZombie(row)
+    }
+  }
 }
 
 const placePlant = (row, col) => {
@@ -823,36 +764,38 @@ onUnmounted(() => {
 <style scoped>
 .multiplayer-game-container {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   padding: 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
 /* 顶部标题栏 */
 .game-header {
-  background: rgba(255, 255, 255, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
   border-radius: 16px;
-  padding: 24px;
-  margin-bottom: 24px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
 }
 
 .header-content {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  max-width: 1600px;
-  margin: 0 auto;
+  gap: 20px;
+  width: 100%;
+  justify-content: space-between;
 }
 
 .header-left h1 {
-  margin: 0 0 12px 0;
-  font-size: 28px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  margin: 0;
+  font-size: 2rem;
+  background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  font-weight: 700;
 }
 
 .game-info {
@@ -866,606 +809,353 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  background: linear-gradient(135deg, #f5f7fa 0%, #e4e8eb 100%);
+  background: rgba(255, 255, 255, 0.2);
   border-radius: 20px;
   font-size: 14px;
   font-weight: 500;
-  color: #333;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
-
-.info-badge .el-icon {
-  font-size: 18px;
-}
-
-/* 主内容区域 */
-.main-content {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  max-width: 1600px;
-  margin: 0 auto;
-}
-
-/* 卡片样式 */
-.control-card {
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s ease;
-  border: none;
-  margin-bottom: 24px;
-}
-
-.control-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
-}
-
-.card-header {
-  font-size: 18px;
-  font-weight: 600;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.stats {
-  display: flex;
-  gap: 12px;
-}
-
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: rgba(255, 255, 255, 0.7);
-  border-radius: 16px;
-  font-weight: 600;
-  font-size: 14px;
-}
-
-/* 植物卡片 */
-.plant-card {
-  background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
-}
-
-.plant-card .card-header {
-  color: #2d5a4d;
-}
-
-/* 僵尸卡片 */
-.zombie-card {
-  background: linear-gradient(135deg, #d4a5a5 0%, #9b59b6 100%);
-}
-
-.zombie-card .card-header {
-  color: #4a2d5d;
-}
-
-/* 系统卡片 */
-.system-card {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
-
-.system-card .card-header {
   color: white;
 }
 
-/* 操作区域 */
-.action-section {
-  margin-bottom: 24px;
-  padding-bottom: 24px;
-  border-bottom: 2px solid rgba(255, 255, 255, 0.3);
-}
-
-.action-section:last-child {
-  border-bottom: none;
-  margin-bottom: 0;
-  padding-bottom: 0;
-}
-
-.action-section h3 {
-  margin: 0 0 16px 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: #333;
+/* 游戏容器 */
+.game-container {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  gap: 20px;
+  margin-bottom: 20px;
 }
 
-/* 按钮网格 */
-.button-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+/* 左侧面板 */
+.left-panel {
+  width: 200px;
+}
+
+/* 植物选择栏 */
+.plants-sidebar {
+  height: calc(100vh - 200px);
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  overflow-y: auto;
+}
+
+.plants-sidebar h3 {
+  margin: 0 0 16px 0;
+  font-size: 1.2rem;
+  color: white;
+  position: sticky;
+  top: 0;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  padding: 10px 0;
+  z-index: 1;
+}
+
+.plant-slots {
+  display: flex;
+  flex-direction: column;
   gap: 12px;
 }
 
-.action-btn {
-  padding: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.5);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.9);
-  cursor: pointer;
-  transition: all 0.3s ease;
+.plant-slot {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.action-btn:hover {
-  transform: translateY(-4px) scale(1.02);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-}
-
-.action-btn:active {
-  transform: translateY(-2px) scale(0.98);
-}
-
-.action-btn.active {
-  border-color: #667eea;
-  box-shadow: 0 0 20px rgba(102, 126, 234, 0.5);
-}
-
-.action-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn-icon {
-  font-size: 32px;
-}
-
-.btn-text {
-  font-size: 14px;
-  font-weight: 600;
-  color: #333;
-}
-
-.btn-desc {
-  font-size: 12px;
-  color: #666;
-}
-
-.btn-cost {
-  font-size: 12px;
-  font-weight: 600;
-  color: #667eea;
-  background: rgba(102, 126, 234, 0.1);
-  padding: 2px 8px;
-  border-radius: 4px;
-}
-
-.sunflower-btn {
-  background: linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%);
-  border-color: #f39c12;
-}
-
-.peashooter-btn {
-  background: linear-gradient(135deg, #55efc4 0%, #00b894 100%);
-  border-color: #00b894;
-  color: white;
-}
-
-.peashooter-btn .btn-text {
-  color: white;
-}
-
-.wallnut-btn {
-  background: linear-gradient(135deg, #dfe6e9 0%, #b2bec3 100%);
-  border-color: #636e72;
-}
-
-.cherrybomb-btn {
-  background: linear-gradient(135deg, #e17055 0%, #d63031 100%);
-  border-color: #d63031;
-  color: white;
-}
-
-.cherrybomb-btn .btn-text {
-  color: white;
-}
-
-.basic-zombie-btn {
-  background: linear-gradient(135deg, #dfe6e9 0%, #b2bec3 100%);
-  border-color: #636e72;
-}
-
-.conehead-btn {
-  background: linear-gradient(135deg, #a29bfe 0%, #6c5ce7 100%);
-  border-color: #6c5ce7;
-  color: white;
-}
-
-.conehead-btn .btn-text {
-  color: white;
-}
-
-.buckethead-btn {
-  background: linear-gradient(135deg, #b2bec3 0%, #636e72 100%);
-  border-color: #2d3436;
-  color: white;
-}
-
-.buckethead-btn .btn-text {
-  color: white;
-}
-
-.football-btn {
-  background: linear-gradient(135deg, #fd79a8 0%, #e84393 100%);
-  border-color: #e84393;
-  color: white;
-}
-
-.football-btn .btn-text {
-  color: white;
-}
-
-/* 游戏棋盘 */
-.game-board {
-  background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%);
-  border-radius: 12px;
   padding: 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-}
-
-.board-row {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 4px;
-}
-
-.board-row:last-child {
-  margin-bottom: 0;
-}
-
-.board-cell {
-  width: 60px;
-  height: 72px;
-  background: rgba(255, 255, 255, 0.3);
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
   cursor: pointer;
   transition: all 0.3s ease;
   border: 2px solid transparent;
 }
 
-.board-cell:hover {
-  background: rgba(255, 255, 255, 0.5);
+.plant-slot:hover {
+  background: rgba(255, 255, 255, 0.2);
   transform: scale(1.05);
 }
 
-.board-cell.can-place:hover {
-  border-color: #00b894;
+.plant-slot.selected {
+  border-color: #fbbf24;
+  box-shadow: 0 0 16px rgba(251, 191, 36, 0.5);
 }
 
-.board-cell.has-plant {
-  background: rgba(255, 255, 255, 0.7);
-}
-
-.plant-display {
-  font-size: 40px;
-}
-
-/* 阳光收集 */
-.suns-container {
-  position: relative;
-  min-height: 200px;
-  background: linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%);
-  border-radius: 12px;
-  padding: 16px;
-}
-
-.sun-item {
-  position: absolute;
-  font-size: 32px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  animation: sunFloat 3s ease-in-out infinite;
-  user-select: none;
-}
-
-.sun-item:hover {
-  transform: scale(1.3);
-  filter: drop-shadow(0 0 10px rgba(255, 215, 0, 0.8));
-}
-
-@keyframes sunFloat {
-  0%, 100% {
-    transform: translateY(0) rotate(0deg);
-  }
-  50% {
-    transform: translateY(-10px) rotate(180deg);
-  }
-}
-
-.no-sun {
-  text-align: center;
-  color: #666;
-  padding: 40px;
-  font-size: 14px;
-}
-
-/* 行选择器 */
-.lane-selector {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.lane-btn {
-  padding: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.5);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.9);
-  cursor: pointer;
-  transition: all 0.3s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  font-size: 16px;
-  font-weight: 600;
-  color: #333;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.lane-btn:hover:not(:disabled) {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-  background: linear-gradient(135deg, #d4a5a5 0%, #9b59b6 100%);
-  color: white;
-}
-
-.lane-btn:disabled {
+.plant-slot.disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.zombie-preview {
-  font-size: 24px;
+.plant-icon {
+  font-size: 2.5rem;
+  margin-bottom: 8px;
 }
 
-/* 系统按钮 */
-.system-buttons {
+.plant-name {
+  font-size: 0.9rem;
+  color: white;
+  margin-bottom: 4px;
+}
+
+.plant-cost {
+  font-size: 0.8rem;
+  color: #fbbf24;
+}
+
+/* 僵尸选择栏 */
+.zombies-sidebar {
+  height: calc(100vh - 200px);
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  overflow-y: auto;
+}
+
+.zombies-sidebar h3 {
+  margin: 0 0 16px 0;
+  font-size: 1.2rem;
+  color: white;
+  position: sticky;
+  top: 0;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  padding: 10px 0;
+  z-index: 1;
+}
+
+.zombie-slots {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
+.zombie-slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
+}
+
+.zombie-slot:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+
+.zombie-slot.selected {
+  border-color: #ef4444;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.5);
+}
+
+.zombie-slot.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.zombie-icon {
+  font-size: 2.5rem;
+  margin-bottom: 8px;
+}
+
+.zombie-name {
+  font-size: 0.9rem;
+  color: white;
+  margin-bottom: 4px;
+}
+
+.zombie-cost {
+  font-size: 0.8rem;
+  color: #ef4444;
+}
+
+/* 能量显示 */
+.energy-display {
+  margin-top: 20px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.energy-label {
+  display: block;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 8px;
+}
+
+.energy-value {
+  display: block;
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: white;
+}
+
+/* 游戏画布 */
+.game-canvas {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.game-canvas canvas {
+  display: block;
+  cursor: crosshair;
+  background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%);
+  border-radius: 8px;
+}
+
+/* 信息面板 */
+.info-panel {
+  width: 200px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.info-item:last-child {
+  border-bottom: none;
+}
+
+.info-label {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 8px;
+}
+
+.info-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: white;
+  text-align: center;
+}
+
+/* 系统按钮 */
+.system-buttons {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .system-btn {
   width: 100%;
-  height: 48px;
-  font-size: 16px;
+  font-size: 0.9rem;
   font-weight: 600;
 }
 
-/* 右侧面板 */
-.right-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-.log-card,
-.state-card {
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  border: none;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-}
-
-.badge {
-  margin-left: 8px;
-}
-
-/* 日志容器 */
-.log-container {
-  height: 400px;
-  overflow-y: auto;
-  padding: 12px;
-  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-  border-radius: 12px;
-  scrollbar-width: thin;
-  scrollbar-color: #667eea #f0f0f0;
-}
-
-.log-container::-webkit-scrollbar {
+/* 自定义滚动条样式 */
+.plants-sidebar::-webkit-scrollbar,
+.zombies-sidebar::-webkit-scrollbar {
   width: 6px;
 }
 
-.log-container::-webkit-scrollbar-track {
-  background: #f0f0f0;
+.plants-sidebar::-webkit-scrollbar-track,
+.zombies-sidebar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
   border-radius: 3px;
 }
 
-.log-container::-webkit-scrollbar-thumb {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+.plants-sidebar::-webkit-scrollbar-thumb,
+.zombies-sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
   border-radius: 3px;
 }
 
-.log-item {
-  padding: 12px;
-  margin-bottom: 8px;
-  border-radius: 8px;
-  background: white;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s ease;
-}
-
-.log-item:hover {
-  transform: translateX(4px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-}
-
-.log-item.event {
-  border-left: 3px solid #28a745;
-}
-
-.log-item.send {
-  border-left: 3px solid #007bff;
-}
-
-.log-item.error {
-  border-left: 3px solid #dc3545;
-  background: #ffebeb;
-}
-
-.log-item.system {
-  border-left: 3px solid #6c757d;
-  font-style: italic;
-}
-
-.log-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.log-time {
-  font-size: 12px;
-  color: #999;
-  font-weight: 500;
-}
-
-.log-content {
-  font-size: 14px;
-  color: #333;
-  line-height: 1.5;
-  word-break: break-word;
-}
-
-.empty-log {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: #999;
-}
-
-.empty-log p {
-  margin-top: 16px;
-  font-size: 14px;
-}
-
-/* 状态显示 */
-.state-content {
-  height: 300px;
-  overflow: auto;
-}
-
-.state-display {
-  height: 100%;
-}
-
-.state-json {
-  padding: 16px;
-  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-  border-radius: 12px;
-  font-size: 12px;
-  line-height: 1.6;
-  overflow-x: auto;
-  color: #333;
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: #999;
-}
-
-.empty-state p {
-  margin-top: 12px;
-  font-size: 14px;
-}
-
-.empty-state .hint {
-  font-size: 12px;
-  margin-top: 8px;
-  opacity: 0.8;
-}
-
-/* 列表动画 */
-.list-enter-active,
-.list-leave-active {
-  transition: all 0.3s ease;
-}
-
-.list-enter-from {
-  opacity: 0;
-  transform: translateX(-30px);
-}
-
-.list-leave-to {
-  opacity: 0;
-  transform: translateX(30px);
+.plants-sidebar::-webkit-scrollbar-thumb:hover,
+.zombies-sidebar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
 }
 
 /* 响应式设计 */
-@media (max-width: 1200px) {
-  .main-content {
-    grid-template-columns: 1fr;
+@media (max-width: 1024px) {
+  .game-container {
+    flex-direction: column;
   }
-  
-  .left-panel {
-    margin-bottom: 24px;
+
+  .left-panel,
+  .info-panel {
+    width: 100%;
   }
-  
-  .button-grid {
-    grid-template-columns: 1fr;
+
+  .plants-sidebar,
+  .zombies-sidebar {
+    height: auto;
+    max-height: 200px;
+  }
+
+  .plant-slots,
+  .zombie-slots {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+
+  .info-panel {
+    display: flex;
+    justify-content: space-around;
+  }
+
+  .info-item {
+    border-bottom: none;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    flex-direction: row;
+    gap: 12px;
+  }
+
+  .info-item:last-child {
+    border-right: none;
   }
 }
 
 @media (max-width: 768px) {
   .multiplayer-game-container {
-    padding: 12px;
+    padding: 10px;
   }
-  
+
+  .game-header {
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px;
+  }
+
   .header-content {
     flex-direction: column;
     gap: 16px;
   }
-  
+
+  .header-left h1 {
+    font-size: 1.5rem;
+    text-align: center;
+  }
+
   .game-info {
     justify-content: center;
   }
-  
-  .header-left h1 {
-    font-size: 20px;
-    text-align: center;
-  }
-  
-  .info-badge {
-    font-size: 12px;
-    padding: 6px 12px;
-  }
-  
-  .log-container {
-    height: 300px;
-  }
-  
-  .state-content {
-    height: 200px;
-  }
-  
-  .board-cell {
-    width: 50px;
-    height: 60px;
-  }
-  
-  .plant-display {
-    font-size: 32px;
+
+  .game-canvas {
+    overflow-x: auto;
   }
 }
 </style>

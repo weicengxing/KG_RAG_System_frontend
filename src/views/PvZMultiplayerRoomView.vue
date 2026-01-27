@@ -415,6 +415,12 @@ const startGame = async () => {
     myRoom.value.status = 'playing'
     showMessage('游戏开始！', 'success')
     ElMessage.success('游戏开始！')
+    
+    // 直接跳转到选择界面
+    setTimeout(() => {
+      enterSelection()
+    }, 500)
+    
     await loadRooms() // 更新房间列表
   } catch (error) {
     const msg = error.response?.data?.detail || '开始游戏失败'
@@ -437,6 +443,31 @@ const enterGame = () => {
       userId: currentUserId.value
     }
   })
+}
+
+const enterSelection = () => {
+  if (!myRoom.value) {
+    return
+  }
+
+  if (myRoom.value.plant_player === currentUserId.value) {
+    router.push({
+      name: 'PlantSelection',
+      query: {
+        room_id: myRoom.value.room_id,
+        user_id: currentUserId.value,
+        mode: 'multiplayer'
+      }
+    })
+  } else {
+    router.push({
+      name: 'ZombieSelection',
+      params: {
+        roomId: myRoom.value.room_id,
+        userId: currentUserId.value
+      }
+    })
+  }
 }
 
 const connectLobbyWebSocket = () => {
@@ -564,14 +595,16 @@ const connectWebSocket = () => {
           
         case 'event.game_start':
           console.log('[WebSocket] 游戏开始事件')
-          // 房主开始游戏，自动跳转到游戏页面
-          ElMessage.success('游戏开始，正在进入游戏...')
-          isGameStarting.value = true
-          
-          // 延迟1秒后进入游戏，给用户一点时间看到提示消息
-          setTimeout(() => {
-            enterGame()
-          }, 1000)
+          // 如果已经在游戏中，不需要重复跳转
+          if (!isGameStarting.value) {
+            ElMessage.success('游戏开始，正在进入游戏...')
+            isGameStarting.value = true
+            
+            // 延迟1秒后进入选择界面，给用户一点时间看到提示消息
+            setTimeout(() => {
+              enterSelection()
+            }, 1000)
+          }
           break
           
         case 'event.room_destroyed':

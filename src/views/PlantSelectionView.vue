@@ -45,6 +45,15 @@
       </button>
     </div>
 
+    <!-- 等待对手提示 -->
+    <div v-if="waitingForOpponent" class="waiting-overlay">
+      <div class="waiting-content">
+        <div class="loading-spinner"></div>
+        <h2>等待僵尸玩家选择...</h2>
+        <p>请稍候，游戏即将开始</p>
+      </div>
+    </div>
+
     <!-- 提示消息 -->
     <div v-if="showToast" class="toast-message">
       {{ toastMessage }}
@@ -53,11 +62,18 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { plantConfig } from '../pvz/config.js'
+import { ElMessage } from 'element-plus'
 
 const router = useRouter()
+const route = useRoute()
+
+// 检查是否是多人模式
+const isMultiplayer = computed(() => route.query.mode === 'multiplayer')
+const roomId = ref(route.query.room_id)
+const userId = ref(route.query.user_id || localStorage.getItem('username'))
 
 // 所有可用的植物
 const allPlants = computed(() => {
@@ -69,6 +85,12 @@ const allPlants = computed(() => {
 
 // 已选择的植物ID列表
 const selectedPlants = ref([])
+
+// WebSocket连接（多人模式）
+let ws = null
+
+// 状态管理（多人模式）
+const waitingForOpponent = ref(false)
 
 // Toast 提示
 const showToast = ref(false)
@@ -129,26 +151,131 @@ const getPlantDescription = (plantId) => {
   return descriptions[plantId] || '强大的植物'
 }
 
-// 返回上一页
-const goBack = () => {
-  router.back()
+// 连接WebSocket（多人模式）
+const connectWebSocket = () => {
+  if (!isMultiplayer.value) return
+  
+  const wsUrl = `ws://localhost:8000/api/ws/pvz/room/${roomId.value}?user_id=${userId.value}`
+  ws = new WebSocket(wsUrl)
+
+  ws.onopen = () => {
+    console.log('植物选择界面WebSocket连接成功')
+  }
+
+  ws.onmessage = (event) => {
+    const message = JSON.parse(event.data)
+    handleWebSocketMessage(message)
+  }
+
+  ws.onerror = (error) => {
+    console.error('WebSocket错误:', error)
+    ElMessage.error('连接失败，请重试')
+  }
+
+  ws.onclose = () => {
+    console.log('WebSocket连接关闭')
+  }
 }
 
-// 开始游戏
+// 处理WebSocket消息
+const handleWebSocketMessage = (message) => {
+  switch (message.type) {
+    case 'event.plant_selection_confirmed':
+      waitingForOpponent.value = true
+      showTempToast('选择已确认，等待僵尸玩家...')
+      break
+      
+    case 'event.game_start':
+    case 'game_start':  // 兼容后端发送的无event.前缀的消息
+      // 两位玩家都选择完成，跳转到游戏界面
+      router.push({
+        name: 'PlantsVsZombiesMultiplayer',
+        params: {
+          roomId: roomId.value,
+          userId: userId.value
+        },
+        query: {
+          from_selection: '1'
+        }
+      })
+      break
+      
+    case 'event.player_disconnected':
+      ElMessage.warning('僵尸玩家已断开连接')
+      waitingForOpponent.value = false
+      break
+  }
+}
+
+// 返回上一页
+const goBack = () => {
+  if (ws) {
+    ws.close()
+  }
+  
+  if (isMultiplayer.value) {
+    // 多人模式返回房间
+    router.push({
+      name: 'PvZMultiplayerRoom',
+      params: {
+        roomId: roomId.value
+      }
+    })
+  } else {
+    // 单人模式返回上一页
+    router.back()
+  }
+}
+
+// 开始游戏/确认选择
 const startGame = () => {
   if (selectedPlants.value.length === 0) {
     showTempToast('请至少选择 1 个植物！')
     return
   }
   
-  // 跳转到游戏页面，并传递选择的植物列表
-  router.push({
-    name: 'PlantsVsZombies',
-    query: {
-      plants: selectedPlants.value.join(',')
+  if (isMultiplayer.value) {
+    // 多人模式：发送选择结果到服务器
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      ElMessage.error('连接已断开，请刷新页面重试')
+      return
     }
-  })
+
+    const message = {
+      type: 'plant_selection_complete',
+      payload: {
+        room_id: roomId.value,
+        user_id: userId.value,
+        selected_plants: selectedPlants.value
+      }
+    }
+
+    ws.send(JSON.stringify(message))
+    waitingForOpponent.value = true
+    showTempToast('选择已提交，等待僵尸玩家...')
+  } else {
+    // 单人模式：直接跳转到游戏页面
+    router.push({
+      name: 'PlantsVsZombies',
+      query: {
+        plants: selectedPlants.value.join(',')
+      }
+    })
+  }
 }
+
+// 生命周期
+onMounted(() => {
+  if (isMultiplayer.value) {
+    connectWebSocket()
+  }
+})
+
+onUnmounted(() => {
+  if (ws) {
+    ws.close()
+  }
+})
 </script>
 
 <style scoped>
@@ -159,6 +286,7 @@ const startGame = () => {
   display: flex;
   flex-direction: column;
   align-items: center;
+  position: relative;
 }
 
 .selection-header {
@@ -392,5 +520,49 @@ const startGame = () => {
   .plant-card-description {
     font-size: 0.8rem;
   }
+}
+
+/* 等待遮罩 */
+.waiting-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.waiting-content {
+  text-align: center;
+  color: white;
+}
+
+.loading-spinner {
+  width: 60px;
+  height: 60px;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-top: 4px solid #22c55e;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 20px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.waiting-content h2 {
+  font-size: 1.8rem;
+  margin-bottom: 10px;
+}
+
+.waiting-content p {
+  font-size: 1.1rem;
+  opacity: 0.8;
 }
 </style>

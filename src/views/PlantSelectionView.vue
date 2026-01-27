@@ -187,7 +187,8 @@ const handleWebSocketMessage = (message) => {
       
     case 'event.game_start':
     case 'game_start':  // 兼容后端发送的无event.前缀的消息
-      // 两位玩家都选择完成，跳转到游戏界面
+      // 两位玩家都选择完成，跳转到游戏界面，并将选择列表通过URL参数传递
+      const plantSelection = message.payload?.plant_selection || selectedPlants.value
       router.push({
         name: 'PlantsVsZombiesMultiplayer',
         params: {
@@ -195,7 +196,8 @@ const handleWebSocketMessage = (message) => {
           userId: userId.value
         },
         query: {
-          from_selection: '1'
+          from_selection: '1',
+          plant_selection: plantSelection.join(',')
         }
       })
       break

@@ -1,94 +1,53 @@
 <template>
-  <div class="multiplayer-game-container">
-    <!-- 顶部标题栏 -->
+  <div class="plants-vs-zombies-view">
+    <!-- 游戏标题 -->
     <div class="game-header">
-      <div class="header-content">
-        <div class="header-left">
-          <h1>🌻 植物大战僵尸 - 双人对战 🧟</h1>
-          <div class="game-info">
-            <div class="info-badge">
-              <el-icon><House /></el-icon>
-              <span>房间: {{ roomId }}</span>
-            </div>
-            <div class="info-badge">
-              <el-icon v-if="role === 'plant'"><Sunny /></el-icon>
-              <el-icon v-else><Moon /></el-icon>
-              <span>角色: {{ role === 'plant' ? '🌻 植物' : '🧟 僵尸' }}</span>
-            </div>
-            <div class="info-badge">
-              <el-icon><Connection /></el-icon>
-              <span>状态: </span>
-              <el-tag 
-                :type="getStatusType(connectionStatus)" 
-                size="small"
-                effect="dark"
-              >
-                {{ connectionStatus }}
-              </el-tag>
-            </div>
-            <div class="info-badge">
-              <el-icon><Timer /></el-icon>
-              <span>延迟: {{ latency }}ms</span>
-            </div>
-          </div>
-        </div>
-        <el-button type="primary" @click="goBack" size="large">
-          <el-icon><Back /></el-icon>
-          返回房间
-        </el-button>
+      <h1>🌻 植物大战僵尸 🧟</h1>
+      <div class="header-buttons">
+        <button @click="sendGameStateUpdate" class="control-btn">同步状态</button>
+        <button @click="declareGameOver" class="control-btn">结束游戏</button>
+        <button @click="goBack" class="control-btn">返回房间</button>
       </div>
     </div>
 
     <div class="game-container">
       <!-- 左侧：植物/僵尸选择栏 -->
-      <div class="left-panel">
-        <!-- 植物玩家选择栏 -->
-        <div class="plants-sidebar" v-if="role === 'plant'">
-          <h3>🌻 植物选择</h3>
-          <div class="plant-slots">
-            <div 
-              class="plant-slot" 
-              v-for="(config, type) in plantConfig" 
-              :key="type"
-              :class="{
-                'selected': selectedPlant === type,
-                'disabled': sunEnergy < config.cost
-              }"
-              @click="selectPlant(type)"
-            >
-              <span class="plant-icon">{{ config.icon }}</span>
-              <span class="plant-name">{{ getPlantName(type) }}</span>
-              <span class="plant-cost">{{ config.cost }}</span>
-            </div>
-          </div>
-          <div class="energy-display">
-            <span class="energy-label">☀️ 阳光</span>
-            <span class="energy-value">{{ sunEnergy }}</span>
+      <div class="plants-sidebar" v-if="role === 'plant'">
+        <h3>🌻 植物选择</h3>
+        <div class="plant-slots">
+          <div 
+            class="plant-slot" 
+            v-for="plant in plantOptions" 
+            :key="plant.id"
+            :class="{
+              'selected': selectedPlant === plant.id,
+              'disabled': sunEnergy < plant.cost
+            }"
+            @click="selectPlant(plant.id)"
+          >
+            <span class="plant-icon">{{ plant.icon }}</span>
+            <span class="plant-name">{{ plant.name }}</span>
+            <span class="plant-cost">{{ plant.cost }}</span>
           </div>
         </div>
+      </div>
 
-        <!-- 僵尸玩家选择栏 -->
-        <div class="zombies-sidebar" v-if="role === 'zombie'">
-          <h3>🧟 僵尸选择</h3>
-          <div class="zombie-slots">
-            <div 
-              class="zombie-slot" 
-              v-for="(config, type) in zombieConfig" 
-              :key="type"
-              :class="{
-                'selected': selectedZombie === type,
-                'disabled': zombieEnergy < config.cost
-              }"
-              @click="selectZombie(type)"
-            >
-              <span class="zombie-icon">{{ config.icon }}</span>
-              <span class="zombie-name">{{ getZombieName(type) }}</span>
-              <span class="zombie-cost">{{ config.cost }}</span>
-            </div>
-          </div>
-          <div class="energy-display">
-            <span class="energy-label">⚡ 能量</span>
-            <span class="energy-value">{{ zombieEnergy }}</span>
+      <div class="zombies-sidebar" v-if="role === 'zombie'">
+        <h3>🧟 僵尸选择</h3>
+        <div class="zombie-slots">
+          <div 
+            class="zombie-slot" 
+            v-for="zombie in zombieOptions" 
+            :key="zombie.id"
+            :class="{
+              'selected': selectedZombie === zombie.id,
+              'disabled': zombieEnergy < zombie.cost
+            }"
+            @click="selectZombie(zombie.id)"
+          >
+            <span class="zombie-icon">{{ zombie.icon }}</span>
+            <span class="zombie-name">{{ zombie.name }}</span>
+            <span class="zombie-cost">{{ zombie.cost }}</span>
           </div>
         </div>
       </div>
@@ -100,7 +59,12 @@
 
       <!-- 右侧：信息面板 -->
       <div class="info-panel">
-        <!-- 游戏信息 -->
+        <div class="info-item">
+          <span class="info-label">{{ role === 'plant' ? '阳光' : '能量' }}</span>
+          <span :class="['info-value', role === 'plant' ? 'sun' : 'energy']">
+            {{ role === 'plant' ? sunEnergy : zombieEnergy }}
+          </span>
+        </div>
         <div class="info-item">
           <span class="info-label">房间</span>
           <span class="info-value">{{ roomId }}</span>
@@ -111,73 +75,32 @@
         </div>
         <div class="info-item">
           <span class="info-label">状态</span>
-          <el-tag 
-            :type="getStatusType(connectionStatus)" 
-            size="small"
-            effect="dark"
-          >
-            {{ connectionStatus }}
-          </el-tag>
+          <span class="info-value">{{ connectionStatus }}</span>
         </div>
         <div class="info-item">
           <span class="info-label">延迟</span>
           <span class="info-value">{{ latency }}ms</span>
         </div>
-        
-        <!-- 系统操作 -->
-        <div class="system-buttons">
-          <el-button
-            type="warning"
-            @click="sendGameStateUpdate"
-            :icon="Refresh"
-            class="system-btn"
-            size="small"
-          >
-            同步状态
-          </el-button>
-          <el-button
-            type="danger"
-            @click="declareGameOver"
-            :icon="Warning"
-            class="system-btn"
-            size="small"
-          >
-            结束游戏
-          </el-button>
-          <el-button
-            type="primary"
-            @click="goBack"
-            :icon="Back"
-            class="system-btn"
-            size="small"
-          >
-            返回房间
-          </el-button>
-        </div>
       </div>
+    </div>
+
+    <!-- 游戏说明 -->
+    <div class="game-instructions">
+      <h3>游戏说明</h3>
+      <p>1. 植物玩家选择植物后点击画布网格进行种植。</p>
+      <p>2. 僵尸玩家选择僵尸后点击画布对应行召唤僵尸。</p>
+      <p>3. 双方根据资源消耗放置单位，先突破防线的一方获胜。</p>
+      <p>4. 房间状态与延迟会实时同步，必要时可使用同步按钮。</p>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, watch, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import {
-  House,
-  Sunny,
-  Moon,
-  Connection,
-  Back,
-  Refresh,
-  DocumentDelete,
-  Loading,
-  Timer,
-  Lightning,
-  Warning
-} from '@element-plus/icons-vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
-import { MultiplayerEngine } from '../pvz/multiplayerEngine.js'
-import { gameConfig } from '../pvz/config.js'
+import { Renderer } from '../pvz/renderer.js'
+import { plantConfig as basePlantConfig, gameConfig } from '../pvz/config.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -191,6 +114,8 @@ const messages = ref([])
 const gameState = ref(null)
 const logContainer = ref(null)
 const latency = ref(0)
+const gameCanvas = ref(null)
+const renderer = ref(null)
 
 // 植物玩家状态
 const sunEnergy = ref(150)
@@ -204,24 +129,140 @@ const zombieEnergy = ref(200)
 const selectedZombie = ref(null)
 const zombies = ref([])
 const selectedZombiesList = ref([]) // 从选择界面传递的僵尸列表
+const lawnMowers = ref([])
 
 let ws = null
 let pingInterval = null
 let sunGenerationInterval = null
 let zombieEnergyInterval = null
 
-const plantConfig = {
-  sunflower: { cost: 50, icon: '🌻', hp: 300 },
-  peashooter: { cost: 100, icon: '🔫', hp: 300 },
-  wallnut: { cost: 50, icon: '🌰', hp: 1000 },
-  cherrybomb: { cost: 150, icon: '🍒', hp: 300 }
-}
+const plantConfig = basePlantConfig
 
 const zombieConfig = {
-  basic: { cost: 50, icon: '🧟', hp: 200, speed: 1 },
-  conehead: { cost: 75, icon: '🎩', hp: 400, speed: 1 },
-  buckethead: { cost: 125, icon: '🪣', hp: 600, speed: 1 },
-  football: { cost: 175, icon: '🏈', hp: 500, speed: 2 }
+  basic: { id: 'basic', name: '普通僵尸', icon: '🧟', cost: 50, hp: 200, speed: 1 },
+  conehead: { id: 'conehead', name: '路障僵尸', icon: '🎩', cost: 75, hp: 400, speed: 1 },
+  buckethead: { id: 'buckethead', name: '铁桶僵尸', icon: '🪣', cost: 125, hp: 600, speed: 1 },
+  football: { id: 'football', name: '橄榄球僵尸', icon: '🏈', cost: 175, hp: 500, speed: 2 },
+  newspaper: { id: 'newspaper', name: '报纸僵尸', icon: '📰', cost: 100, hp: 300, speed: 1.5 },
+  dancing: { id: 'dancing', name: '跳舞僵尸', icon: '🕺', cost: 200, hp: 400, speed: 1 },
+  balloon: { id: 'balloon', name: '气球僵尸', icon: '🎈', cost: 150, hp: 250, speed: 1.2 },
+  pole: { id: 'pole', name: '撑杆僵尸', icon: '🏃', cost: 125, hp: 350, speed: 2.5 }
+}
+
+const plantIdAlias = {
+  wallnut: 'nutWall',
+  cherrybomb: 'cherryBomb'
+}
+
+const plantOptions = computed(() => {
+  return selectedPlantsList.value
+    .map((rawId) => {
+      const id = plantIdAlias[rawId] || rawId
+      return { id, ...plantConfig[id] }
+    })
+    .filter((item) => item && item.id)
+})
+
+const zombieOptions = computed(() => {
+  return selectedZombiesList.value
+    .map((id) => zombieConfig[id])
+    .filter((item) => item && item.id)
+})
+
+const applySelectionsFromQuery = () => {
+  const plantSelection = route.query.plant_selection
+  if (plantSelection && selectedPlantsList.value.length === 0) {
+    const raw = Array.isArray(plantSelection)
+      ? plantSelection.join(',')
+      : plantSelection
+    selectedPlantsList.value = raw.split(',').filter(Boolean)
+  }
+
+  const zombieSelection = route.query.zombie_selection
+  if (zombieSelection && selectedZombiesList.value.length === 0) {
+    const raw = Array.isArray(zombieSelection)
+      ? zombieSelection.join(',')
+      : zombieSelection
+    selectedZombiesList.value = raw.split(',').filter(Boolean)
+  }
+}
+
+const initCanvas = () => {
+  if (!gameCanvas.value) return
+  const canvasWidth = gameConfig.gridCols * gameConfig.cellWidth
+  const canvasHeight = gameConfig.gridRows * gameConfig.cellHeight
+  gameCanvas.value.width = canvasWidth
+  gameCanvas.value.height = canvasHeight
+  renderer.value = new Renderer(gameCanvas.value.getContext('2d'))
+  initLawnMowers()
+  renderGame()
+}
+
+const initLawnMowers = () => {
+  lawnMowers.value = Array.from({ length: gameConfig.gridRows }, (_, row) => ({
+    id: row,
+    x: gameConfig.lawnMowers.col * gameConfig.cellWidth,
+    y: row * gameConfig.cellHeight,
+    width: gameConfig.cellWidth,
+    height: gameConfig.cellHeight,
+    state: 'idle',
+    row,
+    col: gameConfig.lawnMowers.col,
+    speed: gameConfig.lawnMowers.speed,
+    damage: gameConfig.lawnMowers.damage,
+    triggerDistance: gameConfig.lawnMowers.triggerDistance
+  }))
+}
+
+const normalizePlant = (plant) => {
+  const type = plantIdAlias[plant.type] || plant.type
+  const config = plantConfig[type] || {}
+  const gridWidth = config.gridWidth || 1
+  const gridHeight = config.gridHeight || 1
+  const width = config.width || gameConfig.cellWidth * gridWidth
+  const height = config.height || gameConfig.cellHeight * gridHeight
+  return {
+    ...plant,
+    type,
+    x: plant.col * gameConfig.cellWidth,
+    y: plant.row * gameConfig.cellHeight,
+    width,
+    height,
+    gridWidth,
+    gridHeight,
+    maxHp: config.hp || plant.maxHp || plant.hp || 300
+  }
+}
+
+const normalizeZombie = (zombie) => {
+  const config = zombieConfig[zombie.type] || {}
+  return {
+    ...zombie,
+    width: zombie.width || gameConfig.cellWidth,
+    height: zombie.height || gameConfig.cellHeight,
+    maxHp: zombie.maxHp || config.hp || zombie.hp || 200,
+    shieldHp: zombie.shieldHp || 0
+  }
+}
+
+const renderGame = () => {
+  if (!renderer.value || !gameCanvas.value) return
+  const ctx = gameCanvas.value.getContext('2d')
+  ctx.clearRect(0, 0, gameCanvas.value.width, gameCanvas.value.height)
+  ctx.fillStyle = '#4a7c4e'
+  ctx.fillRect(0, 0, gameCanvas.value.width, gameCanvas.value.height)
+
+  const grid = {
+    rows: gameConfig.gridRows,
+    cols: gameConfig.gridCols,
+    cellWidth: gameConfig.cellWidth,
+    cellHeight: gameConfig.cellHeight
+  }
+  renderer.value.drawGrid(grid)
+  renderer.value.drawPlants(plants.value)
+  renderer.value.drawZombies(zombies.value)
+  renderer.value.drawSuns(fallingSuns.value)
+  renderer.value.drawLawnMowers(lawnMowers.value)
 }
 
 const connectWebSocket = () => {
@@ -266,11 +307,11 @@ const connectWebSocket = () => {
         gameState.value = { status: 'playing', startTime: Date.now() }
         
         // 接收选择信息
-        if (message.payload.plant_selection) {
+        if (message.payload.plant_selection && selectedPlantsList.value.length === 0) {
           selectedPlantsList.value = message.payload.plant_selection
           console.log('收到植物选择:', selectedPlantsList.value)
         }
-        if (message.payload.zombie_selection) {
+        if (message.payload.zombie_selection && selectedZombiesList.value.length === 0) {
           selectedZombiesList.value = message.payload.zombie_selection
           console.log('收到僵尸选择:', selectedZombiesList.value)
         }
@@ -367,11 +408,15 @@ const updateGameStateFromSync = (payload) => {
     zombieEnergy.value = payload.zombie_energy
   }
   if (payload.plants) {
-    plants.value = payload.plants
+    plants.value = payload.plants.map(normalizePlant)
   }
   if (payload.zombies) {
-    zombies.value = payload.zombies
+    zombies.value = payload.zombies.map(normalizeZombie)
   }
+  if (payload.suns) {
+    fallingSuns.value = payload.suns
+  }
+  renderGame()
 }
 
 const startSunGeneration = () => {
@@ -385,10 +430,12 @@ const startSunGeneration = () => {
         y: 50 + Math.random() * 300
       }
       fallingSuns.value.push(sun)
+      renderGame()
       
       // 5秒后消失
       setTimeout(() => {
         fallingSuns.value = fallingSuns.value.filter(s => s.id !== sun.id)
+        renderGame()
       }, 5000)
     }
   }, 2000) // 每2秒增加阳光
@@ -429,35 +476,6 @@ const canPlacePlant = (row, col) => {
   return !getCellPlant(row, col) && selectedPlant.value
 }
 
-const getPlantIcon = (plant) => {
-  const type = plant.type
-  return plantConfig[type] ? plantConfig[type].icon : '🌱'
-}
-
-const getZombieIcon = (type) => {
-  return zombieConfig[type] ? zombieConfig[type].icon : '🧟'
-}
-
-const getPlantName = (type) => {
-  const nameMap = {
-    sunflower: '向日葵',
-    peashooter: '豌豆射手',
-    wallnut: '坚果墙',
-    cherrybomb: '樱桃炸弹'
-  }
-  return nameMap[type] || type
-}
-
-const getZombieName = (type) => {
-  const nameMap = {
-    basic: '普通僵尸',
-    conehead: '路障僵尸',
-    buckethead: '铁桶僵尸',
-    football: '橄榄球僵尸'
-  }
-  return nameMap[type] || type
-}
-
 const handleCanvasClick = (event) => {
   const canvas = event.target
   const rect = canvas.getBoundingClientRect()
@@ -465,19 +483,19 @@ const handleCanvasClick = (event) => {
   const y = event.clientY - rect.top
   
   // 计算网格位置
-  const cellWidth = 80 // 网格宽度
-  const cellHeight = 100 // 网格高度
+  const cellWidth = gameConfig.cellWidth
+  const cellHeight = gameConfig.cellHeight
   const col = Math.floor(x / cellWidth)
   const row = Math.floor(y / cellHeight)
   
   if (role.value === 'plant' && selectedPlant.value) {
     // 植物玩家：种植植物
-    if (col >= 0 && col < 9 && row >= 0 && row < 5) {
+    if (col >= 0 && col < gameConfig.gridCols && row >= 0 && row < gameConfig.gridRows) {
       placePlant(row, col)
     }
   } else if (role.value === 'zombie' && selectedZombie.value) {
     // 僵尸玩家：在对应行生成僵尸
-    if (row >= 0 && row < 5) {
+    if (row >= 0 && row < gameConfig.gridRows) {
       spawnZombie(row)
     }
   }
@@ -520,13 +538,14 @@ const placePlant = (row, col) => {
   addMessage('send', { message: `在(${row}, ${col})种植${config.icon}` })
   
   // 本地乐观更新
-  plants.value.push({
+  plants.value.push(normalizePlant({
     id: Date.now(),
     type: plantType,
     row,
     col,
     hp: config.hp
-  })
+  }))
+  renderGame()
 }
 
 const spawnZombie = (lane) => {
@@ -560,15 +579,16 @@ const spawnZombie = (lane) => {
   addMessage('send', { message: `在第${lane}行生成${config.icon}` })
   
   // 本地乐观更新
-  zombies.value.push({
+  zombies.value.push(normalizeZombie({
     id: Date.now(),
     type: zombieType,
     lane,
-    x: 800, // 从右侧开始
-    y: 50 + lane * 80,
+    x: gameConfig.gridCols * gameConfig.cellWidth,
+    y: lane * gameConfig.cellHeight,
     hp: config.hp,
     speed: config.speed
-  })
+  }))
+  renderGame()
 }
 
 const collectSun = (sunId) => {
@@ -576,6 +596,7 @@ const collectSun = (sunId) => {
   if (sunIndex > -1) {
     fallingSuns.value.splice(sunIndex, 1)
     sunEnergy.value += 25
+    renderGame()
     
     // 发送操作
     const message = {
@@ -594,13 +615,14 @@ const handlePlantAction = (message) => {
   const plantType = payload.plant_type
   const config = plantConfig[plantType]
   
-  plants.value.push({
+  plants.value.push(normalizePlant({
     id: Date.now(),
     type: plantType,
     row: payload.row,
     col: payload.col,
     hp: config ? config.hp : 300
-  })
+  }))
+  renderGame()
   
   ElMessage.info(`对手机种植了${config ? config.icon : '🌱'}`)
 }
@@ -610,15 +632,16 @@ const handleZombieAction = (message) => {
   const zombieType = payload.zombie_type
   const config = zombieConfig[zombieType]
   
-  zombies.value.push({
+  zombies.value.push(normalizeZombie({
     id: Date.now(),
     type: zombieType,
     lane: payload.lane,
-    x: 800,
-    y: 50 + payload.lane * 80,
+    x: gameConfig.gridCols * gameConfig.cellWidth,
+    y: payload.lane * gameConfig.cellHeight,
     hp: config ? config.hp : 200,
     speed: config ? config.speed : 1
-  })
+  }))
+  renderGame()
   
   ElMessage.warning(`对手机在第${payload.lane}行生成了${config ? config.icon : '🧟'}`)
 }
@@ -738,7 +761,11 @@ const scrollToBottom = () => {
 }
 
 onMounted(() => {
+  applySelectionsFromQuery()
   connectWebSocket()
+  nextTick(() => {
+    initCanvas()
+  })
   
   pingInterval = setInterval(() => {
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -762,13 +789,13 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.multiplayer-game-container {
+.plants-vs-zombies-view {
   min-height: 100vh;
   padding: 20px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
-/* 顶部标题栏 */
+/* 游戏标题 */
 .game-header {
   display: flex;
   align-items: center;
@@ -781,39 +808,13 @@ onUnmounted(() => {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
 }
 
-.header-content {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  width: 100%;
-  justify-content: space-between;
-}
-
-.header-left h1 {
+.game-header h1 {
   margin: 0;
-  font-size: 2rem;
+  font-size: 2.5rem;
   background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-}
-
-.game-info {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.info-badge {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 20px;
-  font-size: 14px;
-  font-weight: 500;
-  color: white;
 }
 
 /* 游戏容器 */
@@ -823,14 +824,10 @@ onUnmounted(() => {
   margin-bottom: 20px;
 }
 
-/* 左侧面板 */
-.left-panel {
-  width: 200px;
-}
-
 /* 植物选择栏 */
 .plants-sidebar {
-  height: calc(100vh - 200px);
+  width: 200px;
+  max-height: calc(100vh - 20px);
   padding: 20px;
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
@@ -903,7 +900,8 @@ onUnmounted(() => {
 
 /* 僵尸选择栏 */
 .zombies-sidebar {
-  height: calc(100vh - 200px);
+  width: 200px;
+  max-height: calc(100vh - 20px);
   padding: 20px;
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
@@ -974,29 +972,6 @@ onUnmounted(() => {
   color: #ef4444;
 }
 
-/* 能量显示 */
-.energy-display {
-  margin-top: 20px;
-  padding: 16px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  text-align: center;
-}
-
-.energy-label {
-  display: block;
-  font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.8);
-  margin-bottom: 8px;
-}
-
-.energy-value {
-  display: block;
-  font-size: 1.8rem;
-  font-weight: 700;
-  color: white;
-}
-
 /* 游戏画布 */
 .game-canvas {
   flex: 1;
@@ -1013,13 +988,11 @@ onUnmounted(() => {
 .game-canvas canvas {
   display: block;
   cursor: crosshair;
-  background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%);
-  border-radius: 8px;
 }
 
 /* 信息面板 */
 .info-panel {
-  width: 200px;
+  width: 180px;
   padding: 20px;
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
@@ -1046,24 +1019,18 @@ onUnmounted(() => {
 }
 
 .info-value {
-  font-size: 1.2rem;
+  font-size: 1.8rem;
   font-weight: 700;
   color: white;
   text-align: center;
 }
 
-/* 系统按钮 */
-.system-buttons {
-  margin-top: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.info-value.sun {
+  color: #fbbf24;
 }
 
-.system-btn {
-  width: 100%;
-  font-size: 0.9rem;
-  font-weight: 600;
+.info-value.energy {
+  color: #ef4444;
 }
 
 /* 自定义滚动条样式 */
@@ -1095,15 +1062,10 @@ onUnmounted(() => {
     flex-direction: column;
   }
 
-  .left-panel,
+  .plants-sidebar,
+  .zombies-sidebar,
   .info-panel {
     width: 100%;
-  }
-
-  .plants-sidebar,
-  .zombies-sidebar {
-    height: auto;
-    max-height: 200px;
   }
 
   .plant-slots,
@@ -1130,7 +1092,7 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
-  .multiplayer-game-container {
+  .plants-vs-zombies-view {
     padding: 10px;
   }
 
@@ -1140,22 +1102,58 @@ onUnmounted(() => {
     padding: 16px;
   }
 
-  .header-content {
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .header-left h1 {
-    font-size: 1.5rem;
-    text-align: center;
-  }
-
-  .game-info {
-    justify-content: center;
+  .game-header h1 {
+    font-size: 1.8rem;
   }
 
   .game-canvas {
     overflow-x: auto;
   }
+}
+
+/* 控制按钮样式 */
+.header-buttons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.control-btn {
+  padding: 8px 16px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: white;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.control-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+}
+
+/* 游戏说明 */
+.game-instructions {
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.game-instructions h3 {
+  margin: 0 0 12px 0;
+  font-size: 1.2rem;
+  color: white;
+}
+
+.game-instructions p {
+  margin: 8px 0;
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.6;
 }
 </style>

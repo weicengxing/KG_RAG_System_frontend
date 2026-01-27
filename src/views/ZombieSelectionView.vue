@@ -197,7 +197,8 @@ const handleWebSocketMessage = (message) => {
           userId: userId.value
         },
         query: {
-          from_selection: '1'
+          from_selection: '1',
+          zombie_selection: selectedZombies.value.join(',')
         }
       })
       break

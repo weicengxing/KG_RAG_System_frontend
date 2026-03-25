@@ -1,0 +1,36 @@
+# Node modules
+node_modules
+
+# Build output (will be copied separately)
+dist
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Git
+.git
+.gitignore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage
+
+#临时文件
+*.tmp
+*.temp

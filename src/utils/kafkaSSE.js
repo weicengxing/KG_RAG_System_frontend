@@ -5,8 +5,9 @@
 
 import { ElMessage } from 'element-plus'
 import request from './request'
+import { API_CONFIG } from '../config'
 
-const API_BASE_URL = 'http://localhost:8000/api/kg'
+const API_BASE_URL = `${API_CONFIG.BASE_URL}/api/kg`
 
 /**
  * 使用 SSE 流式监听任务进度（带自动重连）

@@ -120,7 +120,7 @@ export const plantConfig = {
     explodeRadius: 220,  // 爆炸半径（像素）- 约2-3个格子
     projectileSpeed: 15, // 炮弹速度
     cooldown: 40,        // 很长的冷却时间
-    sleepDuration: 20,   // 发射后沉睡时间（秒）
+    sleepDuration: 0,   // 发射后沉睡时间（秒）
     gridWidth: 2,        // 占用2个格子宽度
     gridHeight: 1,       // 占用1个格子高度
     width: 104,          // 单个格子宽度（会在engine中动态设置为2倍）

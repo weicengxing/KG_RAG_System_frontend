@@ -109,8 +109,9 @@ request.interceptors.response.use(
 // 添加流式请求方法 - 使用统一的配置
 export function createStreamRequest(url, data) {
   const token = localStorage.getItem('token')
-  
-  return fetch(`${API_CONFIG.BASE_URL}${url}`, {
+  const requestUrl = API_CONFIG.BASE_URL ? `${API_CONFIG.BASE_URL}${url}` : url
+
+  return fetch(requestUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

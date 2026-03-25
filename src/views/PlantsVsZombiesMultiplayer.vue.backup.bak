@@ -1,0 +1,234 @@
+<template>
+  <div class="plants-vs-zombies-view">
+    <!-- 游戏标题 -->
+    <div class="game-header">
+      <h1>🌻 植物大战僵尸 🧟</h1>
+      <div class="header-buttons">
+        <button v-if="role === 'plant'" @click="collectAllSuns" class="control-btn">自动收集阳光</button>
+        <button @click="sendGameStateUpdate" class="control-btn">同步状态</button>
+        <button @click="declareGameOver" class="control-btn">结束游戏</button>
+        <button @click="goBack" class="control-btn">返回房间</button>
+      </div>
+    </div>
+
+    <div class="game-container">
+      <!-- 左侧：植物/僵尸选择栏 -->
+      <div class="plants-sidebar" v-if="role === 'plant'">
+        <h3>🌻 植物选择</h3>
+        <div class="plant-slots">
+          <div 
+            class="plant-slot" 
+            v-for="plant in plantOptions" 
+            :key="plant.id"
+            :class="{
+              'selected': selectedPlant === plant.id,
+              'disabled': sunEnergy < plant.cost
+            }"
+            @click="selectPlant(plant.id)"
+          >
+            <span class="plant-icon">{{ plant.icon }}</span>
+            <span class="plant-name">{{ plant.name }}</span>
+            <span class="plant-cost">{{ plant.cost }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="zombies-sidebar" v-if="role === 'zombie'">
+        <h3>🧟 僵尸选择</h3>
+        <div class="zombie-slots">
+          <div 
+            class="zombie-slot" 
+            v-for="zombie in zombieOptions" 
+            :key="zombie.id"
+            :class="{
+              'selected': selectedZombie === zombie.rawId,
+              'disabled': zombieEnergy < zombie.cost
+            }"
+            @click="selectZombie(zombie.rawId)"
+          >
+            <span class="zombie-icon">{{ zombie.icon }}</span>
+            <span class="zombie-name">{{ zombie.name }}</span>
+            <span class="zombie-cost">{{ zombie.cost }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 中间：游戏画布 -->
+      <div class="game-canvas">
+        <canvas ref="gameCanvas" @click="handleCanvasClick"></canvas>
+      </div>
+
+      <!-- 右侧：信息面板 -->
+      <div class="info-panel">
+        <div class="info-item">
+          <div class="panel-header">
+            <h3>{{ role === 'plant' ? '植物选择' : '僵尸选择' }}</h3>
+            <div class="resource-info">
+              <span v-if="role === 'plant'">☀️ 阳光: {{ sunEnergy }}</span>
+              <span v-if="role === 'zombie'">⚡ 能量: {{ zombieEnergy }}</span>
+            </div>
+          </div>
+
+          <div class="info-item">
+            <span class="info-label">房间</span>
+            <span class="info-value">{{ roomId }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">角色</span>
+            <span class="info-value">{{ role === 'plant' ? '🌻 植物' : '🧟 僵尸' }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">状态</span>
+            <span class="info-value">{{ connectionStatus }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">延迟</span>
+            <span class="info-value">{{ latency }}ms</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 游戏说明 -->
+    <div class="game-instructions">
+      <h3>游戏说明</h3>
+      <p>1. 植物玩家选择植物后点击画布网格进行种植。</p>
+      <p>2. 僵尸玩家选择僵尸后点击画布对应行召唤僵尸。</p>
+      <p>3. 双方根据资源消耗放置单位，先突破防线的一方获胜。</p>
+      <p>4. 房间状态与延迟会实时同步，必要时可使用同步按钮。</p>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { ElMessageBox, ElMessage } from 'element-plus'
+import { MultiplayerGameEngine } from './pvz/multiplayerEngine.js'
+import { plantConfig, zombieConfig, gameConfig } from './pvz/config.js'
+
+const router = useRouter()
+const route = useRoute()
+
+// 游戏引擎实例
+let gameEngine = null
+let rafId = null
+let lastFrameTime = 0
+
+// 响应式状态
+const roomId = ref(route.params.roomId)
+const userId = ref(route.params.userId || localStorage.getItem('username'))
+const fromSelection = ref(route.query.from_selection === '1')
+const role = ref('')
+const connectionStatus = ref('连接中...')
+const gameState = ref(null)
+const latency = ref(0)
+const gameCanvas = ref(null)
+
+// 植物玩家状态
+const sunEnergy = ref(10000)
+const selectedPlant = ref(null)
+const selectedPlantsList = ref([])
+
+// 僵尸玩家状态
+const zombieEnergy = ref(10000)
+const selectedZombie = ref(null)
+const selectedZombiesList = ref([])
+
+// WebSocket
+let ws = null
+let pingInterval = null
+let sunGenerationInterval = null
+let zombieEnergyInterval = null
+
+// 配置别名
+const zombieTypeAlias = {
+  basic: 'normal'
+}
+
+const zombieCostConfig = {
+  basic: 50,
+  conehead: 75,
+  buckethead: 125,
+  football: 175,
+  newspaper: 100,
+  dancing: 200,
+  balloon: 150,
+  pole: 125
+}
+
+const plantIdAlias = {
+  wallnut: 'nutWall',
+  cherrybomb: 'cherryBomb'
+}
+
+// 计算属性
+const plantOptions = computed(() => {
+  return selectedPlantsList.value
+    .map((rawId) => {
+      const id = plantIdAlias[rawId] || rawId
+      return { id, ...plantConfig[id] }
+    })
+    .filter((item) => item && item.id)
+})
+
+const zombieOptions = computed(() => {
+  return selectedZombiesList.value
+    .map((rawId) => {
+      const id = zombieTypeAlias[rawId] || rawId
+      const base = zombieConfig[id]
+      if (!base) return null
+      return {
+        ...base,
+        rawId,
+        cost: zombieCostConfig[rawId]
+      }
+    })
+    .filter((item) => item && item.rawId)
+})
+
+// 应用选择
+const applySelectionsFromQuery = () => {
+  const plantSelection = route.query.plant_selection
+  if (plantSelection && selectedPlantsList.value.length === 0) {
+    const raw = Array.isArray(plantSelection)
+      ? plantSelection.join(',')
+      : plantSelection
+    selectedPlantsList.value = raw.split(',').filter(Boolean)
+  }
+
+  const zombieSelection = route.query.zombie_selection
+  if (zombieSelection && selectedZombiesList.value.length === 0) {
+    const raw = Array.isArray(zombieSelection)
+      ? zombieSelection.join(',')
+      : zombieSelection
+    selectedZombiesList.value = raw.split(',').filter(Boolean)
+  }
+}
+
+// 自动收集阳光
+const collectAllSuns = () => {
+  if (!gameEngine || role.value !== 'plant') return
+  gameEngine.toggleAutoCollectSun()
+}
+
+// 初始化画布和引擎
+const initCanvas = () => {
+  if (!gameCanvas.value) return
+  
+  const canvasWidth = gameConfig.gridCols * gameConfig.cellWidth
+  const canvasHeight = gameConfig.gridRows * gameConfig.cellHeight
+  gameCanvas.value.width = canvasWidth
+  gameCanvas.value.height = canvasHeight
+  
+  // 创建多人游戏引擎
+  gameEngine = new MultiplayerGameEngine(
+    gameCanvas.value,
+    canvasWidth,
+    canvasHeight,
+    ws,
+    role.value
+  )
+  
+  // 设置引擎回调
+  gameEngine

@@ -254,34 +254,6 @@ export class Renderer {
       
       // 绘制血条
       this.drawHealthBar(plant.x, plant.y, plant.width, 10, plant.hp, plant.maxHp)
-      
-      // 如果是樱桃炸弹，显示倒计时
-      if (plant.type === 'cherryBomb' && plant.explodeTimer > 0) {
-        const explodeConfig = plantConfig.cherryBomb
-        const timeLeft = explodeConfig.explodeDelay - plant.explodeTimer
-        const progress = timeLeft / explodeConfig.explodeDelay
-        
-        // 绘制倒计时进度条
-        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'
-        this.ctx.fillRect(plant.x + 5, plant.y + plant.height - 8, plant.width - 10, 4)
-        
-        this.ctx.fillStyle = '#ef4444'
-        this.ctx.fillRect(plant.x + 5, plant.y + plant.height - 8, (plant.width - 10) * progress, 4)
-      }
-      
-      // 如果是火爆辣椒，显示倒计时
-      if (plant.type === 'jalapeno' && plant.explodeTimer > 0) {
-        const explodeConfig = plantConfig.jalapeno
-        const timeLeft = explodeConfig.explodeDelay - plant.explodeTimer
-        const progress = timeLeft / explodeConfig.explodeDelay
-        
-        // 绘制倒计时进度条
-        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'
-        this.ctx.fillRect(plant.x + 5, plant.y + plant.height - 8, plant.width - 10, 4)
-        
-        this.ctx.fillStyle = '#ff4500'
-        this.ctx.fillRect(plant.x + 5, plant.y + plant.height - 8, (plant.width - 10) * progress, 4)
-      }
     }
   }
   
@@ -1312,6 +1284,7 @@ export class Renderer {
           this.drawDeathAnimation(anim, progress)
           break
         case 'explode':
+          // 樱桃炸弹等普通爆炸动画
           this.drawExplosionAnimation(anim, progress)
           break
         case 'plant':
@@ -1343,6 +1316,9 @@ export class Renderer {
           break
         case 'iceDragonExplode':
           this.drawIceDragonExplodeAnimation(anim, progress)
+          break
+        case 'hypoCharm':
+          this.drawHypoCharmAnimation(anim, progress)
           break
         case 'lightningSurround':
           LightningRenderer.drawLightningSurround(this.ctx, anim, progress)

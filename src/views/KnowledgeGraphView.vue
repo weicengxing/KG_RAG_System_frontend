@@ -1,6 +1,6 @@
 <template>
   <div class="knowledge-graph-container">
-    <!-- 背景层：星光背景调整为 fixed 定位，并提高 z-index 确保可见但位于内容之下 -->
+    <!-- 背景极光动画 - fixed 定位避免滚动时闪烁, z-index 确保在内容下方 -->
     <div class="bg-aurora" aria-hidden="true"></div>
 
     <div class="content-wrapper">
@@ -11,8 +11,8 @@
               <el-icon><Connection /></el-icon>
             </div>
             <div class="brand-text">
-              <h1 class="title">知识图谱RAG系统</h1>
-              <p class="subtitle">智能文档解析 · 图谱构建 · 知识问答</p>
+              <h1 class="title">知识图谱 RAG 系统</h1>
+              <p class="subtitle">上传文档、选择文件、拖拽上传 知识图谱问答</p>
             </div>
           </div>
 
@@ -41,17 +41,17 @@
         <!-- 图谱构建标签页 -->
         <el-tab-pane label="图谱构建" name="build">
           <div class="build-pipeline">
-            <!-- 步骤指示器 -->
+            <!-- 步骤流程 -->
             <div class="steps-container">
               <el-steps :active="currentStep" finish-status="success" align-center>
                 <el-step title="上传文档" :icon="Upload" />
                 <el-step title="文本分块" :icon="Document" />
                 <el-step title="实体抽取" :icon="Search" />
-                <el-step title="图谱生成" :icon="Share" />
+                <el-step title="图谱构建" :icon="Share" />
               </el-steps>
             </div>
 
-            <!-- 步骤1: 文档上传 -->
+            <!-- 步骤1: 上传文档 -->
             <div v-if="currentStep === 0" class="step-content">
               <el-card class="panel-card upload-card step-upload-theme" shadow="never">
                 <div class="step-decoration upload-decoration">
@@ -62,10 +62,10 @@
                 <template #header>
                   <div class="card-header">
                     <div class="card-title">
-                      <span class="emoji emoji-large upload-emoji">📄</span>
-                      <span>文档上传</span>
+                      <span class="emoji emoji-large upload-emoji">📤</span>
+                      <span>上传文档</span>
                     </div>
-                    <el-tag type="info" effect="light" round>PDF/TXT/DOCX/PPTX · ≤ 100MB</el-tag>
+                    <el-tag type="info" effect="light" round>PDF/TXT/DOCX/PPTX 最大100MB</el-tag>
                   </div>
                 </template>
 
@@ -80,11 +80,11 @@
                   >
                     <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
                     <div class="el-upload__text">
-                      拖拽文档到此处或 <em>点击上传</em>
+                      将文件拖到此处，或<em>点击上传</em>
                     </div>
                     <template #tip>
                       <div class="el-upload__tip">
-                        支持 PDF、TXT、DOCX、PPTX 格式
+                        支持 PDF/TXT/DOCX/PPT 格式文件
                       </div>
                     </template>
                   </el-upload>
@@ -99,10 +99,10 @@
                       class="action-button"
                     >
                       <el-icon class="btn-icon"><Upload /></el-icon>
-                      开始解析文档
+                      开始上传文档
                     </el-button>
 
-                    <!-- 一键上传按钮 -->
+                    <!-- 一键上传处理 -->
                     <el-button
                       type="success"
                       size="large"
@@ -112,18 +112,18 @@
                       class="action-button one-click-btn"
                     >
                       <el-icon class="btn-icon"><Promotion /></el-icon>
-                      一键上传（自动处理）
+                      一键上传并处理
                     </el-button>
 
                     <div class="hint-row">
                       <span class="hint" v-if="selectedFile">
-                        已选择：<strong>{{ selectedFileName }}</strong>
+                        已选择文件：<strong>{{ selectedFileName }}</strong>
                       </span>
-                      <span class="hint" v-else>未选择文件</span>
+                      <span class="hint" v-else>请先选择要上传的文件</span>
                     </div>
                   </div>
 
-                  <!-- 异步上传进度显示 -->
+                  <!-- 异步上传进度条 -->
                   <el-collapse-transition>
                     <div v-if="uploadProgress > 0 || uploadingAsync" class="async-upload-progress">
                       <el-progress 
@@ -152,11 +152,11 @@
                 <template #header>
                   <div class="card-header">
                     <div class="card-title">
-                      <span class="emoji emoji-large chunk-emoji">📝</span>
+                      <span class="emoji emoji-large chunk-emoji">📄</span>
                       <span>文本分块</span>
                     </div>
                     <el-tag v-if="chunks.length > 0" type="success" effect="light" round>
-                      共 {{ chunks.length }} 个分块
+                      共 {{ chunks.length }} 个块
                     </el-tag>
                   </div>
                 </template>
@@ -164,19 +164,19 @@
                 <el-row :gutter="20" class="split-grid">
                   <el-col :span="12">
                     <div class="panel-head">
-                      <h4 class="panel-title">原始文本预览</h4>
+                      <h4 class="panel-title">原文预览</h4>
                       <el-tag type="info" effect="plain" round size="small">Preview</el-tag>
                     </div>
                     <el-scrollbar height="420px">
                       <div class="text-preview">
-                        {{ documentText || '加载中...' }}
+                        {{ documentText || '暂无内容...' }}
                       </div>
                     </el-scrollbar>
                   </el-col>
 
                   <el-col :span="12">
                     <div class="panel-head">
-                      <h4 class="panel-title">分块结果</h4>
+                      <h4 class="panel-title">文本块列表</h4>
                       <el-tag type="warning" effect="plain" round size="small">Chunks</el-tag>
                     </div>
                     <el-scrollbar height="420px">
@@ -192,13 +192,13 @@
                             <span class="chunk-length">{{ chunk.length }} 字符</span>
                           </div>
                           <div class="chunk-content">
-                            {{ (chunk.content || '').substring(0, 120) }}{{ (chunk.content || '').length > 120 ? '…' : '' }}
+                            {{ (chunk.content || '').substring(0, 120) }}{{ (chunk.content || '').length > 120 ? '...' : '' }}
                           </div>
                         </el-card>
 
                         <el-empty
                           v-if="chunks.length === 0"
-                          description="暂无分块结果"
+                          description="暂无分块数据"
                           :image-size="100"
                         />
                       </div>
@@ -215,7 +215,7 @@
                     class="action-button"
                   >
                     <el-icon class="btn-icon"><Search /></el-icon>
-                    提取实体关系
+                    开始抽取实体
                   </el-button>
                 </div>
               </el-card>
@@ -233,7 +233,7 @@
                   <div class="card-header">
                     <div class="card-title">
                       <span class="emoji emoji-large extract-emoji">🔍</span>
-                      <span>实体关系抽取</span>
+                      <span>实体抽取</span>
                     </div>
                     <el-tag v-if="triplets.length > 0" type="success" effect="light" round>
                       共 {{ triplets.length }} 个三元组
@@ -266,7 +266,7 @@
 
                     <el-empty
                       v-if="triplets.length === 0"
-                      description="暂无三元组结果"
+                      description="暂无抽取的三元组"
                       :image-size="110"
                     />
                   </div>
@@ -281,13 +281,13 @@
                     class="action-button"
                   >
                     <el-icon class="btn-icon"><Share /></el-icon>
-                    构建知识图谱
+                    构建图谱
                   </el-button>
                 </div>
               </el-card>
             </div>
 
-            <!-- 步骤4: 图谱可视化 -->
+            <!-- 步骤4: 图谱展示 -->
             <div v-if="currentStep === 3" class="step-content">
               <el-card class="panel-card step-graph-theme" shadow="never">
                 <div class="step-decoration graph-decoration">
@@ -307,7 +307,7 @@
                         刷新
                       </el-button>
                       <el-button size="small" @click="resetPipeline" plain>
-                        重新开始
+                        重置流程
                       </el-button>
                     </div>
                   </div>
@@ -319,15 +319,15 @@
 
                 <div class="graph-stats">
                   <div class="stat-card">
-                    <div class="stat-title">节点数</div>
+                    <div class="stat-title">节点数量</div>
                     <div class="stat-value">{{ graphData.nodes?.length || 0 }}</div>
                   </div>
                   <div class="stat-card">
-                    <div class="stat-title">边数</div>
+                    <div class="stat-title">边数量</div>
                     <div class="stat-value">{{ graphData.edges?.length || 0 }}</div>
                   </div>
                   <div class="stat-card">
-                    <div class="stat-title">耗时</div>
+                    <div class="stat-title">构建时间</div>
                     <div class="stat-value">{{ buildTime }}<span class="stat-suffix">秒</span></div>
                   </div>
                 </div>
@@ -337,10 +337,10 @@
         </el-tab-pane>
 
         <!-- RAG问答标签页 -->
-        <el-tab-pane label="智能问答" name="qa">
+        <el-tab-pane label="知识问答" name="qa">
           <div class="qa-container">
             <el-row :gutter="20" class="qa-grid">
-              <!-- 左侧：问答界面 -->
+              <!-- 左侧聊天区域 -->
               <el-col :span="12" class="qa-col">
                 <el-card class="panel-card chat-card" shadow="never">
                   <template #header>
@@ -377,14 +377,14 @@
                     </div>
                   </template>
 
-                  <!-- 聊天区域 Wrapper -->
+                  <!-- 聊天内容区域 -->
                   <div class="chat-wrapper">
                     <el-scrollbar class="chat-scroll-area" ref="chatScroll" wrap-class="chat-scroll-wrap">
                       <div class="chat-messages">
                         <div class="chat-start-placeholder" v-if="messages.length === 0">
                           <div class="placeholder-icon">🤖</div>
-                          <h3>欢迎使用 RAG 智能问答</h3>
-                          <p>我可以根据您上传的知识图谱回答相关问题。</p>
+                          <h3>欢迎使用 RAG 知识问答系统</h3>
+                          <p>请先上传文档并构建知识图谱，然后我可以回答您关于文档内容的问题。</p>
                         </div>
 
                         <div
@@ -392,15 +392,15 @@
                           :key="idx"
                           :class="['message', msg.role]"
                         >
-                          <!-- 头像 -->
+                          <!-- 用户头像 -->
                           <div class="message-avatar" :class="msg.role">
                             <img v-if="msg.role === 'user'" src="https://cdn-icons-png.flaticon.com/512/9308/9308304.png" alt="User" />
                             <div v-else class="ai-avatar-inner">
-                              <span class="ai-icon">✨</span>
+                              <span class="ai-icon">🤖</span>
                             </div>
                           </div>
 
-                          <!-- 气泡 -->
+                          <!-- 消息气泡 -->
                           <div class="message-bubble" :class="msg.role">
                             <div
                               class="message-text"
@@ -413,7 +413,7 @@
                         <div v-if="answering" class="message assistant">
                           <div class="message-avatar assistant">
                             <div class="ai-avatar-inner typing-state">
-                              <span class="ai-icon">⏳</span>
+                              <span class="ai-icon">🤖</span>
                             </div>
                           </div>
                           <div class="message-bubble assistant">
@@ -431,12 +431,12 @@
                       </div>
                     </el-scrollbar>
 
-                    <!-- 悬浮输入框 -->
+                    <!-- 底部输入框 -->
                     <div class="chat-input-container">
                       <div class="chat-input-wrapper">
                         <el-input
                           v-model="question"
-                          placeholder="请输入关于知识图谱的问题..."
+                          placeholder="请输入您的问题..."
                           @keyup.enter="askQuestion"
                           :disabled="answering"
                           class="floating-input"
@@ -451,40 +451,40 @@
                           :disabled="!question.trim()"
                         >
                           <template #icon>
-                            <el-icon v-if="!answering"><position /></el-icon>
+                            <el-icon v-if="!answering"><Position /></el-icon>
                           </template>
                         </el-button>
                       </div>
                       <div class="input-hint">
                         <span class="hint-badge">Tips</span>
-                        <span class="hint-text">支持上下文多轮对话，按 Enter 发送</span>
+                        <span class="hint-text">按 Enter 键发送问题</span>
                       </div>
                     </div>
                   </div>
                 </el-card>
               </el-col>
 
-              <!-- 右侧：解释面板 -->
+              <!-- 右侧参考资料区域 -->
               <el-col :span="12" class="qa-col">
                 <el-card class="panel-card explain-card" shadow="never">
                   <template #header>
                     <div class="card-header">
                       <div class="card-title">
-                        <span class="emoji">🔎</span>
-                        <span>答案溯源</span>
+                        <span class="emoji">📚</span>
+                        <span>参考资料</span>
                       </div>
-                      <el-tag type="success" effect="light" round>可解释</el-tag>
+                      <el-tag type="success" effect="light" round>参考来源</el-tag>
                     </div>
                   </template>
 
                   <el-tabs v-model="explainTab" class="explain-tabs">
-                    <el-tab-pane label="引用片段" name="chunks">
+                    <el-tab-pane label="相关文档块" name="chunks">
                       <el-scrollbar height="calc(100% - 10px)">
                         <div class="source-chunks">
-                          <!-- 加载状态 -->
+                          <!-- 加载中提示 -->
                           <div v-if="loadingStatus.vectorSearch" class="loading-indicator">
                             <el-icon class="is-loading"><Loading /></el-icon>
-                            <span>正在检索相关文档片段...</span>
+                            <span>正在搜索相关文档块...</span>
                           </div>
 
                           <el-card
@@ -496,39 +496,39 @@
                           >
                             <div class="source-chunk-head">
                               <div class="chunk-badge">
-                                <!-- 装饰性边角 -->
+                                <!-- 装饰角标 -->
                                 <span class="badge-corner badge-corner-tl"></span>
                                 <span class="badge-corner badge-corner-tr"></span>
                                 <span class="badge-corner badge-corner-bl"></span>
                                 <span class="badge-corner badge-corner-br"></span>
                                 
-                                <!-- 左侧图标区域 -->
+                                <!-- 图标区域 -->
                                 <div class="badge-icon-area">
                                   <span class="badge-icon">📄</span>
                                   <div class="badge-icon-glow"></div>
                                 </div>
                                 
-                                <!-- 中间内容区域 -->
+                                <!-- 内容区域 -->
                                 <div class="badge-content">
                                   <div class="badge-number-row">
                                     <span class="badge-prefix">FRAGMENT</span>
                                     <span class="badge-number">{{ idx + 1 }}</span>
                                   </div>
                                   <div class="badge-meta">
-                                    <span class="badge-label-source">文档片段</span>
-                                    <span class="badge-separator">·</span>
-                                    <span class="badge-label-index">第{{ idx + 1 }}部分</span>
+                                    <span class="badge-label-source">文档块</span>
+                                    <span class="badge-separator">|</span>
+                                    <span class="badge-label-index">#{{ idx + 1 }}</span>
                                   </div>
                                 </div>
                                 
-                                <!-- 右侧装饰星星 -->
+                                <!-- 星星装饰 -->
                                 <div class="badge-stars">
-                                  <span class="star star-1">✦</span>
-                                  <span class="star star-2">✨</span>
-                                  <span class="star star-3">✦</span>
+                                  <span class="star star-1">⭐</span>
+                                  <span class="star star-2">⭐</span>
+                                  <span class="star star-3">⭐</span>
                                 </div>
                                 
-                                <!-- 流光效果层 -->
+                                <!-- 光效 -->
                                 <div class="badge-shine"></div>
                               </div>
                             </div>
@@ -537,66 +537,66 @@
 
                           <el-empty
                             v-if="!loadingStatus.vectorSearch && sourceChunks.length === 0"
-                            description="暂无引用片段"
+                            description="暂无参考资料"
                             :image-size="110"
                           />
                         </div>
                       </el-scrollbar>
                     </el-tab-pane>
 
-                    <el-tab-pane label="局部图谱" name="graph">
-  <!-- 加载状态 -->
-  <div v-if="loadingStatus.graphSearch" class="loading-indicator">
-    <el-icon class="is-loading"><Loading /></el-icon>
-    <span>正在检索知识图谱...</span>
-  </div>
+                    <el-tab-pane label="知识图谱" name="graph">
+                      <!-- 加载中提示 -->
+                      <div v-if="loadingStatus.graphSearch" class="loading-indicator">
+                        <el-icon class="is-loading"><Loading /></el-icon>
+                        <span>正在加载知识图谱...</span>
+                      </div>
 
-  <div v-else class="subgraph-stage">
-    <!-- 
-       1. 添加 @dblclick 双击事件 
-       2. 添加 cursor: zoom-in 提示用户可点击 
-    -->
-    <div 
-      ref="subgraphContainer" 
-      class="subgraph-container" 
-      @dblclick="handleOpenExpand"
-      title="双击全屏查看"
-      style="cursor: zoom-in;"
-    ></div>
-  </div>
-  
-  <el-empty
-    v-if="!loadingStatus.graphSearch && (!subgraphData || subgraphData.nodes?.length === 0)"
-    description="暂无关联图谱"
-    :image-size="110"
-  />
+                      <div v-else class="subgraph-stage">
+                        <!-- 
+                           1. 双击可以放大
+                           2. 鼠标悬停显示详情
+                        -->
+                        <div 
+                          ref="subgraphContainer" 
+                          class="subgraph-container" 
+                          @dblclick="handleOpenExpand"
+                          title="双击放大查看"
+                          style="cursor: zoom-in;"
+                        ></div>
+                      </div>
+                      
+                      <el-empty
+                        v-if="!loadingStatus.graphSearch && (!subgraphData || subgraphData.nodes?.length === 0)"
+                        description="暂无知识图谱数据"
+                        :image-size="110"
+                      />
 
-  <!-- 🆕 新增：全屏图谱弹窗 -->
-  <el-dialog
-    v-model="expandVisible"
-    fullscreen
-    :show-close="true"
-    class="expand-graph-modal"
-    @opened="renderExpandedGraph"
-    @closed="destroyExpandedGraph"
-    destroy-on-close
-  >
-    <!-- 弹窗内容容器 -->
-    <div class="expanded-wrapper">
-      <!-- 这里的背景图将通过 CSS 设置 -->
-      <div class="expanded-bg"></div>
-      
-      <!-- 大图谱挂载点 -->
-      <div ref="expandedContainer" class="expanded-container"></div>
-      
-      <!-- 简单的关闭按钮/提示 -->
-      <div class="expanded-header">
-        <h2>知识图谱详情视图</h2>
-        <p>按 ESC 或点击关闭按钮退出</p>
-      </div>
-    </div>
-  </el-dialog>
-</el-tab-pane>
+                      <!-- 全屏图谱对话框 -->
+                      <el-dialog
+                        v-model="expandVisible"
+                        fullscreen
+                        :show-close="true"
+                        class="expand-graph-modal"
+                        @opened="renderExpandedGraph"
+                        @closed="destroyExpandedGraph"
+                        destroy-on-close
+                      >
+                        <!-- 全屏内容区域 -->
+                        <div class="expanded-wrapper">
+                          <!-- 背景图 -->
+                          <div class="expanded-bg"></div>
+                          
+                          <!-- 图形容器 -->
+                          <div ref="expandedContainer" class="expanded-container"></div>
+                          
+                          <!-- 顶部标题 -->
+                          <div class="expanded-header">
+                            <h2>知识图谱详情</h2>
+                            <p>按 ESC 键退出全屏</p>
+                          </div>
+                        </div>
+                      </el-dialog>
+                    </el-tab-pane>
                   </el-tabs>
                 </el-card>
               </el-col>
@@ -613,13 +613,13 @@ import { ref, nextTick, computed, watch, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Connection, Upload, UploadFilled, Document, Search, Share, Loading, Position, Promotion } from '@element-plus/icons-vue'
 import G6 from '@antv/g6'
-import request from '@/utils/request'
+import request, { createStreamRequest } from '@/utils/request'
 import { watchTaskProgress, uploadDocumentAsync } from '@/utils/kafkaSSE'
 
-// 标签页状态
+// 当前标签页
 const activeTab = ref('build')
 
-// ==================== 图谱构建相关 ====================
+// ==================== 图谱构建相关状态 ====================
 const currentStep = ref(0)
 const selectedFile = ref(null)
 const uploading = ref(false)
@@ -633,42 +633,41 @@ const chunks = ref([])
 const triplets = ref([])
 const graphData = ref({ nodes: [], edges: [] })
 
-// ==================== 一键上传相关（Kafka + SSE）====================
-const uploadingAsync = ref(false)  // 是否正在异步上传
+// ==================== 异步上传 Kafka + SSE相关 ====================
+const uploadingAsync = ref(false)  // 异步上传状态
 const uploadProgress = ref(0)      // 上传进度 (0-100)
-const uploadStage = ref('')        // 当前处理阶段
-const uploadMessage = ref('')      // 当前处理消息
-const sseConnection = ref(null)    // SSE 连接实例
+const uploadStage = ref('')        // 当前阶段标签
+const uploadMessage = ref('')      // 进度消息
+const sseConnection = ref(null)    // SSE 连接
 const expandVisible = ref(false)
 const expandedContainer = ref(null)
 let expandedInstance = null
 
-// G6容器与实例
+// G6 图形容器引用
 const graphContainer = ref(null)
 const subgraphContainer = ref(null)
-// ==================== G6 自定义图形注册 (节点与边全同步摇摆版) ====================
 
-// [1] 定义公共的摇摆算法
-// 根据 ID 和 当前时间，计算出确定的偏移量 (x, y)
-// 这样 Edge 就能知道 Node 跑到哪里去了
+// ==================== G6 自定义节点和边 ====================
+
+// [1] 生成节点摇摆动画的位置偏移
+// 传入节点 ID 和时间戳，返回节点位置的微小偏移量 (x, y)
+// 边的动画需要根据连接的源节点和目标节点的位置动态计算
 const getWobble = (id, timestamp) => {
   if (!id) return { x: 0, y: 0 };
   
-  // A. 将字符串 ID 转化为一个数字哈希值，确保同一个 ID 永远得到相同的参数
-  // 这样就不需要 Math.random() 了，因为 random 无法在 Node 和 Edge 之间同步
+  // A. 生成节点 ID 的哈希值，确保相同 ID 产生相同的随机偏移
   let hash = 0;
   for (let i = 0; i < id.length; i++) {
     hash = id.charCodeAt(i) + ((hash << 5) - hash);
   }
   
-  // B. 设定参数 (根据 hash 稍微打散，让每个节点动的节奏不一样)
-  // 这里的幅度要和你代码里设定的一致
+  // B. 根据哈希值生成偏移参数
   const rangeX = 25; 
   const rangeY = 30; 
-  const speed = 3000 + (Math.abs(hash) % 2000); // 速度 3000~5000
-  const phase = (Math.abs(hash) % 100) / 100 * Math.PI * 2; // 随机相位
+  const speed = 3000 + (Math.abs(hash) % 2000); // 周期 3000~5000
+  const phase = (Math.abs(hash) % 100) / 100 * Math.PI * 2; // 相位
   
-  // C. 计算偏移
+  // C. 计算偏移量
   const t = (timestamp / speed) * Math.PI * 2 + phase;
   const dx = Math.sin(t) * rangeX;
   const dy = Math.cos(t * 1.5) * rangeY;
@@ -678,16 +677,16 @@ const getWobble = (id, timestamp) => {
 
 const registerCustomTheme = () => {
   
-  // ==================== 1. 注册节点 ====================
+  // ==================== 1. 呼吸动画节点 ====================
   G6.registerNode('breathing-node', {
     draw(cfg, group) {
       const r = (cfg.size || 32) / 2;
       const color = cfg.style.fill || '#409EFF';
 
-      // 创建容器
+      // 容器组
       const container = group.addGroup();
 
-      // A. 七彩光环
+      // A. 光晕效果
       const halo = container.addShape('circle', {
         zIndex: -10,
         attrs: {
@@ -698,14 +697,14 @@ const registerCustomTheme = () => {
         name: 'halo-shape'
       });
 
-      // B. 呼吸背景
+      // B. 背景圆
       const back1 = container.addShape('circle', {
         zIndex: -5,
         attrs: { x: 0, y: 0, r: r, fill: color, opacity: 0.4 },
         name: 'back-shape'
       });
 
-      // C. 核心节点
+      // C. 主体圆形
       const keyShape = container.addShape('circle', {
         zIndex: 0,
         attrs: {
@@ -716,31 +715,28 @@ const registerCustomTheme = () => {
         draggable: true
       });
 
-      // --- 🚀 核心修复：寄生动画策略 🚀 ---
-      // 我们不再单独给 container 开动画，而是利用 halo 的动画回调
-      // 顺便把 container 的位置也更新了。Shape 的动画机制在 G6 中最稳定。
-      
+      // --- 动画效果 - 呼吸动画 ---
+      // 光晕动画：动态改变颜色并产生摇摆效果
       halo.animate(
         (ratio) => {
-          // 1. 自身的变色逻辑
+          // 1. 颜色循环
           const hue = ratio * 360;
           const hsl = `hsl(${hue}, 100%, 70%)`;
           
-          // 2. 【核心】借机更新父容器的矩阵，实现摇摆
-          // 只要光环在变色，节点就会摇摆，永不停止
+          // 2. 位置摇摆
           const now = performance.now();
           const pos = getWobble(cfg.id, now);
           
-          // 直接操作矩阵，不依赖动画系统的补间，稳如老狗
+          // 设置容器组的变换矩阵实现位置偏移
           container.setMatrix([1, 0, 0, 0, 1, 0, pos.x, pos.y, 1]);
 
-          // 返回光环需要的属性
+          // 返回属性变化
           return { stroke: hsl, shadowColor: hsl };
         },
         { repeat: true, duration: 3000, easing: 'easeLinear' }
       );
 
-      // 背景呼吸 (独立动画)
+      // 背景圆动画：轻微缩放
       back1.animate(
         { r: r + 8, opacity: 0.05 },
         { repeat: true, duration: 2500, easing: 'easeLinear' }
@@ -764,7 +760,7 @@ const registerCustomTheme = () => {
   }, 'single-node');
 
 
-  // ==================== 2. 注册动态边 (保持不变) ====================
+  // ==================== 2. 动态流动边 ====================
   G6.registerEdge('dynamic-edge', {
     draw(cfg, group) {
       const startPoint = cfg.startPoint;
@@ -784,7 +780,7 @@ const registerCustomTheme = () => {
         (ratio) => {
           const now = performance.now();
           
-          // 获取同步的偏移量
+          // 获取连接的节点位置偏移
           const sourceId = typeof cfg.source === 'string' ? cfg.source : cfg.source.id;
           const targetId = typeof cfg.target === 'string' ? cfg.target : cfg.target.id;
           
@@ -811,14 +807,14 @@ const registerCustomTheme = () => {
   });
 }
 
-// ==================== 大图谱弹窗相关逻辑 ====================
-// 1. 打开弹窗
+// ==================== 全屏图谱相关功能 ====================
+// 1. 打开全屏
 const handleOpenExpand = () => {
   if (!subgraphData.value || !subgraphData.value.nodes?.length) return
   expandVisible.value = true
 }
 
-// 2. 销毁大图谱（关闭弹窗时）
+// 2. 销毁全屏图谱
 const destroyExpandedGraph = () => {
   if (expandedInstance) {
     expandedInstance.destroy()
@@ -826,48 +822,47 @@ const destroyExpandedGraph = () => {
   }
 }
 
-// 3. 渲染大图谱 (在弹窗打开动画结束后调用)
+// 3. 渲染全屏图谱
 const renderExpandedGraph = async () => {
   if (!expandedContainer.value) return
   if (!subgraphData.value) return
 
-  // 销毁旧实例
+  // 先销毁
   destroyExpandedGraph()
 
-  // 确保自定义图形已注册
+  // 注册自定义主题
   if (!isThemeRegistered) {
     registerCustomTheme()
     isThemeRegistered = true
   }
 
-  // 获取屏幕尺寸
+  // 获取窗口尺寸
   const width = window.innerWidth
   const height = window.innerHeight
 
-  // 初始化大图谱
+  // 创建图谱实例
   expandedInstance = new G6.Graph({
     container: expandedContainer.value,
     width,
     height,
-    localRefresh: false, // 【必须】防止残影
-    // 布局参数调整：全屏了，斥力大一点，距离远一点，看起来更爽
+    localRefresh: false,
     layout: {
       type: 'force',
       preventOverlap: true,
-      nodeSize: 60,         // 节点占位更大
-      linkDistance: 250,    // 连线更长
-      nodeStrength: -1000,  // 斥力更强
+      nodeSize: 60,
+      linkDistance: 250,
+      nodeStrength: -1000,
       edgeStrength: 0.4,
       damping: 0.9,
-      alphaDecay: 0.02,     // 动得更久一点
+      alphaDecay: 0.02,
       center: [width / 2, height / 2]
     },
     modes: {
       default: ['drag-canvas', 'zoom-canvas', 'drag-node']
     },
     defaultNode: {
-      type: 'breathing-node', // 使用同样的七彩节点
-      size: 45,               // 节点本身画大一点
+      type: 'breathing-node',
+      size: 45,
       style: {
         fill: '#409EFF',
       },
@@ -875,31 +870,28 @@ const renderExpandedGraph = async () => {
         position: 'bottom',
         offset: 12,
         style: {
-          fontSize: 14,       // 字体变大
-          fill: '#fff',       // 全屏背景可能是深色，文字用白色
+          fontSize: 14,
+          fill: '#fff',
           fontWeight: 700,
-          stroke: '#000',     // 加个黑色描边防止背景太花看不清
+          stroke: '#000',
           lineWidth: 2
         }
       }
     },
     defaultEdge: {
-      type: 'dynamic-edge',   // 使用同样的动态边
+      type: 'dynamic-edge',
       style: {
-        stroke: '#a5b4fc',    // 稍微亮一点的颜色
-        lineWidth: 3          // 线条变粗
+        stroke: '#a5b4fc',
+        lineWidth: 3
       }
     }
   })
 
-  // 渲染数据
-  // 此时数据已经在内存中，直接渲染即可，不需要像小图那样逐个添加的动画（如果想加也可以）
-  // 这里我们直接 read，让它迅速铺开
+  // 处理节点数据
   const nodes = subgraphData.value.nodes.map(n => ({
     ...n,
     id: String(n.id),
     label: String(n.label ?? n.name ?? n.id),
-    // 初始位置随机打散
     x: width / 2 + (Math.random() - 0.5) * 200,
     y: height / 2 + (Math.random() - 0.5) * 200
   }))
@@ -915,23 +907,17 @@ const renderExpandedGraph = async () => {
   expandedInstance.render()
 }
 
-
-
-// 确保只注册一次
+// ==================== 状态变量 ====================
 let isThemeRegistered = false;
 let graphInstance = null
 let subgraphInstance = null
-
-// 防止异步回来太晚（组件已卸载还执行渲染）
 const isDisposed = ref(false)
-
-// resize 监听状态
 const resizeBound = ref(false)
 
 const selectedFileName = computed(() => {
   const f = selectedFile.value
   if (!f) return ''
-  return f.name || '未命名文件'
+  return f.name || '未选择文件'
 })
 
 const handleFileChange = (file) => {
@@ -985,29 +971,26 @@ const uploadDocument = async () => {
 
     if (isDisposed.value) return
 
-    // 检查是否是重复上传
+    // 检查是否为重复文档
     if (res.data.duplicate) {
-      // 使用确认对话框询问用户
       try {
         await ElMessageBox.confirm(
-          res.data.message || '该文档已上传过，是否查看已有知识图谱？',
-          '文档已存在',
+          res.data.message || '该文档已存在，是否覆盖？',
+          '文档重复',
           {
-            confirmButtonText: '查看知识图谱',
+            confirmButtonText: '确认覆盖',
             cancelButtonText: '取消',
             type: 'info',
             customClass: 'duplicate-doc-dialog'
           }
         )
 
-        // 用户点击了确认，显示文档详情弹窗
         const existingDoc = res.data.existing_doc
         if (existingDoc) {
           showExistingDocDialog(existingDoc)
         }
       } catch (error) {
-        // 用户点击了取消，不做任何操作
-        console.log('用户取消了查看已有知识图谱')
+        console.log('用户取消操作')
       }
       uploading.value = false
       return
@@ -1018,7 +1001,7 @@ const uploadDocument = async () => {
 
     ElMessage.success('文档上传成功')
 
-    // 自动进入下一步并分块
+    // 进入下一步
     currentStep.value = 1
     await splitText()
   } catch (error) {
@@ -1028,7 +1011,7 @@ const uploadDocument = async () => {
   }
 }
 
-// 显示已存在文档的详情弹窗
+// 显示已存在文档的对话框
 const showExistingDocDialog = (existingDoc) => {
   // 格式化上传时间
   const uploadTime = existingDoc.upload_time 
@@ -1051,7 +1034,7 @@ const showExistingDocDialog = (existingDoc) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   }
 
-  // 状态标签颜色映射
+  // 状态映射
   const statusMap = {
     'uploaded': { type: 'info', text: '已上传' },
     'processing': { type: 'warning', text: '处理中' },
@@ -1086,7 +1069,7 @@ const showExistingDocDialog = (existingDoc) => {
           </div>
           
           <div class="info-item">
-            <span class="info-label">文本长度</span>
+            <span class="info-label">文档字数</span>
             <span class="info-value">${existingDoc.text_length?.toLocaleString() || 0} 字符</span>
           </div>
           
@@ -1098,24 +1081,23 @@ const showExistingDocDialog = (existingDoc) => {
         
         <div class="doc-detail-footer">
           <el-icon class="check-icon"><Check /></el-icon>
-          <span>知识图谱已构建完成，点击底部按钮查看</span>
+          <span>点击确认将直接加载该文档的知识图谱</span>
         </div>
       </div>
     `,
-    '文档详情',
+    '文档已存在',
     {
-      confirmButtonText: '查看知识图谱',
-      cancelButtonText: '关闭',
+      confirmButtonText: '确认加载',
+      cancelButtonText: '取消',
       showCancelButton: true,
       dangerouslyUseHTMLString: true,
       customClass: 'existing-doc-dialog',
       distinguishCancelAndClose: true,
       callback: async (action) => {
         if (action === 'confirm') {
-          // 保存已存在文档的 doc_id
           docId.value = existingDoc.doc_id
           
-          // 跳转到图谱步骤
+          // 跳转到图谱展示
           currentStep.value = 3
           
           // 等待 DOM 更新
@@ -1124,9 +1106,9 @@ const showExistingDocDialog = (existingDoc) => {
           // 加载图谱数据
           try {
             await loadGraphData()
-            ElMessage.success('已跳转到知识图谱')
+            ElMessage.success('成功加载知识图谱')
           } catch (error) {
-            ElMessage.error('加载图谱数据失败')
+            ElMessage.error('加载知识图谱失败')
           }
         }
       }
@@ -1144,13 +1126,13 @@ const splitText = async () => {
     if (isDisposed.value) return
 
     chunks.value = res.data.chunks
-    ElMessage.success(`文本分块完成，共 ${chunks.value.length} 个分块`)
+    ElMessage.success(`文本分块完成，共 ${chunks.value.length} 个块`)
   } catch (error) {
     ElMessage.error(error.response?.data?.detail || '文本分块失败')
   }
 }
 
-// 实体关系抽取
+// 实体抽取
 const extractEntities = async () => {
   extracting.value = true
   try {
@@ -1161,7 +1143,7 @@ const extractEntities = async () => {
     if (isDisposed.value) return
 
     triplets.value = res.data.triplets
-    ElMessage.success(`实体关系抽取完成，共 ${triplets.value.length} 个三元组`)
+    ElMessage.success(`实体抽取完成，共 ${triplets.value.length} 个三元组`)
     currentStep.value = 2
   } catch (error) {
     ElMessage.error(error.response?.data?.detail || '实体抽取失败')
@@ -1181,7 +1163,7 @@ const buildGraph = async () => {
     if (isDisposed.value) return
 
     buildTime.value = res.data.elapsed_time
-    ElMessage.success('知识图谱构建完成')
+    ElMessage.success(`图谱构建完成，耗时 ${buildTime.value}秒`)
 
     currentStep.value = 3
     await nextTick()
@@ -1193,17 +1175,17 @@ const buildGraph = async () => {
   }
 }
 
-// ==================== 一键上传（Kafka + SSE）====================
+// ==================== 异步上传 Kafka + SSE ====================
 
-// 辅助方法：将英文阶段转换为中文
+// 获取阶段标签
 const getStageLabel = (stage) => {
   const stageMap = {
     'initialized': '初始化',
-    'parsing': '文档解析',
+    'parsing': '解析文档',
     'chunking': '文本分块',
     'extracting': '实体抽取',
-    'building_graph': '图谱构建',
-    'completed': '已完成'
+    'building_graph': '构建图谱',
+    'completed': '处理完成'
   }
   return stageMap[stage] || stage
 }
@@ -1217,31 +1199,31 @@ const asyncUploadDocument = async () => {
   uploadMessage.value = '正在初始化...'
 
   try {
-    // 1. 上传文件并获取 task_id
+    // 1. 获取 task_id
     const result = await uploadDocumentAsync(selectedFile.value)
-    console.log('✓ 异步上传成功:', result)
+    console.log('异步上传任务创建成功', result)
     
     const { task_id, doc_id } = result
     
-    ElMessage.success('文档已上传，正在后台处理中...')
+    ElMessage.success('任务已创建，处理器会自动处理...')
     
     // 保存 doc_id
     docId.value = doc_id
     
-    // 2. 使用 SSE 监听进度
+    // 2. 监听 SSE 获取进度
     sseConnection.value = watchTaskProgress(task_id, {
       onProgress: (progress, stage, message) => {
         uploadProgress.value = progress
         uploadStage.value = stage
         uploadMessage.value = message
-        console.log(`📊 进度: ${progress}% | 阶段: ${stage} | ${message}`)
+        console.log(`进度: ${progress}% | 阶段: ${stage} | ${message}`)
       },
       onCompleted: async (data) => {
-        console.log('✓ 处理完成:', data)
+        console.log('处理完成', data)
         uploadProgress.value = 100
-        uploadMessage.value = '知识图谱构建完成！'
+        uploadMessage.value = '图谱构建完成'
         
-        // 跳转到图谱步骤
+        // 跳转到图谱展示
         currentStep.value = 3
         
         // 加载图谱数据
@@ -1249,12 +1231,12 @@ const asyncUploadDocument = async () => {
         await loadGraphData()
       },
       onError: (errorMessage) => {
-        console.error('✗ 处理失败:', errorMessage)
+        console.error('处理失败:', errorMessage)
         ElMessage.error(errorMessage || '处理失败')
       }
     })
   } catch (error) {
-    console.error('✗ 异步上传失败:', error)
+    console.error('异步上传失败', error)
     ElMessage.error('上传失败，请重试')
   } finally {
     uploadingAsync.value = false
@@ -1277,7 +1259,7 @@ const loadGraphData = async () => {
 
     renderGraph()
   } catch (error) {
-    ElMessage.error('图谱数据加载失败')
+    ElMessage.error('加载图谱数据失败')
   }
 }
 
@@ -1303,15 +1285,15 @@ const buildGraphPlugins = () => {
       if (type === 'node') {
         outDiv.innerHTML = `
           <div style="font-weight:700; margin-bottom:6px;">节点</div>
-          <div><span style="opacity:.7;">Label：</span>${model.label || model.id || ''}</div>
-          <div><span style="opacity:.7;">ID：</span>${model.id || ''}</div>
+          <div><span style="opacity:.7;">Label:</span>${model.label || model.id || ''}</div>
+          <div><span style="opacity:.7;">ID:</span>${model.id || ''}</div>
         `
       } else {
         outDiv.innerHTML = `
           <div style="font-weight:700; margin-bottom:6px;">关系</div>
-          <div><span style="opacity:.7;">Label：</span>${model.label || ''}</div>
-          <div><span style="opacity:.7;">Source：</span>${model.source || ''}</div>
-          <div><span style="opacity:.7;">Target：</span>${model.target || ''}</div>
+          <div><span style="opacity:.7;">Label:</span>${model.label || ''}</div>
+          <div><span style="opacity:.7;">Source:</span>${model.source || ''}</div>
+          <div><span style="opacity:.7;">Target:</span>${model.target || ''}</div>
         `
       }
       return outDiv
@@ -1325,12 +1307,12 @@ const buildGraphPlugins = () => {
   return [tooltip, minimap]
 }
 
-// 渲染主图（关键：container 用 ref DOM，避免 parentNode null）
+// 渲染图谱
 const renderGraph = () => {
   if (!graphContainer.value) return
   if (isDisposed.value) return
 
-  // 销毁旧实例（避免 force layout 仍在跑）
+  // 销毁旧实例
   if (graphInstance) {
     graphInstance.destroy()
     graphInstance = null
@@ -1402,7 +1384,7 @@ const renderGraph = () => {
     edgeStateStyles: {
       hover: {
         lineWidth: 3,
-        stroke: 'rgba(59, 130, 246, 0.9)'
+        stroke: 'rgba(59, 130,246,0.9)'
       }
     },
     layout: {
@@ -1471,7 +1453,7 @@ const renderGraph = () => {
   bindResize()
 }
 
-// resize handler（主图）
+// resize handler
 const handleGraphResize = () => {
   if (!graphInstance) return
   if (!graphContainer.value) return
@@ -1481,7 +1463,7 @@ const handleGraphResize = () => {
   graphInstance.fitView(20)
 }
 
-// 重置流水线
+// 重置流程
 const resetPipeline = () => {
   currentStep.value = 0
   selectedFile.value = null
@@ -1496,51 +1478,51 @@ const resetPipeline = () => {
   unbindResize()
 }
 
-// ==================== RAG问答相关 ====================
+// ==================== RAG 问答相关 ====================
 const question = ref('')
 const answering = ref(false)
 const messages = ref([])
 const sourceChunks = ref([])
-const displayedChunks = ref([])  // 用于打字机效果的显示文本
+const displayedChunks = ref([])
 const subgraphData = ref(null)
 const explainTab = ref('chunks')
 const chatScroll = ref(null)
-const conversationId = ref('')  // 对话ID
-const typewriterTimers = ref([])  // 存储打字机定时器
+const conversationId = ref('')
+const typewriterTimers = ref([])
 
-// AI模型相关
-const availableModels = ref([])  // 可用的AI模型列表
-const selectedModel = ref('')  // 当前选中的模型
+// AI 模型列表
+const availableModels = ref([])
+const selectedModel = ref('')
 
-// 加载状态跟踪
+// 加载状态
 const loadingStatus = ref({
   vectorSearch: false,
   graphSearch: false,
   answerGeneration: false
 })
 
-// 生成新的对话ID
+// 生成会话ID
 const generateConversationId = () => {
   return 'conv_' + Date.now() + '_' + Math.random().toString(36).substring(2, 15)
 }
 
-// 加载可用的AI模型列表
+// 加载可用模型
 const loadAvailableModels = async () => {
   try {
     const res = await request.get('/api/kg/available-models')
     availableModels.value = res.data.models
-    selectedModel.value = res.data.default  // 设置默认模型
-    console.log('可用模型列表:', availableModels.value)
+    selectedModel.value = res.data.default
+    console.log('可用模型列表', availableModels.value)
   } catch (error) {
     console.error('加载模型列表失败:', error)
     ElMessage.error('加载模型列表失败')
   }
 }
 
-// 初始化对话ID
+// 初始化会话ID
 if (!conversationId.value) {
   conversationId.value = generateConversationId()
-  console.log('🆕 生成新对话ID:', conversationId.value)
+  console.log('当前会话ID:', conversationId.value)
 }
 
 // 加载模型列表
@@ -1548,20 +1530,17 @@ loadAvailableModels()
 
 // 新建对话
 const newConversation = () => {
-  // 清空聊天记录
   messages.value = []
   sourceChunks.value = []
   displayedChunks.value = []
   subgraphData.value = null
-  // 清除打字机定时器
   typewriterTimers.value.forEach(timer => clearInterval(timer))
   typewriterTimers.value = []
 
-  // 生成新的对话ID
   conversationId.value = generateConversationId()
-  console.log('🆕 新建对话，ID:', conversationId.value)
+  console.log('新建会话ID:', conversationId.value)
 
-  ElMessage.success('已创建新对话')
+  ElMessage.success('已创建新的对话')
 }
 
 // 发送问题
@@ -1579,7 +1558,6 @@ const askQuestion = async () => {
   question.value = ''
   answering.value = true
 
-  // 重置加载状态
   loadingStatus.value = {
     vectorSearch: true,
     graphSearch: true,
@@ -1588,7 +1566,6 @@ const askQuestion = async () => {
 
   scrollToBottom()
 
-  // 创建一个临时的assistant消息用于流式更新
   const assistantMessage = {
     role: 'assistant',
     content: '',
@@ -1597,16 +1574,13 @@ const askQuestion = async () => {
   messages.value.push(assistantMessage)
   const assistantIndex = messages.value.length - 1
 
-  // 清空之前的数据
   sourceChunks.value = []
   displayedChunks.value = []
   subgraphData.value = null
-  // 清除之前的打字机定时器
   typewriterTimers.value.forEach(timer => clearInterval(timer))
   typewriterTimers.value = []
 
   try {
-    // 获取token（从localStorage）
     const token = localStorage.getItem('token')
     if (!token) {
       ElMessage.error('请先登录')
@@ -1615,19 +1589,11 @@ const askQuestion = async () => {
       return
     }
 
-    // 使用新的并行流式接口，携带conversation_id和model_name
-    const response = await fetch('http://localhost:8000/api/kg/ask-parallel-stream', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`  // 添加认证token
-      },
-      body: JSON.stringify({
-        question: currentQuestion,
-        stream: true,
-        conversation_id: conversationId.value,  // 携带对话ID
-        model_name: selectedModel.value  // 携带选中的模型
-      })
+    const response = await createStreamRequest('/api/kg/ask-parallel-stream', {
+      question: currentQuestion,
+      stream: true,
+      conversation_id: conversationId.value,
+      model_name: selectedModel.value
     })
 
     if (!response.ok) {
@@ -1654,33 +1620,28 @@ const askQuestion = async () => {
           const data = JSON.parse(line)
 
           if (data.type === 'vector_chunks') {
-            // 向量检索结果到达，立即更新
             sourceChunks.value = data.data || []
             loadingStatus.value.vectorSearch = false
-            console.log('✅ 向量检索完成:', data.data?.length, '个片段')
-            // 启动打字机动画
+            console.log('向量检索找到', data.data?.length, '个文档块')
             startTypewriterEffect()
           } else if (data.type === 'graph_data') {
-            // 图检索结果到达，立即更新
             subgraphData.value = data.data || null
             loadingStatus.value.graphSearch = false
-            console.log('✅ 图检索完成:', data.data?.nodes?.length, '个节点')
+            console.log('图谱检索找到', data.data?.nodes?.length, '个节点')
             await nextTick()
             if (!isDisposed.value) {
               renderSubgraph()
             }
           } else if (data.type === 'answer') {
-            // 答案流式到达，逐字更新
             assistantMessage.content += data.content
             messages.value[assistantIndex] = { ...assistantMessage }
             scrollToBottom()
           } else if (data.type === 'answer_done') {
-            // 答案完成
             loadingStatus.value.answerGeneration = false
-            console.log('✅ 答案生成完成')
+            console.log('回答生成完成')
           }
         } catch (e) {
-          console.error('解析数据失败:', e, line)
+          console.error('解析SSE数据失败', e, line)
         }
       }
     }
@@ -1689,34 +1650,29 @@ const askQuestion = async () => {
   } catch (error) {
     console.error('问答失败:', error)
     ElMessage.error(error.message || '问答失败')
-    // 移除临时的assistant消息
     messages.value.splice(assistantIndex, 1)
   } finally {
     answering.value = false
-    // 确保所有加载状态都被重置
     loadingStatus.value = {
       vectorSearch: false,
       graphSearch: false,
       answerGeneration: false
     }
-    // 再次滚动到底部确保显示完全
     setTimeout(scrollToBottom, 100)
   }
 }
 
-// 渲染动态子图
+// 渲染子图
 const renderSubgraph = async () => {
   if (!subgraphContainer.value) return
   if (!subgraphData.value) return
   if (isDisposed.value) return
 
-  // 注册自定义皮肤（仅一次）
   if (!isThemeRegistered) {
     registerCustomTheme();
     isThemeRegistered = true;
   }
 
-  // 销毁旧实例
   if (subgraphInstance) {
     subgraphInstance.destroy()
     subgraphInstance = null
@@ -1726,12 +1682,10 @@ const renderSubgraph = async () => {
   const { width } = getContainerSize(containerEl, 520, 420)
   const height = 420
 
-  // 配置图谱实例
   subgraphInstance = new G6.Graph({
     container: containerEl,
     width,
     height,
-    // 保持关闭局部刷新以防止残影
     localRefresh: false, 
     
     layout: {
@@ -1791,7 +1745,7 @@ const renderSubgraph = async () => {
   subgraphInstance.data({ nodes: [], edges: [] });
   subgraphInstance.render();
 
-  // ==================== 动态生成逻辑 ====================
+  // 处理节点和边数据
   const rawNodes = subgraphData.value.nodes || [];
   const rawEdges = subgraphData.value.edges || [];
   const palette = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#6366f1'];
@@ -1833,7 +1787,6 @@ const renderSubgraph = async () => {
       await new Promise(r => setTimeout(r, addEdgeDelay));
     }
     
-    // 【关键修改】使用默认参数，移除可能导致报错的动画配置对象
     if (subgraphInstance) {
       subgraphInstance.fitView(40); 
     }
@@ -1854,20 +1807,17 @@ const scrollToBottom = () => {
   })
 }
 
-// 打字机效果函数
+// 打字机效果
 const startTypewriterEffect = () => {
-  // 清除之前的定时器
   typewriterTimers.value.forEach(timer => clearInterval(timer))
   typewriterTimers.value = []
 
-  // 初始化显示数组
   displayedChunks.value = sourceChunks.value.map(() => ({ content: '', isTyping: false, isComplete: false }))
 
-  // 依次启动每个卡片的打字机效果
   sourceChunks.value.forEach((chunk, index) => {
     setTimeout(() => {
       typewriterForChunk(chunk.content, index)
-    }, index * 200) // 每个卡片延迟200ms开始
+    }, index * 200)
   })
 }
 
@@ -1880,14 +1830,12 @@ const typewriterForChunk = (text, index) => {
   const timer = setInterval(() => {
     if (currentIndex < text.length) {
       const char = text[currentIndex]
-      // 转义HTML特殊字符
       const escapedChar = char
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
+        .replace(/&/g, '&')
+        .replace(/</g, '<')
+        .replace(/>/g, '>')
+        .replace(/"/g, '"')
         .replace(/'/g, '&#039;')
-      // 给每个字符包裹荧光效果
       displayedChunks.value[index].content += `<span class="glow-char">${escapedChar}</span>`
       currentIndex++
     } else {
@@ -1895,64 +1843,48 @@ const typewriterForChunk = (text, index) => {
       displayedChunks.value[index].isTyping = false
       displayedChunks.value[index].isComplete = true
     }
-  }, 25) // 每25ms打印一个字符
-
+  }, 25)
   typewriterTimers.value.push(timer)
 }
 
-// 格式化消息内容：去除markdown标记，保留换行
+// 格式化消息内容
 const formatMessageContent = (content, role) => {
   if (!content) return ''
 
-  // 只对assistant的消息进行处理
   if (role === 'assistant') {
     let formatted = content
 
-    // 去除markdown标记
+    // Markdown 格式化
     formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
     formatted = formatted.replace(/__(.+?)__/g, '<b>$1</b>')
-
-    // 去除斜体标记 *text* 或 _text_
     formatted = formatted.replace(/\*(.+?)\*/g, '<i>$1</i>')
     formatted = formatted.replace(/_(.+?)_/g, '<i>$1</i>')
-
-    // 去除标题标记 # ## ### 等
     formatted = formatted.replace(/^#{1,6}\s+/gm, '')
-
-    // 去除列表标记（* 或 -）并保留内容
     formatted = formatted.replace(/^[\*\-]\s+/gm, '• ')
-
-    // 去除代码块标记
     formatted = formatted.replace(/```[\s\S]*?```/g, (match) => {
       return match.replace(/```\w*\n?/g, '')
     })
-
-    // 去除行内代码标记 `code`
     formatted = formatted.replace(/`(.+?)`/g, '<code class="inline-code">$1</code>')
 
-    // 将换行符转换为HTML换行
+    // 分行处理
     formatted = formatted.split('\n').map(line => {
-      // 如果是空行，返回一个段落间距
       if (line.trim() === '') {
         return '<div class="paragraph-space"></div>'
       }
       return `<p class="text-line">${line}</p>`
     }).join('')
 
-    // 关键：识别并保护emoji，防止被渐变色影响
-    // emoji正则：匹配各种emoji字符
+    // Emoji 处理
     const emojiRegex = /([\u{1F000}-\u{1FFFF}]|[\u{2600}-\u{27BF}]|[\u{E000}-\u{F8FF}]|[\u{FE00}-\u{FE0F}]|[\u{1F900}-\u{1F9FF}]|[\u{2300}-\u{23FF}]|[\u{2B50}]|[\u{203C}-\u{3299}])/gu
-
     formatted = formatted.replace(emojiRegex, '<span class="emoji-char">$1</span>')
 
     return formatted
   }
 
-  // 用户消息保持原样，只处理换行
   return content.replace(/\n/g, '<br>')
 }
 
-// 关键修复：离开图谱步骤时，DOM 会被 v-if 移除，必须先 destroy（否则 parentNode null）
+// 监听步骤变化
 watch(currentStep, (n, o) => {
   if (o === 3 && n !== 3) {
     destroyGraphs()
@@ -1960,7 +1892,7 @@ watch(currentStep, (n, o) => {
   }
 })
 
-// 可选修复：切到 QA 页也销毁主图，避免后台仍跑 force layout
+// 监听标签页切换
 watch(activeTab, (tab) => {
   if (tab !== 'build') {
     destroyGraphs()
@@ -1980,10 +1912,8 @@ onUnmounted(() => {
   isDisposed.value = true
   destroyGraphs()
   unbindResize()
-  // 清除打字机定时器
   typewriterTimers.value.forEach(timer => clearInterval(timer))
   typewriterTimers.value = []
-  // 关闭 SSE 连接
   if (sseConnection.value) {
     sseConnection.value.close()
     sseConnection.value = null
@@ -2006,7 +1936,6 @@ onUnmounted(() => {
 
   min-height: 100vh;
   position: relative;
-  /* 修复：使用更低不透明度的背景，让下层星光透出来 */
   background: radial-gradient(1100px 700px at 15% 15%, rgba(99, 102, 241, 0.35), transparent 55%),
     radial-gradient(900px 650px at 85% 20%, rgba(168, 85, 247, 0.25), transparent 55%),
     radial-gradient(900px 650px at 60% 90%, rgba(34, 197, 94, 0.15), transparent 55%),
@@ -2017,7 +1946,7 @@ onUnmounted(() => {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-/* 修复：使用 fixed 定位，确保全屏覆盖 */
+/* 背景极光动画 */
 .bg-aurora {
   position: fixed;
   inset: 0;
@@ -2033,7 +1962,7 @@ onUnmounted(() => {
 
 .content-wrapper {
   position: relative;
-  z-index: 1; /* 确保内容在星光之上 */
+  z-index: 1;
   padding: 20px;
 }
 
@@ -2179,25 +2108,20 @@ onUnmounted(() => {
   z-index: 1;
 }
 
-/* 覆盖聊天卡片的 padding，实现全屏背景 */
+/* 聊天卡片样式 */
 .chat-card :deep(.el-card__body) {
   padding: 0 !important;
-  height: 100% !important; /* 关键：确保卡片body占满高度 */
-  overflow: hidden; /* 防止内部溢出导致外层滚动 */
+  height: 100% !important;
+  overflow: hidden;
 }
 
-/* =========================================
-   Chat Interface Beautification (Main Logic)
-   ========================================= */
-
-/* 修复：Chat Wrapper 使用 Flex 布局，不再依赖 absolute 导致的脱离文档流问题 */
+/* 聊天界面美化样式 */
 .chat-wrapper {
   display: flex;
   flex-direction: column;
   height: 100%;
   position: relative;
   overflow: hidden;
-  /* 背景纹理 */
   background-color: rgba(246, 249, 252, 0.5);
   background-image: 
     radial-gradient(rgba(148, 163, 184, 0.2) 1px, transparent 1px),
@@ -2206,15 +2130,14 @@ onUnmounted(() => {
 }
 
 .chat-scroll-area {
-  flex: 1; /* 占据剩余空间 */
-  height: 0; /* 关键：配合flex使用，允许缩小 */
+  flex: 1;
+  height: 0;
   width: 100%;
 }
 
-/* 自定义滚动条样式 */
 :deep(.chat-scroll-wrap) {
   scroll-behavior: smooth;
-  height: 100%; /* 确保高度传递 */
+  height: 100%;
 }
 :deep(.el-scrollbar__bar.is-vertical) {
   width: 4px;
@@ -2229,7 +2152,6 @@ onUnmounted(() => {
   padding: 20px 16px;
 }
 
-/* 修复：增加底部占位高度，等于或略大于输入框的高度 */
 .chat-bottom-spacer {
   height: 140px; 
   width: 100%;
@@ -2337,21 +2259,16 @@ onUnmounted(() => {
   word-wrap: break-word;
 }
 
-/* User text styling */
 .message.user .message-text {
   font-weight: 500;
 }
 
-/* AI text styling - 行草字体 + 渐变色 */
 .message.assistant .message-text {
-  /* 使用中文行草字体，emoji会自动回退到系统默认字体 */
-  font-family: 'STKaiti', 'KaiTi', 'STXingkai', '华文行楷', '华文楷体', 'FangSong',
+  font-family: 'STKaiti', 'KaiTi', 'STXingkai', '华文行楷', '华文新魏', 'FangSong',
                'Noto Sans SC', 'Microsoft YaHei', serif;
   font-size: 15px;
   line-height: 1.8;
   letter-spacing: 0.5px;
-
-  /* 渐变色文字效果 */
   background: linear-gradient(135deg,
     #667eea 0%,
     #764ba2 25%,
@@ -2363,8 +2280,6 @@ onUnmounted(() => {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-
-  /* 渐变动画效果 */
   animation: gradient-flow 6s ease infinite;
 }
 
@@ -2377,7 +2292,6 @@ onUnmounted(() => {
   }
 }
 
-/* 确保代码块、加粗、斜体等特殊元素不受渐变色影响 */
 .message.assistant .message-text :deep(b),
 .message.assistant .message-text :deep(strong),
 .message.assistant .message-text :deep(i),
@@ -2387,7 +2301,6 @@ onUnmounted(() => {
   background: none;
 }
 
-/* 关键：保护emoji，让其显示为正常颜色 */
 .message.assistant .message-text :deep(.emoji-char) {
   -webkit-text-fill-color: initial;
   background: none;
@@ -2396,7 +2309,6 @@ onUnmounted(() => {
   display: inline-block;
 }
 
-/* Inline Code Style */
 .message-text :deep(.inline-code) {
   background: rgba(0,0,0,0.06);
   padding: 2px 5px;
@@ -2418,7 +2330,7 @@ onUnmounted(() => {
 }
 .message.user .message-time { color: rgba(255,255,255,0.9); }
 
-/* Typing animation */
+/* 打字动画 */
 .typing {
   display: flex;
   align-items: center;
@@ -2452,10 +2364,7 @@ onUnmounted(() => {
   to { opacity: 0.8; }
 }
 
-/* =========================================
-   Floating Input Area (Beautiful!)
-   ========================================= */
-
+/* 输入区域样式 */
 .chat-input-container {
   position: absolute;
   bottom: 0;
@@ -2468,16 +2377,15 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  /* 确保此容器不阻挡点击，但内部元素可以点击 */
   pointer-events: none; 
 }
 
 .chat-input-wrapper {
-  pointer-events: auto; /* 恢复输入框的点击事件 */
+  pointer-events: auto;
   position: relative;
   width: 100%;
   max-width: 600px;
-  background: rgba(255, 255, 255, 0.95); /* 提高不透明度 */
+  background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(12px);
   border-radius: 30px;
   box-shadow: 
@@ -2501,7 +2409,7 @@ onUnmounted(() => {
   box-shadow: none !important;
   background: transparent !important;
   padding-left: 16px;
-  padding-right: 48px; /* Space for button */
+  padding-right: 48px;
   height: 48px;
 }
 
@@ -2541,7 +2449,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  pointer-events: auto; /* 恢复提示文字的事件响应 */
+  pointer-events: auto;
   background: rgba(255,255,255,0.6);
   padding: 4px 8px;
   border-radius: 8px;
@@ -2556,10 +2464,7 @@ onUnmounted(() => {
   color: #475569;
 }
 
-/* =========================================
-   End Chat Styles
-   ========================================= */
-
+/* 构建流程样式 */
 .build-pipeline {
   padding: 6px 0;
 }
@@ -2574,7 +2479,6 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-/* Steps 装饰背景 */
 .steps-container::before {
   content: '';
   position: absolute;
@@ -2592,12 +2496,10 @@ onUnmounted(() => {
   pointer-events: none;
 }
 
-/* 每个步骤项的样式 */
 .steps-container :deep(.el-step) {
   position: relative;
 }
 
-/* 步骤图标容器 */
 .steps-container :deep(.el-step__icon) {
   width: 52px !important;
   height: 52px !important;
@@ -2608,7 +2510,6 @@ onUnmounted(() => {
   border: 2px solid transparent !important;
 }
 
-/* 步骤图标内部 */
 .steps-container :deep(.el-step__icon-inner) {
   font-size: 24px !important;
   font-weight: bold !important;
@@ -2616,14 +2517,12 @@ onUnmounted(() => {
   z-index: 2 !important;
 }
 
-/* 未完成状态 - 默认白色背景需要覆盖 */
 .steps-container :deep(.el-step__icon.is-text) {
   background: rgba(255, 255, 255, 0.85) !important;
   border-color: rgba(148, 163, 184, 0.30) !important;
   box-shadow: 0 4px 12px rgba(2, 6, 23, 0.08) !important;
 }
 
-/* 进行中状态 */
 .steps-container :deep(.el-step.is-process .el-step__icon) {
   background: linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(99, 102, 241, 0.95)) !important;
   border-color: rgba(59, 130, 246, 0.50) !important;
@@ -2635,7 +2534,6 @@ onUnmounted(() => {
   color: #ffffff !important;
 }
 
-/* 已完成状态 */
 .steps-container :deep(.el-step.is-success .el-step__icon) {
   background: linear-gradient(135deg, rgba(34, 197, 94, 0.95), rgba(16, 185, 129, 0.95)) !important;
   border-color: rgba(34, 197, 94, 0.50) !important;
@@ -2646,14 +2544,18 @@ onUnmounted(() => {
   color: #ffffff !important;
 }
 
-/* 每个步骤的独特主题色 - 第1步：上传文档（蓝色）*/
-.steps-container :deep(.el-step:nth-child(1) .el-step__icon.is-text) {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(99, 102, 241, 0.10)) !important;
-  border-color: rgba(59, 130, 246, 0.35) !important;
-  position: relative !important;
+.steps-container :deep(.el-step:nth-child(1) .el-step__icon.is-text::before) {
+  content: '📤' !important;
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  font-size: 28px !important;
+  opacity: 0.3 !important;
+  z-index: 1 !important;
 }
 
-.steps-container :deep(.el-step:nth-child(1) .el-step__icon.is-text::before) {
+.steps-container :deep(.el-step:nth-child(2) .el-step__icon.is-text::before) {
   content: '📄' !important;
   position: absolute !important;
   top: 50% !important;
@@ -2662,31 +2564,6 @@ onUnmounted(() => {
   font-size: 28px !important;
   opacity: 0.3 !important;
   z-index: 1 !important;
-}
-
-/* 第2步：文本分块（绿色）*/
-.steps-container :deep(.el-step:nth-child(2) .el-step__icon.is-text) {
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(16, 185, 129, 0.10)) !important;
-  border-color: rgba(34, 197, 94, 0.35) !important;
-  position: relative !important;
-}
-
-.steps-container :deep(.el-step:nth-child(2) .el-step__icon.is-text::before) {
-  content: '📝' !important;
-  position: absolute !important;
-  top: 50% !important;
-  left: 50% !important;
-  transform: translate(-50%, -50%) !important;
-  font-size: 28px !important;
-  opacity: 0.3 !important;
-  z-index: 1 !important;
-}
-
-/* 第3步：实体抽取（紫色）*/
-.steps-container :deep(.el-step:nth-child(3) .el-step__icon.is-text) {
-  background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(147, 51, 234, 0.10)) !important;
-  border-color: rgba(168, 85, 247, 0.35) !important;
-  position: relative !important;
 }
 
 .steps-container :deep(.el-step:nth-child(3) .el-step__icon.is-text::before) {
@@ -2700,13 +2577,6 @@ onUnmounted(() => {
   z-index: 1 !important;
 }
 
-/* 第4步：图谱生成（橙色）*/
-.steps-container :deep(.el-step:nth-child(4) .el-step__icon.is-text) {
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(251, 146, 60, 0.10)) !important;
-  border-color: rgba(245, 158, 11, 0.35) !important;
-  position: relative !important;
-}
-
 .steps-container :deep(.el-step:nth-child(4) .el-step__icon.is-text::before) {
   content: '🕸️' !important;
   position: absolute !important;
@@ -2718,13 +2588,11 @@ onUnmounted(() => {
   z-index: 1 !important;
 }
 
-/* 步骤标题样式 */
 .steps-container :deep(.el-step__title) {
   font-size: 14px !important;
   font-weight: 700 !important;
   color: rgba(255, 255, 255, 0.85) !important;
   margin-top: 8px !important;
-  text-shadow: 0 2px 4px rgba(2, 6, 23, 0.15) !important;
 }
 
 .steps-container :deep(.el-step.is-process .el-step__title) {
@@ -2736,7 +2604,6 @@ onUnmounted(() => {
   color: rgba(255, 255, 255, 0.90) !important;
 }
 
-/* 连接线样式 */
 .steps-container :deep(.el-step__line) {
   background: rgba(255, 255, 255, 0.20) !important;
   height: 3px !important;
@@ -2751,7 +2618,6 @@ onUnmounted(() => {
   background: linear-gradient(90deg, rgba(59, 130, 246, 0.50), rgba(255, 255, 255, 0.20)) !important;
 }
 
-/* 脉冲发光动画 */
 @keyframes pulseGlow {
   0%, 100% {
     box-shadow: 0 8px 24px rgba(59, 130, 246, 0.35);
@@ -2790,7 +2656,7 @@ onUnmounted(() => {
   display: grid;
   place-items: center;
   background: rgba(59, 130, 246, 0.12);
-  border: 1px solid rgba(59, 130, 246, 0.18);
+  border: 1px solid rgba(59,130, 246, 0.18);
 }
 
 .emoji-large {
@@ -2805,36 +2671,34 @@ onUnmounted(() => {
   transform: scale(1.1) rotate(5deg);
 }
 
-/* 步骤主题样式 */
 .step-upload-theme {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(99, 102, 241, 0.05) 100%) !important;
-  border: 2px solid rgba(59, 130, 246, 0.25) !important;
+  background: linear-gradient(135deg, rgba(59,130,246,0.08) 0%, rgba(99,102,241,0.05) 100%) !important;
+  border: 2px solid rgba(59,130,246,0.25) !important;
 }
 
 .step-chunk-theme {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.08) 0%, rgba(16, 185, 129, 0.05) 100%) !important;
-  border: 2px solid rgba(34, 197, 94, 0.25) !important;
+  background: linear-gradient(135deg, rgba(34,197,94,0.08) 0%, rgba(16,185,129,0.05) 100%) !important;
+  border: 2px solid rgba(34,197,94,0.25) !important;
 }
 
 .step-extract-theme {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(135deg, rgba(168, 85, 247, 0.08) 0%, rgba(147, 51, 234, 0.05) 100%) !important;
-  border: 2px solid rgba(168, 85, 247, 0.25) !important;
+  background: linear-gradient(135deg, rgba(168,85,247,0.08) 0%, rgba(147,51,234,0.05) 100%) !important;
+  border: 2px solid rgba(168,85,247,0.25) !important;
 }
 
 .step-graph-theme {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(251, 146, 60, 0.05) 100%) !important;
-  border: 2px solid rgba(245, 158, 11, 0.25) !important;
+  background: linear-gradient(135deg, rgba(245,158,11,0.08) 0%, rgba(251,146,60,0.05) 100%) !important;
+  border: 2px solid rgba(245,158,11,0.25) !important;
 }
 
-/* 装饰元素 */
 .step-decoration {
   position: absolute;
   top: 0;
@@ -2870,7 +2734,6 @@ onUnmounted(() => {
   animation-delay: 1.5s;
 }
 
-/* 上传步骤装饰 - 文档图案 */
 .upload-decoration .deco-pattern {
   position: absolute;
   top: 20%;
@@ -2878,8 +2741,8 @@ onUnmounted(() => {
   width: 160px;
   height: 200px;
   background:
-    linear-gradient(to bottom, rgba(59, 130, 246, 0.18) 2px, transparent 2px),
-    linear-gradient(to right, rgba(59, 130, 246, 0.18) 2px, transparent 2px);
+    linear-gradient(to bottom, rgba(59,130,246,0.18) 2px, transparent 2px),
+    linear-gradient(to right, rgba(59,130,246,0.18) 2px, transparent 2px);
   background-size: 20px 20px;
   border-radius: 12px;
   transform: rotate(-15deg);
@@ -2887,7 +2750,6 @@ onUnmounted(() => {
   animation: slideDown 4s ease-in-out infinite;
 }
 
-/* 分块步骤装饰 - 网格图案 */
 .chunk-decoration .deco-grid {
   position: absolute;
   top: 15%;
@@ -2895,14 +2757,13 @@ onUnmounted(() => {
   width: 200px;
   height: 200px;
   background-image:
-    repeating-linear-gradient(0deg, rgba(34, 197, 94, 0.22) 0px, rgba(34, 197, 94, 0.22) 1px, transparent 1px, transparent 25px),
-    repeating-linear-gradient(90deg, rgba(34, 197, 94, 0.22) 0px, rgba(34, 197, 94, 0.22) 1px, transparent 1px, transparent 25px);
+    repeating-linear-gradient(0deg, rgba(34,197,94,0.22) 0px, rgba(34,197,94,0.22) 1px, transparent 1px, transparent 25px),
+    repeating-linear-gradient(90deg, rgba(34,197,94,0.22) 0px, rgba(34,197,94,0.22) 1px, transparent 1px, transparent 25px);
   border-radius: 12px;
   transform: rotate(12deg);
   animation: pulse 3s ease-in-out infinite;
 }
 
-/* 抽取步骤装饰 - 波浪图案 */
 .extract-decoration .deco-wave {
   position: absolute;
   top: 25%;
@@ -2910,15 +2771,14 @@ onUnmounted(() => {
   width: 180px;
   height: 120px;
   background:
-    radial-gradient(circle at 20% 50%, rgba(168, 85, 247, 0.25) 0%, transparent 50%),
-    radial-gradient(circle at 50% 50%, rgba(168, 85, 247, 0.25) 0%, transparent 50%),
-    radial-gradient(circle at 80% 50%, rgba(168, 85, 247, 0.25) 0%, transparent 50%);
+    radial-gradient(circle at 20% 50%, rgba(168,85,247,0.25) 0%, transparent 50%),
+    radial-gradient(circle at 50% 50%, rgba(168,85,247,0.25) 0%, transparent 50%),
+    radial-gradient(circle at 80% 50%, rgba(168,85,247,0.25) 0%, transparent 50%);
   background-size: 60px 60px;
   border-radius: 12px;
   animation: wave 4s ease-in-out infinite;
 }
 
-/* 图谱步骤装饰 - 网络图案 */
 .graph-decoration .deco-network {
   position: absolute;
   top: 20%;
@@ -2926,37 +2786,35 @@ onUnmounted(() => {
   width: 180px;
   height: 180px;
   background-image:
-    radial-gradient(circle at 30% 30%, rgba(245, 158, 11, 0.35) 3px, transparent 3px),
-    radial-gradient(circle at 70% 30%, rgba(245, 158, 11, 0.35) 3px, transparent 3px),
-    radial-gradient(circle at 50% 70%, rgba(245, 158, 11, 0.35) 3px, transparent 3px),
-    linear-gradient(135deg, rgba(245, 158, 11, 0.22) 2px, transparent 2px);
+    radial-gradient(circle at 30% 30%, rgba(245,158,11,0.35) 3px, transparent 3px),
+    radial-gradient(circle at 70% 30%, rgba(245,158,11,0.35) 3px, transparent 3px),
+    radial-gradient(circle at 50% 70%, rgba(245,158,11,0.35) 3px, transparent 3px),
+    linear-gradient(135deg, rgba(245,158,11,0.22) 2px, transparent 2px);
   background-size: 100% 100%, 100% 100%, 100% 100%, 80px 80px;
   border-radius: 12px;
   animation: rotate360 8s linear infinite;
 }
 
-/* Emoji主题色 */
 .upload-emoji {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.18) 0%, rgba(99, 102, 241, 0.15) 100%) !important;
-  border-color: rgba(59, 130, 246, 0.30) !important;
+  background: linear-gradient(135deg, rgba(59,130,246,0.18) 0%, rgba(99,102,241,0.15) 100%) !important;
+  border-color: rgba(59,130,246,0.30) !important;
 }
 
 .chunk-emoji {
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.18) 0%, rgba(16, 185, 129, 0.15) 100%) !important;
-  border-color: rgba(34, 197, 94, 0.30) !important;
+  background: linear-gradient(135deg, rgba(34,197,94,0.18) 0%, rgba(16,185,129,0.15) 100%) !important;
+  border-color: rgba(34,197,94,0.30) !important;
 }
 
 .extract-emoji {
-  background: linear-gradient(135deg, rgba(168, 85, 247, 0.18) 0%, rgba(147, 51, 234, 0.15) 100%) !important;
-  border-color: rgba(168, 85, 247, 0.30) !important;
+  background: linear-gradient(135deg, rgba(168,85,247,0.18) 0%, rgba(147,51,234,0.15) 100%) !important;
+  border-color: rgba(168,85,247,0.30) !important;
 }
 
 .graph-emoji {
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.18) 0%, rgba(251, 146, 60, 0.15) 100%) !important;
-  border-color: rgba(245, 158, 11, 0.30) !important;
+  background: linear-gradient(135deg, rgba(245,158,11,0.18) 0%, rgba(251,146,60,0.15) 100%) !important;
+  border-color: rgba(245,158,11,0.30) !important;
 }
 
-/* 动画效果 */
 @keyframes float {
   0%, 100% {
     transform: translateY(0) scale(1);
@@ -3052,7 +2910,6 @@ onUnmounted(() => {
   box-shadow: 0 12px 22px rgba(59, 130, 246, 0.18);
 }
 
-/* 一键上传按钮样式 */
 .one-click-btn {
   background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   border: none;
@@ -3070,7 +2927,6 @@ onUnmounted(() => {
   box-shadow: none;
 }
 
-/* 异步上传进度显示样式 */
 .async-upload-progress {
   margin-top: 16px;
   padding: 16px;
@@ -3243,8 +3099,8 @@ onUnmounted(() => {
   width: 100%;
   height: 620px;
   border-radius: 14px;
-  background: radial-gradient(900px 400px at 20% 10%, rgba(59, 130, 246, 0.10), transparent 60%),
-    radial-gradient(900px 400px at 80% 20%, rgba(168, 85, 247, 0.08), transparent 60%),
+  background: radial-gradient(900px 400px at 20% 10%, rgba(59,130,246,0.10), transparent 60%),
+    radial-gradient(900px 400px at 80% 20%, rgba(168,85,247,0.08), transparent 60%),
     #ffffff;
   border: 1px solid rgba(148, 163, 184, 0.20);
   overflow: hidden;
@@ -3297,7 +3153,6 @@ onUnmounted(() => {
   margin-bottom: 14px;
 }
 
-/* 修复：使用 calc(100vh - XX) 限制高度，防止页面滚动 */
 .chat-card,
 .explain-card {
   height: calc(100vh - 220px); 
@@ -3330,28 +3185,25 @@ onUnmounted(() => {
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.92);
   position: relative;
-  overflow: visible; /* 改为visible以允许外部阴影 */
+  overflow: visible;
   opacity: 0;
   transform: translateY(20px);
   animation: slideInUp 0.6s ease forwards;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-/* 卡片入场动画 - 依次延迟（跳过加载指示器） */
 .source-chunk-item:nth-child(2) { animation-delay: 0s; }
 .source-chunk-item:nth-child(3) { animation-delay: 0.15s; }
 .source-chunk-item:nth-child(4) { animation-delay: 0.3s; }
 .source-chunk-item:nth-child(5) { animation-delay: 0.45s; }
 .source-chunk-item:nth-child(6) { animation-delay: 0.6s; }
 
-/* 流光边框效果 - 基础 */
 .source-chunk-item::before {
   content: '';
   position: absolute;
-  inset: -4px; /* 默认厚度 */
+  inset: -4px;
   border-radius: 18px;
   padding: 4px;
-  /* 修复：使用更高饱和度和对比度的彩虹渐变，确保流动感明显 */
   background: linear-gradient(
     60deg,
     #6366f1,
@@ -3363,7 +3215,6 @@ onUnmounted(() => {
     #3b82f6,
     #6366f1
   );
-  /* 修复：缩小 background-size，增加条纹密度，让流动感更强 */
   background-size: 300% 300%;
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
@@ -3374,18 +3225,16 @@ onUnmounted(() => {
   pointer-events: none;
 }
 
-/* 1. 渲染中：边框更粗更亮，且流动更快 */
 .source-chunk-item.chunk-animating::before {
-  inset: -2px; /* 加粗 */
+  inset: -2px;
   padding: 2px;
-  filter: blur(2px); /* 增加光晕感 */
-  animation: borderFlow 2s linear infinite; /* 加速流动 */
+  filter: blur(2px);
+  animation: borderFlow 2s linear infinite;
   box-shadow: 0 0 35px rgba(102, 126, 234, 0.8);
 }
 
-/* 3. 完成后：极淡的紫光边框 */
 .source-chunk-item.chunk-complete::before {
-  inset: -3px; /* 变细 */
+  inset: -3px;
   padding: 3px;
   background: linear-gradient(
     90deg,
@@ -3396,8 +3245,8 @@ onUnmounted(() => {
     #a855f7 100%
   );
   background-size: 200% 100%;
-  animation: borderFlow 5s linear infinite; /* 减速 */
-  opacity: 0.3; /* 降低透明度 */
+  animation: borderFlow 5s linear infinite;
+  opacity: 0.3;
   box-shadow: none;
 }
 
@@ -3406,7 +3255,6 @@ onUnmounted(() => {
   box-shadow: 0 20px 40px rgba(99, 102, 241, 0.25);
 }
 
-/* 卡片入场动画 - 从下往上滑入 */
 @keyframes slideInUp {
   0% {
     opacity: 0;
@@ -3418,7 +3266,6 @@ onUnmounted(() => {
   }
 }
 
-/* 流光边框动画 - 调整移动距离适配 background-size */
 @keyframes borderFlow {
   0% {
     background-position: 0% 50%;
@@ -3435,7 +3282,6 @@ onUnmounted(() => {
   margin-bottom: 12px;
 }
 
-/* 超豪华精致徽章样式 */
 .chunk-badge {
   display: inline-flex;
   align-items: stretch;
@@ -3444,11 +3290,8 @@ onUnmounted(() => {
   border-radius: 16px;
   position: relative;
   overflow: hidden;
-  /* 多层渐变背景 */
   background: 
-    /* 底层 - 深色渐变 */
     linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%),
-    /* 中层 - 彩虹流光 */
     linear-gradient(
       90deg,
       #667eea 0%,
@@ -3460,7 +3303,6 @@ onUnmounted(() => {
       #43e97b 85%,
       #38f9d7 100%
     ),
-    /* 顶层 - 金色渐变 */
     linear-gradient(135deg, 
       rgba(251, 191, 36, 0.9) 0%,
       rgba(245, 158, 11, 0.95) 25%,
@@ -3474,16 +3316,13 @@ onUnmounted(() => {
     badgeGoldFlow 4s ease infinite;
   border: 2px solid rgba(251, 191, 36, 0.6);
   box-shadow: 
-    /* 外发光 */
     0 6px 20px rgba(251, 191, 36, 0.4),
     0 3px 10px rgba(102, 126, 234, 0.3),
-    /* 内阴影 */
     inset 0 2px 4px rgba(255, 255, 255, 0.4),
     inset 0 -2px 4px rgba(0, 0, 0, 0.2);
   z-index: 1;
 }
 
-/* 徽章流光效果层 */
 .chunk-badge::before {
   content: '';
   position: absolute;
@@ -3501,7 +3340,6 @@ onUnmounted(() => {
   z-index: 3;
 }
 
-/* 徽章颗粒纹理 */
 .chunk-badge::after {
   content: '';
   position: absolute;
@@ -3516,7 +3354,6 @@ onUnmounted(() => {
   z-index: 2;
 }
 
-/* 装饰性边角 */
 .badge-corner {
   position: absolute;
   width: 12px;
@@ -3562,7 +3399,6 @@ onUnmounted(() => {
   animation-delay: 1.5s;
 }
 
-/* 左侧图标区域 */
 .badge-icon-area {
   display: flex;
   align-items: center;
@@ -3590,7 +3426,6 @@ onUnmounted(() => {
   z-index: -1;
 }
 
-/* 图标发光光晕 */
 .badge-icon-glow {
   position: absolute;
   width: 20px;
@@ -3608,7 +3443,6 @@ onUnmounted(() => {
   z-index: 1;
 }
 
-/* 中间内容区域 */
 .badge-content {
   display: flex;
   flex-direction: column;
@@ -3629,7 +3463,6 @@ onUnmounted(() => {
   font-weight: 900;
   color: rgba(255, 255, 255, 0.9);
   letter-spacing: 1.5px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 .badge-number {
@@ -3672,7 +3505,6 @@ onUnmounted(() => {
   color: rgba(255, 255, 255, 0.7);
 }
 
-/* 右侧装饰星星 */
 .badge-stars {
   display: flex;
   gap: 6px;
@@ -3701,9 +3533,6 @@ onUnmounted(() => {
   color: rgba(255, 215, 0, 0.9);
 }
 
-/* ==================== 徽章动画定义 ==================== */
-
-/* 彩虹流光背景动画 */
 @keyframes badgeRainbow {
   0% {
     background-position: 0% 50%, 0% 50%, 0% 50%;
@@ -3713,7 +3542,6 @@ onUnmounted(() => {
   }
 }
 
-/* 金色流动动画 */
 @keyframes badgeGoldFlow {
   0%, 100% {
     background-position: 0% 50%, 0% 50%, 0% 50%;
@@ -3723,7 +3551,6 @@ onUnmounted(() => {
   }
 }
 
-/* 徽章流光扫过动画 */
 @keyframes badgeShine {
   0%, 100% {
     background-position: -200% 0;
@@ -3733,7 +3560,6 @@ onUnmounted(() => {
   }
 }
 
-/* 边角发光动画 */
 @keyframes cornerGlow {
   0% {
     opacity: 0.6;
@@ -3745,7 +3571,6 @@ onUnmounted(() => {
   }
 }
 
-/* 图标边框发光动画 */
 @keyframes iconBorderGlow {
   0% {
     background-position: 0% 50%;
@@ -3755,7 +3580,6 @@ onUnmounted(() => {
   }
 }
 
-/* 图标浮动动画 */
 @keyframes iconFloat {
   0%, 100% {
     transform: translateY(0) rotate(0deg);
@@ -3768,7 +3592,6 @@ onUnmounted(() => {
   }
 }
 
-/* 发光脉冲动画 */
 @keyframes glowPulse {
   0%, 100% {
     transform: scale(0.8);
@@ -3780,7 +3603,6 @@ onUnmounted(() => {
   }
 }
 
-/* 数字发光动画 */
 @keyframes numberGlow {
   0% {
     filter: brightness(1);
@@ -3790,7 +3612,6 @@ onUnmounted(() => {
   }
 }
 
-/* 星星闪烁动画 */
 @keyframes starTwinkle {
   0%, 100% {
     transform: scale(1) rotate(0deg);
@@ -3819,17 +3640,13 @@ onUnmounted(() => {
   z-index: 1;
 }
 
-/* Source Chunk Card Styles - Fixed Visibility */
-
-/* 2. 渲染中文字：打字机效果 */
 .chunk-animating .chunk-text :deep(.glow-char) {
-  display: inline;  /* 必须使用 inline，否则长文本会排版错乱 */
-  color: #b45309;   /* 基础文字颜色 */
+  display: inline;
+  color: #b45309;
   font-weight: 700;
-  animation: goldReveal 0.3s ease-out; /* 使用修复后的动画 */
+  animation: goldReveal 0.3s ease-out;
 }
 
-/* 3. 完成后文字：保持原有淡淡流光 */
 .chunk-complete .chunk-text :deep(.glow-char) {
   display: inline;
   color: #334155;
@@ -3837,10 +3654,9 @@ onUnmounted(() => {
   animation: purpleFlow 3s ease-in-out infinite;
 }
 
-/* 修复后的动画：去除 opacity:0 和 transform */
 @keyframes goldReveal {
   0% {
-    background-color: rgba(251, 191, 36, 0.2); /* 模拟光标扫过的背景色 */
+    background-color: rgba(251, 191, 36, 0.2);
     color: #d97706;
   }
   100% {
@@ -3849,18 +3665,16 @@ onUnmounted(() => {
   }
 }
 
-/* 紫光流动动画 - 极淡呼吸感 */
 @keyframes purpleFlow {
   0%, 100% {
     text-shadow: 0 0 0 rgba(168, 85, 247, 0);
   }
   50% {
-    text-shadow: 0 0 5px rgba(168, 85, 247, 0.4); /* 非常淡的光晕 */
-    color: #475569; /* 稍微变浅一点点 */
+    text-shadow: 0 0 5px rgba(168, 85, 247, 0.4);
+    color: #475569;
   }
 }
 
-/* 打字光标效果 */
 .typing-cursor {
   display: inline-block;
   width: 2px;
@@ -3871,7 +3685,6 @@ onUnmounted(() => {
   box-shadow: 0 0 8px rgba(102, 126, 234, 0.6);
 }
 
-/* 光标闪烁动画 */
 @keyframes cursorBlink {
   0%, 50% {
     opacity: 1;
@@ -3889,9 +3702,7 @@ onUnmounted(() => {
   margin-bottom: 10px;
 }
 
-/* 局部图谱容器样式微调 */
 .subgraph-container {
-  /* 使用稍深的背景，突出节点的光晕效果 */
   background: radial-gradient(circle at center, rgba(255, 255, 255, 0.8) 0%, rgba(240, 245, 255, 0.6) 100%);
   border: 1px solid rgba(148, 163, 184, 0.3);
   box-shadow: inset 0 0 20px rgba(99, 102, 241, 0.05);
@@ -3899,22 +3710,22 @@ onUnmounted(() => {
 
 :deep(.el-upload-dragger) {
   border-radius: 16px !important;
-  border: 1px dashed rgba(59, 130, 246, 0.42) !important;
-  background: rgba(59, 130, 246, 0.06) !important;
+  border: 1px dashed rgba(59,130,246,0.42) !important;
+  background: rgba(59,130,246,0.06) !important;
   transition: all 0.2s ease !important;
 }
 
 :deep(.el-upload-dragger:hover) {
-  background: rgba(59, 130, 246, 0.10) !important;
-  border-color: rgba(59, 130, 246, 0.62) !important;
+  background: rgba(59,130,246,0.10) !important;
+  border-color: rgba(59,130,246,0.62) !important;
 }
 
 :deep(.el-upload__text) {
-  color: rgba(15, 23, 42, 0.78) !important;
+  color: rgba(15,23,42,0.78) !important;
 }
 
 :deep(.el-upload__text em) {
-  color: rgba(59, 130, 246, 0.98) !important;
+  color: rgba(59,130,246,0.98) !important;
   font-style: normal !important;
   font-weight: 900 !important;
 }
@@ -3923,28 +3734,26 @@ onUnmounted(() => {
   border-radius: 12px !important;
 }
 
-/* 加载指示器样式 */
 .loading-indicator {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
   padding: 40px 20px;
-  color: rgba(15, 23, 42, 0.65);
+  color: rgba(15,23,42,0.65);
   font-size: 14px;
 }
 
 .loading-indicator .el-icon {
   font-size: 20px;
-  color: rgba(59, 130, 246, 0.85);
+  color: rgba(59,130,246,0.85);
 }
 
-/* 模型选择器样式 */
 .model-option {
   display: flex;
   flex-direction: column;
-  padding: 10px 16px;              /* 在这里设置内边距，把间距撑开 */
-  gap: 4px;                        /* 名称和描述之间的间距 */
+  padding: 10px 16px;
+  gap: 4px;
   width: 100%;
   box-sizing: border-box;
 }
@@ -3957,12 +3766,12 @@ onUnmounted(() => {
 }
 
 .model-description {
-  display: block !important;       /* 强制显示 */
+  display: block !important;
   font-size: 12px;
-  color: #64748b;                  /* 灰蓝色 */
+  color: #64748b;
   line-height: 1.5;
-  white-space: normal;             /* 允许换行 */
-  word-break: break-all;           /* 允许长单词断句 */
+  white-space: normal;
+  word-break: break-all;
 }
 
 @media (max-width: 992px) {
@@ -4004,7 +3813,6 @@ onUnmounted(() => {
     font-size: 20px;
   }
 }
-/* ==================== 重复文档弹窗样式 ==================== */
 
 .doc-detail-content {
   padding: 20px;
@@ -4105,7 +3913,6 @@ onUnmounted(() => {
   }
 }
 
-/* Element Plus Dialog 样式覆盖 */
 .existing-doc-dialog {
   border-radius: 16px;
   overflow: hidden;
@@ -4140,9 +3947,6 @@ onUnmounted(() => {
   border-top: 1px solid rgba(148, 163, 184, 0.2);
 }
 
-/* ================= 全屏弹窗样式 ================= */
-
-/* 覆盖 Element Plus Dialog 的默认样式，使其背景透明 */
 .expand-graph-modal {
   background: transparent !important;
   box-shadow: none !important;
@@ -4156,7 +3960,6 @@ onUnmounted(() => {
   background: transparent !important;
 }
 
-/* 关闭按钮样式美化 */
 .expand-graph-modal .el-dialog__headerbtn {
   top: 20px;
   right: 20px;
@@ -4175,7 +3978,6 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-/* 🚀 核心：背景图片设置 🚀 */
 .expanded-bg {
   position: absolute;
   top: 0;
@@ -4183,18 +3985,12 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   z-index: 0;
-  
-  /* 设置背景图路径 */
   background-image: url('/background/OIP.jpg');
-  
-  /* 确保图片覆盖全屏 */
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  
-  /* 可选：加一层黑色遮罩，让图谱更清晰 */
-  filter: brightness(0.6); /* 稍微变暗，突出前景图谱 */
-  transform: scale(1.05); /* 放大一点防止模糊边缘 */
+  filter: brightness(0.6);
+  transform: scale(1.05);
 }
 
 .expanded-container {
@@ -4203,7 +3999,7 @@ onUnmounted(() => {
   left: 0;
   width: 100%;
   height: 100%;
-  z-index: 1; /* 在背景之上 */
+  z-index: 1;
 }
 
 .expanded-header {
@@ -4211,7 +4007,7 @@ onUnmounted(() => {
   top: 30px;
   left: 40px;
   z-index: 2;
-  pointer-events: none; /* 允许点击穿透 */
+  pointer-events: none;
   color: rgba(255, 255, 255, 0.9);
   text-shadow: 0 2px 10px rgba(0,0,0,0.8);
 }
@@ -4230,30 +4026,26 @@ onUnmounted(() => {
 }
 </style>
 <style>
-/* 1. 强制覆盖 Element Plus 下拉项的高度限制 */
 .custom-model-popper .el-select-dropdown__item {
-  height: auto !important;          /* 解除 34px 高度限制 */
-  padding: 0 !important;            /* 清除默认内边距 */
-  line-height: normal !important;   /* 重置行高 */
-  overflow: visible !important;     /* 防止内容被裁切 */
+  height: auto !important;
+  padding: 0 !important;
+  line-height: normal !important;
+  overflow: visible !important;
 }
 
-/* 2. 选中状态样式修正 */
 .custom-model-popper .el-select-dropdown__item.selected {
   font-weight: normal;
 }
 
-/* 3. 自定义内容的容器布局 */
 .custom-model-popper .model-option {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 10px 16px;       /* 上下左右内边距 */
-  min-height: 60px;         /* 给个最小高度 */
+  padding: 10px 16px;
+  min-height: 60px;
   box-sizing: border-box;
 }
 
-/* 4. 标题样式 */
 .custom-model-popper .model-name {
   font-size: 14px;
   font-weight: 700;
@@ -4262,12 +4054,11 @@ onUnmounted(() => {
   line-height: 1.3;
 }
 
-/* 5. 描述样式 */
 .custom-model-popper .model-description {
   font-size: 12px;
   color: #64748b;
   line-height: 1.4;
-  white-space: normal;      /* 允许换行 */
-  word-wrap: break-word;    /* 长单词换行 */
+  white-space: normal;
+  word-wrap: break-word;
 }
 </style>

@@ -1,4 +1,4 @@
-import { gameConfig, plantConfig, zombieConfig } from './config.js'
+﻿import { gameConfig, plantConfig, zombieConfig } from './config.js'
 import { Renderer } from './renderer.js'
 import { InputHandler } from './input.js'
 import { ProjectileManager } from './projectileManager.js'
@@ -442,15 +442,40 @@ export class GameEngine {
   
   // 游戏主循环
   gameLoop(currentTime = performance.now()) {
-    if (!this.isPlaying || this.gameOver) return
+    this._dbgLastLog ??= 0
+    if (currentTime - this._dbgLastLog > 1000) {
+      console.log('[loop]', {
+        isPlaying: this.isPlaying,
+        gameOver: this.gameOver,
+        plants: this.plants?.length,
+        zombies: this.zombies?.length,
+      })
+      this._dbgLastLog = currentTime
+    }
+    
+    if (!this.isPlaying || this.gameOver) {
+      console.warn('[loop] early exit:', {
+        isPlaying: this.isPlaying,
+        gameOver: this.gameOver
+      })
+      return
+    }
+    
+    this.loopCount = (this.loopCount || 0) + 1
     
     this.deltaTime = (currentTime - this.lastTime) / 1000
     this.lastTime = currentTime
     
     if (this.deltaTime > 0.1) this.deltaTime = 0.1
     
-    this.update(this.deltaTime)
-    this.render()
+    try {
+      this.update(this.deltaTime)
+      this.render()
+    } catch (error) {
+      console.error('[loop] crash:', error)
+      this.isPlaying = false
+      return
+    }
     
     requestAnimationFrame((time) => this.gameLoop(time))
   }
@@ -868,11 +893,29 @@ export class GameEngine {
   
   // 渲染
   render() {
+    this._dbgRenderLast ??= 0
+    const now = performance.now()
+    if (now - this._dbgRenderLast > 1000) {
+      console.log('[render data]', {
+        grid: this.grid ? 'ok' : 'null',
+        plants: this.plants?.length,
+        zombies: this.zombies?.length,
+      })
+      this._dbgRenderLast = now
+    }
+    
     this.ctx.clearRect(0, 0, this.width, this.height)
     
-    // 绘制背景
-    this.ctx.fillStyle = '#4a7c4e'
-    this.ctx.fillRect(0, 0, this.width, this.height)
+    // 画一个肉眼可见的调试点
+    this.ctx.save()
+    this.ctx.fillStyle = '#ff0000'
+    this.ctx.font = '20px Arial'
+    this.ctx.fillText(`DBG ${Math.floor(performance.now()) % 10000}`, 10, 30)
+    this.ctx.fillStyle = '#00ff00'
+    this.ctx.fillRect(10, 40, 20, 20)
+    this.ctx.restore()
+    
+    // 原有渲染
     
     this.renderer.drawGrid(this.grid)
     this.renderer.drawPlants(this.plants)
@@ -908,6 +951,14 @@ export class GameEngine {
       const plant = this.plants[i]
       const config = plantConfig[plant.type]
       
+      // [LOG1] 西瓜投手进入 updatePlants 循环
+      if (plant.type === 'watermelon' || plant.type === 'iceWatermelon') {
+        console.log('[LOG1] 西瓜投手进入 updatePlants, type:', plant.type, 
+                    'row:', plant.row, 'col:', plant.col,
+                    'attackTimer:', plant.attackTimer?.toFixed(2), 
+                    'interval:', config.attackInterval)
+      }
+
       // 魅惑菇逻辑：检测僵尸接触
       if (plant.type === 'hypnoShroom' && !plant.hasTriggered) {
         const row = plant.row
@@ -1008,6 +1059,13 @@ export class GameEngine {
         if (plant.attackTimer >= config.attackInterval) {
           const row = Math.floor((plant.y + plant.height / 2) / gameConfig.cellHeight)
           const hasZombie = this.hasZombieInRow(row, plant.x)
+          
+          // [DEBUG] 西瓜投手攻击检测
+          console.log('[西瓜投手调试] 植物:', plant.type, '行:', row, '位置:', Math.round(plant.x), Math.round(plant.y), '有僵尸:', hasZombie, '僵尸数量:', this.zombies.length)
+          this.zombies.forEach((z, i) => {
+            const zRow = Math.floor((z.y + z.height / 2) / gameConfig.cellHeight)
+            console.log('  僵尸['+i+']: 类型='+z.type+', 行='+zRow+', x='+Math.round(z.x)+', y='+Math.round(z.y))
+          })
           
           if (hasZombie) {
             plant.attackTimer = 0
@@ -1411,7 +1469,7 @@ export class GameEngine {
     
     // 添加魅惑动画
     this.animations.push({
-      type: 'hypoCharm',
+      type: 'hypnoCharm',
       x: zombie.x + zombie.width / 2,
       y: zombie.y + zombie.height / 2,
       time: 0,
@@ -1705,8 +1763,8 @@ export class GameEngine {
     this.zombies.push(zombie)
   }
   
-  // 种植植物
-  plant(col, row, plantType) {
+  // 创建植物对象（纯工厂方法，无副作用）
+  createPlantObject(col, row, plantType) {
     const config = plantConfig[plantType]
     const pixelPos = this.grid.gridToPixel(col, row)
     
@@ -1718,11 +1776,11 @@ export class GameEngine {
       type: plantType,
       col: col,
       row: row,
-      gridWidth: gridWidth,    // 记录占用的格子宽度
-      gridHeight: gridHeight,  // 记录占用的格子高度
+      gridWidth: gridWidth,
+      gridHeight: gridHeight,
       x: pixelPos.x,
       y: pixelPos.y,
-      width: config.width * gridWidth,  // 宽度 = 单格宽度 * 格子数
+      width: config.width * gridWidth,
       height: config.height,
       hp: config.hp,
       maxHp: config.hp,
@@ -1733,7 +1791,9 @@ export class GameEngine {
       isSleeping: false,
       sleepTimer: 0,
       // 土豆地雷相关字段
-      isReady: false
+      isReady: false,
+      // 魅惑菇相关字段
+      hasTriggered: false
     }
     
     // 如果是土豆地雷，设置沉睡状态
@@ -1742,6 +1802,26 @@ export class GameEngine {
       plant.sleepTimer = plantConfig.potatoMine.sleepDuration
       plant.isReady = false
     }
+    
+    // 如果是玉米加农炮，设置沉睡状态
+    if (plantType === 'cannon') {
+      plant.isSleeping = true
+      plant.sleepTimer = plantConfig.cannon.sleepDuration
+    }
+    
+    return plant
+  }
+  
+  // 种植植物（本地操作）
+  plant(col, row, plantType) {
+    const config = plantConfig[plantType]
+    
+    // 使用工厂方法创建植物对象
+    const plant = this.createPlantObject(col, row, plantType)
+    
+    // 获取植物的格子占用大小
+    const gridWidth = config.gridWidth || 1
+    const gridHeight = config.gridHeight || 1
     
     this.plants.push(plant)
     // 使用多格子放置方法

@@ -1,6 +1,6 @@
-﻿<template>
+<template>
   <div class="knowledge-graph-container">
-    <!-- 背景极光动画 - fixed 定位避免滚动时闪烁，z-index 确保在下层 -->
+    <!-- 鑳屾櫙鏋佸厜鍔ㄧ敾 - fixed 瀹氫綅閬垮厤婊氬姩鏃堕棯鐑? z-index 纭繚鍦ㄥ唴瀹逛笅鏂?-->
     <div class="bg-aurora" aria-hidden="true"></div>
 
     <div class="content-wrapper">
@@ -11,47 +11,47 @@
               <el-icon><Connection /></el-icon>
             </div>
             <div class="brand-text">
-              <h1 class="title">知识图谱 RAG 系统</h1>
-              <p class="subtitle">上传文档、选择文件、拖拽上传、知识图谱问答</p>
+              <h1 class="title">鐭ヨ瘑鍥捐氨 RAG 绯荤粺</h1>
+              <p class="subtitle">涓婁紶鏂囨。銆侀€夋嫨鏂囦欢銆佹嫋鎷戒笂浼?鐭ヨ瘑鍥捐氨闂瓟</p>
             </div>
           </div>
 
           <div class="header-meta">
             <div class="meta-chip">
               <span class="dot" :class="{ on: currentStep >= 0 }"></span>
-              <span class="label">上传</span>
+              <span class="label">涓婁紶</span>
             </div>
             <div class="meta-chip">
               <span class="dot" :class="{ on: currentStep >= 1 }"></span>
-              <span class="label">分块</span>
+              <span class="label">鍒嗗潡</span>
             </div>
             <div class="meta-chip">
               <span class="dot" :class="{ on: currentStep >= 2 }"></span>
-              <span class="label">抽取</span>
+              <span class="label">鎶藉彇</span>
             </div>
             <div class="meta-chip">
               <span class="dot" :class="{ on: currentStep >= 3 }"></span>
-              <span class="label">图谱</span>
+              <span class="label">鍥捐氨</span>
             </div>
           </div>
         </div>
       </el-card>
 
       <el-tabs v-model="activeTab" class="main-tabs">
-        <!-- 图谱构建标签页 -->
-        <el-tab-pane label="图谱构建" name="build">
+        <!-- 鍥捐氨鏋勫缓鏍囩椤?-->
+        <el-tab-pane label="鍥捐氨鏋勫缓" name="build">
           <div class="build-pipeline">
-            <!-- 步骤流程 -->
+            <!-- 姝ラ娴佺▼ -->
             <div class="steps-container">
               <el-steps :active="currentStep" finish-status="success" align-center>
-                <el-step title="上传文档" :icon="Upload" />
-                <el-step title="文本分块" :icon="Document" />
-                <el-step title="实体抽取" :icon="Search" />
-                <el-step title="图谱构建" :icon="Share" />
+                <el-step title="涓婁紶鏂囨。" :icon="Upload" />
+                <el-step title="鏂囨湰鍒嗗潡" :icon="Document" />
+                <el-step title="瀹炰綋鎶藉彇" :icon="Search" />
+                <el-step title="鍥捐氨鏋勫缓" :icon="Share" />
               </el-steps>
             </div>
 
-            <!-- 步骤1: 上传文档 -->
+            <!-- 姝ラ1: 涓婁紶鏂囨。 -->
             <div v-if="currentStep === 0" class="step-content">
               <el-card class="panel-card upload-card step-upload-theme" shadow="never">
                 <div class="step-decoration upload-decoration">
@@ -62,10 +62,10 @@
                 <template #header>
                   <div class="card-header">
                     <div class="card-title">
-                      <span class="emoji emoji-large upload-emoji">📚</span>
-                      <span>上传文档</span>
+                      <span class="emoji emoji-large upload-emoji">馃摛</span>
+                      <span>涓婁紶鏂囨。</span>
                     </div>
-                    <el-tag type="info" effect="light" round>PDF/TXT/DOCX/PPTX 最大100MB</el-tag>
+                    <el-tag type="info" effect="light" round>PDF/TXT/DOCX/PPTX 鏈€澶?00MB</el-tag>
                   </div>
                 </template>
 
@@ -84,7 +84,7 @@
                     </div>
                     <template #tip>
                       <div class="el-upload__tip">
-                      支持 PDF/TXT/DOCX/PPT 格式文件
+                        鏀寔 PDF/TXT/DOCX/PPT 鏍煎紡鏂囦欢
                       </div>
                     </template>
                   </el-upload>
@@ -99,10 +99,10 @@
                       class="action-button"
                     >
                       <el-icon class="btn-icon"><Upload /></el-icon>
-                      开始上传文档
+                      寮€濮嬩笂浼犳枃妗?
                     </el-button>
 
-                    <!-- 一键上传处理 -->
+                    <!-- 涓€閿笂浼犲鐞?-->
                     <el-button
                       type="success"
                       size="large"
@@ -112,18 +112,18 @@
                       class="action-button one-click-btn"
                     >
                       <el-icon class="btn-icon"><Promotion /></el-icon>
-                      一键上传并处理
+                      涓€閿笂浼犲苟澶勭悊
                     </el-button>
 
                     <div class="hint-row">
                       <span class="hint" v-if="selectedFile">
                         已选择文件：<strong>{{ selectedFileName }}</strong>
                       </span>
-                      <span class="hint" v-else>请先选择要上传的文件</span>
+                      <span class="hint" v-else>璇峰厛閫夋嫨瑕佷笂浼犵殑鏂囦欢</span>
                     </div>
                   </div>
 
-                  <!-- 异步上传进度条 -->
+                  <!-- 寮傛涓婁紶杩涘害鏉?-->
                   <el-collapse-transition>
                     <div v-if="uploadProgress > 0 || uploadingAsync" class="async-upload-progress">
                       <el-progress 
@@ -141,7 +141,7 @@
               </el-card>
             </div>
 
-            <!-- 步骤2: 文本分块 -->
+            <!-- 姝ラ2: 鏂囨湰鍒嗗潡 -->
             <div v-if="currentStep === 1" class="step-content">
               <el-card class="panel-card step-chunk-theme" shadow="never">
                 <div class="step-decoration chunk-decoration">
@@ -152,11 +152,11 @@
                 <template #header>
                   <div class="card-header">
                     <div class="card-title">
-                      <span class="emoji emoji-large chunk-emoji">📦</span>
-                      <span>文本分块</span>
+                      <span class="emoji emoji-large chunk-emoji">馃搫</span>
+                      <span>鏂囨湰鍒嗗潡</span>
                     </div>
                     <el-tag v-if="chunks.length > 0" type="success" effect="light" round>
-                      共 {{ chunks.length }} 个块
+                      鍏?{{ chunks.length }} 涓潡
                     </el-tag>
                   </div>
                 </template>
@@ -164,12 +164,12 @@
                 <el-row :gutter="20" class="split-grid">
                   <el-col :span="12">
                     <div class="panel-head">
-                      <h4 class="panel-title">原文预览</h4>
+                      <h4 class="panel-title">鍘熸枃棰勮</h4>
                       <el-tag type="info" effect="plain" round size="small">Preview</el-tag>
                     </div>
                     <el-scrollbar height="420px">
                       <div class="text-preview">
-                        {{ documentText || '暂无内容...' }}
+                        {{ documentText || '鏆傛棤鍐呭...' }}
                       </div>
                     </el-scrollbar>
                   </el-col>
@@ -188,8 +188,8 @@
                           shadow="never"
                         >
                           <div class="chunk-header">
-                            <el-tag size="small" type="info" effect="light" round>块 {{ chunk.index + 1 }}</el-tag>
-                            <span class="chunk-length">{{ chunk.length }} 字符</span>
+                            <el-tag size="small" type="info" effect="light" round>鍧?{{ chunk.index + 1 }}</el-tag>
+                            <span class="chunk-length">{{ chunk.length }} 瀛楃</span>
                           </div>
                           <div class="chunk-content">
                             {{ (chunk.content || '').substring(0, 120) }}{{ (chunk.content || '').length > 120 ? '...' : '' }}
@@ -198,7 +198,7 @@
 
                         <el-empty
                           v-if="chunks.length === 0"
-                          description="暂无分块数据"
+                          description="鏆傛棤鍒嗗潡鏁版嵁"
                           :image-size="100"
                         />
                       </div>
@@ -215,13 +215,13 @@
                     class="action-button"
                   >
                     <el-icon class="btn-icon"><Search /></el-icon>
-                    开始抽取实体
+                    寮€濮嬫娊鍙栧疄浣?
                   </el-button>
                 </div>
               </el-card>
             </div>
 
-            <!-- 步骤3: 实体抽取 -->
+            <!-- 姝ラ3: 瀹炰綋鎶藉彇 -->
             <div v-if="currentStep === 2" class="step-content">
               <el-card class="panel-card step-extract-theme" shadow="never">
                 <div class="step-decoration extract-decoration">
@@ -232,11 +232,11 @@
                 <template #header>
                   <div class="card-header">
                     <div class="card-title">
-                      <span class="emoji emoji-large extract-emoji">🔍</span>
-                      <span>实体抽取</span>
+                      <span class="emoji emoji-large extract-emoji">馃攳</span>
+                      <span>瀹炰綋鎶藉彇</span>
                     </div>
                     <el-tag v-if="triplets.length > 0" type="success" effect="light" round>
-                      共 {{ triplets.length }} 个三元组
+                      鍏?{{ triplets.length }} 涓笁鍏冪粍
                     </el-tag>
                   </div>
                 </template>
@@ -266,7 +266,7 @@
 
                     <el-empty
                       v-if="triplets.length === 0"
-                      description="暂无抽取的三元组"
+                      description="鏆傛棤鎶藉彇鐨勪笁鍏冪粍"
                       :image-size="110"
                     />
                   </div>
@@ -281,13 +281,13 @@
                     class="action-button"
                   >
                     <el-icon class="btn-icon"><Share /></el-icon>
-                    构建图谱
+                    鏋勫缓鍥捐氨
                   </el-button>
                 </div>
               </el-card>
             </div>
 
-            <!-- 步骤4: 图谱展示 -->
+            <!-- 姝ラ4: 鍥捐氨灞曠ず -->
             <div v-if="currentStep === 3" class="step-content">
               <el-card class="panel-card step-graph-theme" shadow="never">
                 <div class="step-decoration graph-decoration">
@@ -299,19 +299,19 @@
                   <div class="card-header">
                     <div class="card-title">
                       <span class="emoji emoji-large graph-emoji">🕸️</span>
-                      <span>知识图谱</span>
+                      <span>鐭ヨ瘑鍥捐氨</span>
                     </div>
                     <div class="header-actions">
                       <el-radio-group v-model="graphScope" size="small" @change="handleGraphScopeChange">
-                        <el-radio-button label="current">当前文档</el-radio-button>
-                        <el-radio-button label="all">所有文档</el-radio-button>
+                        <el-radio-button label="current">Current Doc</el-radio-button>
+                        <el-radio-button label="all">All Docs</el-radio-button>
                       </el-radio-group>
                       <el-button size="small" @click="loadGraphData" plain>
                         <el-icon class="btn-icon"><Document /></el-icon>
-                        刷新
+                        鍒锋柊
                       </el-button>
                       <el-button size="small" @click="resetPipeline" plain>
-                        重置流程
+                        閲嶇疆娴佺▼
                       </el-button>
                     </div>
                   </div>
@@ -323,11 +323,11 @@
                     <div class="graph-mode-hint">{{ graphScopeHint }}</div>
                   </div>
                   <div class="graph-mode-legend">
-                    <span class="legend-pill legend-pill-solid">同文档</span>
-                    <span class="legend-pill legend-pill-dashed">跨文档</span>
+                    <span class="legend-pill legend-pill-solid">Intra-doc</span>
+                    <span class="legend-pill legend-pill-dashed">Cross-doc</span>
                   </div>
                   <div class="stat-card">
-                    <div class="stat-title">区域数量</div>
+                    <div class="stat-title">Regions</div>
                     <div class="stat-value">{{ graphRegionCount }}</div>
                   </div>
                 </div>
@@ -338,7 +338,7 @@
 
                 <div class="graph-stats">
                   <div class="stat-card">
-                    <div class="stat-title">节点数量</div>
+                    <div class="stat-title">鑺傜偣鏁伴噺</div>
                     <div class="stat-value">{{ graphData.nodes?.length || 0 }}</div>
                   </div>
                   <div class="stat-card">
@@ -346,7 +346,7 @@
                     <div class="stat-value">{{ graphData.edges?.length || 0 }}</div>
                   </div>
                   <div class="stat-card">
-                    <div class="stat-title">构建时间</div>
+                    <div class="stat-title">鏋勫缓鏃堕棿</div>
                     <div class="stat-value">{{ buildTime }}<span class="stat-suffix">秒</span></div>
                   </div>
                 </div>
@@ -355,23 +355,23 @@
           </div>
         </el-tab-pane>
 
-        <!-- RAG问答标签页 -->
-        <el-tab-pane label="知识问答" name="qa">
+        <!-- RAG闂瓟鏍囩椤?-->
+        <el-tab-pane label="鐭ヨ瘑闂瓟" name="qa">
           <div class="qa-container">
             <el-row :gutter="20" class="qa-grid">
-              <!-- 左侧聊天区域 -->
+              <!-- 宸︿晶鑱婂ぉ鍖哄煙 -->
               <el-col :span="12" class="qa-col">
                 <el-card class="panel-card chat-card" shadow="never">
                   <template #header>
                     <div class="card-header">
                       <div class="card-title">
-                        <span class="emoji">💬</span>
-                        <span>知识问答</span>
+                        <span class="emoji">馃挰</span>
+                        <span>鐭ヨ瘑闂瓟</span>
                       </div>
                       <div class="header-actions">
                         <el-select
                           v-model="selectedModel"
-                          placeholder="选择模型"
+                          placeholder="閫夋嫨妯″瀷"
                           size="default"
                           style="width: 280px; margin-right: 10px;"
                           popper-class="custom-model-popper" 
@@ -390,19 +390,19 @@
                         </el-select>
                         <el-button size="small" @click="newConversation" plain>
                           <el-icon class="btn-icon"><Document /></el-icon>
-                          新建对话
+                          鏂板缓瀵硅瘽
                         </el-button>
                       </div>
                     </div>
                   </template>
 
-                  <!-- 聊天内容区域 -->
+                  <!-- 鑱婂ぉ鍐呭鍖哄煙 -->
                   <div class="chat-wrapper">
                     <el-scrollbar class="chat-scroll-area" ref="chatScroll" wrap-class="chat-scroll-wrap">
                       <div class="chat-messages">
                         <div class="chat-start-placeholder" v-if="messages.length === 0">
-                          <div class="placeholder-icon">🤖</div>
-                          <h3>欢迎使用 RAG 知识问答系统</h3>
+                          <div class="placeholder-icon">馃</div>
+                          <h3>娆㈣繋浣跨敤 RAG 鐭ヨ瘑闂瓟绯荤粺</h3>
                           <p>请先上传文档并构建知识图谱，然后再进行问答。</p>
                         </div>
 
@@ -411,15 +411,15 @@
                           :key="idx"
                           :class="['message', msg.role]"
                         >
-                          <!-- 用户头像 -->
+                          <!-- 鐢ㄦ埛澶村儚 -->
                           <div class="message-avatar" :class="msg.role">
                             <img v-if="msg.role === 'user'" src="https://cdn-icons-png.flaticon.com/512/9308/9308304.png" alt="User" />
                             <div v-else class="ai-avatar-inner">
-                              <span class="ai-icon">🤖</span>
+                              <span class="ai-icon">馃</span>
                             </div>
                           </div>
 
-                          <!-- 消息气泡 -->
+                          <!-- 娑堟伅姘旀场 -->
                           <div class="message-bubble" :class="msg.role">
                             <div
                               class="message-text"
@@ -432,7 +432,7 @@
                         <div v-if="answering" class="message assistant">
                           <div class="message-avatar assistant">
                             <div class="ai-avatar-inner typing-state">
-                              <span class="ai-icon">🤖</span>
+                              <span class="ai-icon">馃</span>
                             </div>
                           </div>
                           <div class="message-bubble assistant">
@@ -440,22 +440,22 @@
                               <span class="typing-dot"></span>
                               <span class="typing-dot"></span>
                               <span class="typing-dot"></span>
-                              <span class="typing-text">AI 正在思考中...</span>
+                              <span class="typing-text">AI 姝ｅ湪鎬濊€冧腑...</span>
                             </div>
                           </div>
                         </div>
                         
-                        <!-- 底部占位 -->
+                        <!-- 搴曢儴鍗犱綅 -->
                         <div class="chat-bottom-spacer"></div>
                       </div>
                     </el-scrollbar>
 
-                    <!-- 底部输入框 -->
+                    <!-- 搴曢儴杈撳叆妗?-->
                     <div class="chat-input-container">
                       <div class="chat-input-wrapper">
                         <el-input
                           v-model="question"
-                          placeholder="请输入您的问题..."
+                          placeholder="璇疯緭鍏ユ偍鐨勯棶棰?.."
                           @keyup.enter="askQuestion"
                           :disabled="answering"
                           class="floating-input"
@@ -483,13 +483,13 @@
                 </el-card>
               </el-col>
 
-              <!-- 右侧参考资料区域 -->
+              <!-- 鍙充晶鍙傝€冭祫鏂欏尯鍩?-->
               <el-col :span="12" class="qa-col">
                 <el-card class="panel-card explain-card" shadow="never">
                   <template #header>
                     <div class="card-header">
                       <div class="card-title">
-                        <span class="emoji">📖</span>
+                        <span class="emoji">馃摎</span>
                         <span>参考资料</span>
                       </div>
                       <el-tag type="success" effect="light" round>参考来源</el-tag>
@@ -500,10 +500,10 @@
                     <el-tab-pane label="相关文档块" name="chunks">
                       <el-scrollbar height="calc(100% - 10px)">
                         <div class="source-chunks">
-                          <!-- 加载中提示 -->
+                          <!-- 鍔犺浇涓彁绀?-->
                           <div v-if="loadingStatus.vectorSearch" class="loading-indicator">
                             <el-icon class="is-loading"><Loading /></el-icon>
-                            <span>正在搜索相关文档块...</span>
+                            <span>姝ｅ湪鎼滅储鐩稿叧鏂囨。鍧?..</span>
                           </div>
 
                           <el-card
@@ -515,19 +515,19 @@
                           >
                             <div class="source-chunk-head">
                               <div class="chunk-badge">
-                                <!-- 装饰角标 -->
+                                <!-- 瑁呴グ瑙掓爣 -->
                                 <span class="badge-corner badge-corner-tl"></span>
                                 <span class="badge-corner badge-corner-tr"></span>
                                 <span class="badge-corner badge-corner-bl"></span>
                                 <span class="badge-corner badge-corner-br"></span>
                                 
-                                <!-- 图标区域 -->
+                                <!-- 鍥炬爣鍖哄煙 -->
                                 <div class="badge-icon-area">
-                                  <span class="badge-icon">📦</span>
+                                  <span class="badge-icon">馃搫</span>
                                   <div class="badge-icon-glow"></div>
                                 </div>
                                 
-                                <!-- 内容区域 -->
+                                <!-- 鍐呭鍖哄煙 -->
                                 <div class="badge-content">
                                   <div class="badge-number-row">
                                     <span class="badge-prefix">FRAGMENT</span>
@@ -540,14 +540,14 @@
                                   </div>
                                 </div>
                                 
-                                <!-- 星星装饰 -->
+                                <!-- 鏄熸槦瑁呴グ -->
                                 <div class="badge-stars">
                                   <span class="star star-1">★</span>
                                   <span class="star star-2">★</span>
                                   <span class="star star-3">★</span>
                                 </div>
                                 
-                                <!-- 光效 -->
+                                <!-- 鍏夋晥 -->
                                 <div class="badge-shine"></div>
                               </div>
                             </div>
@@ -563,44 +563,44 @@
                       </el-scrollbar>
                     </el-tab-pane>
 
-                    <el-tab-pane label="知识图谱" name="graph">
-                      <!-- 加载中提示 -->
+                    <el-tab-pane label="鐭ヨ瘑鍥捐氨" name="graph">
+                      <!-- 鍔犺浇涓彁绀?-->
                       <div v-if="loadingStatus.graphSearch" class="loading-indicator">
                         <el-icon class="is-loading"><Loading /></el-icon>
-                        <span>正在加载知识图谱...</span>
+                        <span>姝ｅ湪鍔犺浇鐭ヨ瘑鍥捐氨...</span>
                       </div>
 
                       <div v-else class="subgraph-stage">
                         <div v-if="subgraphData && subgraphData.nodes?.length" class="subgraph-toolbar">
                           <div class="subgraph-toolbar-copy">
-                            <div class="subgraph-toolbar-title">支持直接编辑当前问答命令中的实体和关系</div>
-                            <div class="subgraph-toolbar-hint">修改后先更新当前视图，再后台异步写入 Neo4j</div>
+                            <div class="subgraph-toolbar-title">鏀寔鐩存帴缂栬緫褰撳墠闂瓟鍛戒腑鐨勫疄浣撳拰鍏崇郴</div>
+                            <div class="subgraph-toolbar-hint">淇敼鍚庡厛鏇存柊褰撳墠瑙嗗浘锛屽啀鍚庡彴寮傛鍐欏叆 Neo4j</div>
                           </div>
                           <el-button type="primary" plain @click="openGraphEditor">
                             <el-icon class="btn-icon"><Edit /></el-icon>
-                            编辑图谱
+                            缂栬緫鍥捐氨
                           </el-button>
                         </div>
                         <!-- 
-                           1. 双击可以放大
-                           2. 鼠标悬停显示详情
+                           1. 鍙屽嚮鍙互鏀惧ぇ
+                           2. 榧犳爣鎮仠鏄剧ず璇︽儏
                         -->
                         <div 
                           ref="subgraphContainer" 
                           class="subgraph-container" 
                           @dblclick="handleOpenExpand"
-                          title="双击放大查看"
+                          title="鍙屽嚮鏀惧ぇ鏌ョ湅"
                           style="cursor: zoom-in;"
                         ></div>
                       </div>
-
+                      
                       <el-empty
                         v-if="!loadingStatus.graphSearch && (!subgraphData || subgraphData.nodes?.length === 0)"
-                        description="暂无知识图谱数据"
+                        description="鏆傛棤鐭ヨ瘑鍥捐氨鏁版嵁"
                         :image-size="110"
                       />
 
-                      <!-- 全屏图谱对话框 -->
+                      <!-- 鍏ㄥ睆鍥捐氨瀵硅瘽妗?-->
                       <el-dialog
                         v-model="expandVisible"
                         fullscreen
@@ -610,17 +610,17 @@
                         @closed="destroyExpandedGraph"
                         destroy-on-close
                       >
-                        <!-- 全屏内容区域 -->
+                        <!-- 鍏ㄥ睆鍐呭鍖哄煙 -->
                         <div class="expanded-wrapper">
-                          <!-- 背景图 -->
+                          <!-- 鑳屾櫙鍥?-->
                           <div class="expanded-bg"></div>
                           
-                          <!-- 图形容器 -->
+                          <!-- 鍥惧舰瀹瑰櫒 -->
                           <div ref="expandedContainer" class="expanded-container"></div>
                           
-                          <!-- 顶部标题 -->
+                          <!-- 椤堕儴鏍囬 -->
                           <div class="expanded-header">
-                            <h2>知识图谱详情</h2>
+                            <h2>鐭ヨ瘑鍥捐氨璇︽儏</h2>
                             <p>按 ESC 键退出全屏</p>
                           </div>
                         </div>
@@ -634,48 +634,48 @@
                       >
                         <template #header>
                           <div class="graph-edit-header">
-                            <div class="graph-edit-title">编辑问答图谱</div>
+                            <div class="graph-edit-title">缂栬緫闂瓟鍥捐氨</div>
                             <div class="graph-edit-subtitle">支持修改实体名称、实体类型、关系名称，以及关系连接的起点和终点。</div>
                           </div>
                         </template>
 
                         <div class="graph-edit-section">
-                          <div class="graph-edit-section-title">实体</div>
+                          <div class="graph-edit-section-title">瀹炰綋</div>
                           <el-table :data="editableSubgraph.nodes" stripe max-height="260">
-                            <el-table-column label="实体 ID" min-width="220">
+                            <el-table-column label="瀹炰綋 ID" min-width="220">
                               <template #default="{ row }">
                                 <span class="graph-edit-id">{{ row.id }}</span>
                               </template>
                             </el-table-column>
-                            <el-table-column label="名称" min-width="180">
+                            <el-table-column label="鍚嶇О" min-width="180">
                               <template #default="{ row }">
                                 <el-input v-model="row.label" placeholder="Entity name" />
                               </template>
                             </el-table-column>
-                            <el-table-column label="类型" min-width="160">
+                            <el-table-column label="绫诲瀷" min-width="160">
                               <template #default="{ row }">
-                                <el-input v-model="row.type" placeholder="例如 Person / Org / Entity" />
+                                <el-input v-model="row.type" placeholder="渚嬪 Person / Org / Entity" />
                               </template>
                             </el-table-column>
                           </el-table>
                         </div>
 
                         <div class="graph-edit-section">
-                          <div class="graph-edit-section-title">关系</div>
+                          <div class="graph-edit-section-title">鍏崇郴</div>
                           <el-table :data="editableSubgraph.edges" stripe max-height="280">
-                            <el-table-column label="关系 ID" min-width="180">
+                            <el-table-column label="鍏崇郴 ID" min-width="180">
                               <template #default="{ row }">
                                 <span class="graph-edit-id">{{ row.id }}</span>
                               </template>
                             </el-table-column>
-                            <el-table-column label="关系名称" min-width="160">
+                            <el-table-column label="鍏崇郴鍚嶇О" min-width="160">
                               <template #default="{ row }">
                                 <el-input v-model="row.label" placeholder="Relation name" />
                               </template>
                             </el-table-column>
-                            <el-table-column label="起点实体" min-width="190">
+                            <el-table-column label="璧风偣瀹炰綋" min-width="190">
                               <template #default="{ row }">
-                                <el-select v-model="row.source" placeholder="选择起点实体" filterable style="width: 100%">
+                                <el-select v-model="row.source" placeholder="閫夋嫨璧风偣瀹炰綋" filterable style="width: 100%">
                                   <el-option
                                     v-for="node in editableNodeOptions"
                                     :key="node.value"
@@ -685,9 +685,9 @@
                                 </el-select>
                               </template>
                             </el-table-column>
-                            <el-table-column label="终点实体" min-width="190">
+                            <el-table-column label="缁堢偣瀹炰綋" min-width="190">
                               <template #default="{ row }">
-                                <el-select v-model="row.target" placeholder="选择终点实体" filterable style="width: 100%">
+                                <el-select v-model="row.target" placeholder="閫夋嫨缁堢偣瀹炰綋" filterable style="width: 100%">
                                   <el-option
                                     v-for="node in editableNodeOptions"
                                     :key="node.value"
@@ -702,9 +702,9 @@
 
                         <template #footer>
                           <div class="graph-edit-footer">
-                            <el-button @click="graphEditVisible = false">取消</el-button>
+                            <el-button @click="graphEditVisible = false">鍙栨秷</el-button>
                             <el-button type="primary" :loading="savingGraphEdits" @click="saveGraphEdits">
-                              保存修改
+                              淇濆瓨淇敼
                             </el-button>
                           </div>
                         </template>
@@ -729,10 +729,10 @@ import G6 from '@antv/g6'
 import request, { createStreamRequest } from '@/utils/request'
 import { watchTaskProgress, uploadDocumentAsync } from '@/utils/kafkaSSE'
 
-// 当前标签页
+// 褰撳墠鏍囩椤?
 const activeTab = ref('build')
 
-// ==================== 图谱构建相关状态 ====================
+// ==================== 鍥捐氨鏋勫缓鐩稿叧鐘舵€?====================
 const currentStep = ref(0)
 const selectedFile = ref(null)
 const uploading = ref(false)
@@ -755,26 +755,26 @@ const graphRegionCount = computed(() => {
 })
 const graphScopeTitle = computed(() => {
   return graphScope.value === 'all'
-    ? '文档分区视图'
-    : '聚焦当前文档视图'
+    ? 'Document Partition View'
+    : 'Focused Document View'
 })
 const graphScopeHint = computed(() => {
   return graphScope.value === 'all'
-    ? '每个圆圈代表一个源文档。虚线连接表示跨文档关系。'
-    : '聚焦当前文档，同时显示跨文档连接。'
+    ? 'Each circle groups entities from one source document. Dashed links indicate cross-document relations.'
+    : 'Focus on the current document while keeping cross-document links visible as dashed connectors.'
 })
 
-// ==================== 异步上传 Kafka + SSE相关 ====================
-const uploadingAsync = ref(false)  // 异步上传状态
-const uploadProgress = ref(0)      // 上传进度 (0-100)
-const uploadStage = ref('')        // 当前阶段标签
-const uploadMessage = ref('')      // 进度消息
-const sseConnection = ref(null)    // SSE 连接
+// ==================== 寮傛涓婁紶 Kafka + SSE鐩稿叧 ====================
+const uploadingAsync = ref(false)  // 寮傛涓婁紶鐘舵€?
+const uploadProgress = ref(0)      // 涓婁紶杩涘害 (0-100)
+const uploadStage = ref('')        // 褰撳墠闃舵鏍囩
+const uploadMessage = ref('')      // 杩涘害娑堟伅
+const sseConnection = ref(null)    // SSE 杩炴帴
 const expandVisible = ref(false)
 const expandedContainer = ref(null)
 let expandedInstance = null
 
-// G6 图形容器引用
+// G6 鍥惧舰瀹瑰櫒寮曠敤
 const graphContainer = ref(null)
 const subgraphContainer = ref(null)
 
@@ -801,27 +801,27 @@ const getComboStyle = (comboId) => {
   return comboPalette[Math.abs(hash) % comboPalette.length]
 }
 
-// ==================== G6 自定义节点和边 ====================
+// ==================== G6 鑷畾涔夎妭鐐瑰拰杈?====================
 
-// [1] 生成节点摇摆动画的位置偏移
-// 传入节点 ID 和时间戳，返回节点位置的微小偏移量 (x, y)
-// 边的动画需要根据连接的源节点和目标节点的位置动态计算
+// [1] 鐢熸垚鑺傜偣鎽囨憜鍔ㄧ敾鐨勪綅缃亸绉?
+// 浼犲叆鑺傜偣 ID 鍜屾椂闂存埑锛岃繑鍥炶妭鐐逛綅缃殑寰皬鍋忕Щ閲?(x, y)
+// 杈圭殑鍔ㄧ敾闇€瑕佹牴鎹繛鎺ョ殑婧愯妭鐐瑰拰鐩爣鑺傜偣鐨勪綅缃姩鎬佽绠?
 const getWobble = (id, timestamp) => {
   if (!id) return { x: 0, y: 0 };
   
-  // A. 生成节点 ID 的哈希值，确保相同 ID 产生相同的随机偏移
+  // A. 鐢熸垚鑺傜偣 ID 鐨勫搱甯屽€硷紝纭繚鐩稿悓 ID 浜х敓鐩稿悓鐨勯殢鏈哄亸绉?
   let hash = 0;
   for (let i = 0; i < id.length; i++) {
     hash = id.charCodeAt(i) + ((hash << 5) - hash);
   }
   
-  // B. 根据哈希值生成偏移参数
+  // B. 鏍规嵁鍝堝笇鍊肩敓鎴愬亸绉诲弬鏁?
   const rangeX = 25; 
   const rangeY = 30; 
-  const speed = 3000 + (Math.abs(hash) % 2000); // 周期 3000~5000
-  const phase = (Math.abs(hash) % 100) / 100 * Math.PI * 2; // 相位
+  const speed = 3000 + (Math.abs(hash) % 2000); // 鍛ㄦ湡 3000~5000
+  const phase = (Math.abs(hash) % 100) / 100 * Math.PI * 2; // 鐩镐綅
   
-  // C. 计算偏移量
+  // C. 璁＄畻鍋忕Щ閲?
   const t = (timestamp / speed) * Math.PI * 2 + phase;
   const dx = Math.sin(t) * rangeX;
   const dy = Math.cos(t * 1.5) * rangeY;
@@ -831,16 +831,16 @@ const getWobble = (id, timestamp) => {
 
 const registerCustomTheme = () => {
   
-  // ==================== 1. 呼吸动画节点 ====================
+  // ==================== 1. 鍛煎惛鍔ㄧ敾鑺傜偣 ====================
   G6.registerNode('breathing-node', {
     draw(cfg, group) {
       const r = (cfg.size || 32) / 2;
       const color = cfg.style.fill || '#409EFF';
 
-      // 容器组
+      // 瀹瑰櫒缁?
       const container = group.addGroup();
 
-      // A. 光晕效果
+      // A. 鍏夋檿鏁堟灉
       const halo = container.addShape('circle', {
         zIndex: -10,
         attrs: {
@@ -851,14 +851,14 @@ const registerCustomTheme = () => {
         name: 'halo-shape'
       });
 
-      // B. 背景圆
+      // B. 鑳屾櫙鍦?
       const back1 = container.addShape('circle', {
         zIndex: -5,
         attrs: { x: 0, y: 0, r: r, fill: color, opacity: 0.4 },
         name: 'back-shape'
       });
 
-      // C. 主体圆形
+      // C. 涓讳綋鍦嗗舰
       const keyShape = container.addShape('circle', {
         zIndex: 0,
         attrs: {
@@ -869,28 +869,28 @@ const registerCustomTheme = () => {
         draggable: true
       });
 
-      // --- 动画效果 - 呼吸动画 ---
-      // 光晕动画：动态改变颜色并产生摇摆效果
+      // --- 鍔ㄧ敾鏁堟灉 - 鍛煎惛鍔ㄧ敾 ---
+      // 鍏夋檿鍔ㄧ敾锛氬姩鎬佹敼鍙橀鑹插苟浜х敓鎽囨憜鏁堟灉
       halo.animate(
         (ratio) => {
-          // 1. 颜色循环
+          // 1. 棰滆壊寰幆
           const hue = ratio * 360;
           const hsl = `hsl(${hue}, 100%, 70%)`;
           
-          // 2. 位置摇摆
+          // 2. 浣嶇疆鎽囨憜
           const now = performance.now();
           const pos = getWobble(cfg.id, now);
           
-          // 设置容器组的变换矩阵实现位置偏移
+          // 璁剧疆瀹瑰櫒缁勭殑鍙樻崲鐭╅樀瀹炵幇浣嶇疆鍋忕Щ
           container.setMatrix([1, 0, 0, 0, 1, 0, pos.x, pos.y, 1]);
 
-          // 返回属性变化
+          // 杩斿洖灞炴€у彉鍖?
           return { stroke: hsl, shadowColor: hsl };
         },
         { repeat: true, duration: 3000, easing: 'easeLinear' }
       );
 
-      // 背景圆动画：轻微缩放
+      // 鑳屾櫙鍦嗗姩鐢伙細杞诲井缂╂斁
       back1.animate(
         { r: r + 8, opacity: 0.05 },
         { repeat: true, duration: 2500, easing: 'easeLinear' }
@@ -914,7 +914,7 @@ const registerCustomTheme = () => {
   }, 'single-node');
 
 
-  // ==================== 2. 动态流动边 ====================
+  // ==================== 2. 鍔ㄦ€佹祦鍔ㄨ竟 ====================
   G6.registerEdge('dynamic-edge', {
     draw(cfg, group) {
       const startPoint = cfg.startPoint;
@@ -934,7 +934,7 @@ const registerCustomTheme = () => {
         (ratio) => {
           const now = performance.now();
           
-          // 获取连接的节点位置偏移
+          // 鑾峰彇杩炴帴鐨勮妭鐐逛綅缃亸绉?
           const sourceId = typeof cfg.source === 'string' ? cfg.source : cfg.source.id;
           const targetId = typeof cfg.target === 'string' ? cfg.target : cfg.target.id;
           
@@ -961,14 +961,14 @@ const registerCustomTheme = () => {
   });
 }
 
-// ==================== 全屏图谱相关功能 ====================
-// 1. 打开全屏
+// ==================== 鍏ㄥ睆鍥捐氨鐩稿叧鍔熻兘 ====================
+// 1. 鎵撳紑鍏ㄥ睆
 const handleOpenExpand = () => {
   if (!subgraphData.value || !subgraphData.value.nodes?.length) return
   expandVisible.value = true
 }
 
-// 2. 销毁全屏图谱
+// 2. 閿€姣佸叏灞忓浘璋?
 const destroyExpandedGraph = () => {
   if (expandedInstance) {
     expandedInstance.destroy()
@@ -976,25 +976,25 @@ const destroyExpandedGraph = () => {
   }
 }
 
-// 3. 渲染全屏图谱
+// 3. 娓叉煋鍏ㄥ睆鍥捐氨
 const renderExpandedGraph = async () => {
   if (!expandedContainer.value) return
   if (!subgraphData.value) return
 
-  // 先销毁
+  // 鍏堥攢姣?
   destroyExpandedGraph()
 
-  // 注册自定义主题
+  // 娉ㄥ唽鑷畾涔変富棰?
   if (!isThemeRegistered) {
     registerCustomTheme()
     isThemeRegistered = true
   }
 
-  // 获取窗口尺寸
+  // 鑾峰彇绐楀彛灏哄
   const width = window.innerWidth
   const height = window.innerHeight
 
-  // 创建图谱实例
+  // 鍒涘缓鍥捐氨瀹炰緥
   expandedInstance = new G6.Graph({
     container: expandedContainer.value,
     width,
@@ -1041,7 +1041,7 @@ const renderExpandedGraph = async () => {
     }
   })
 
-  // 处理节点数据
+  // 澶勭悊鑺傜偣鏁版嵁
   const nodes = subgraphData.value.nodes.map(n => ({
     ...n,
     id: String(n.id),
@@ -1061,7 +1061,7 @@ const renderExpandedGraph = async () => {
   expandedInstance.render()
 }
 
-// ==================== 状态变量 ====================
+// ==================== 鐘舵€佸彉閲?====================
 let isThemeRegistered = false;
 let graphInstance = null
 let subgraphInstance = null
@@ -1071,7 +1071,7 @@ const resizeBound = ref(false)
 const selectedFileName = computed(() => {
   const f = selectedFile.value
   if (!f) return ''
-  return f.name || '未选择文件'
+  return f.name || '鏈€夋嫨鏂囦欢'
 })
 
 const handleFileChange = (file) => {
@@ -1110,7 +1110,7 @@ const getContainerSize = (el, fallbackWidth, fallbackHeight) => {
   return { width, height }
 }
 
-// 上传文档
+// 涓婁紶鏂囨。
 const uploadDocument = async () => {
   if (!selectedFile.value) return
 
@@ -1125,15 +1125,15 @@ const uploadDocument = async () => {
 
     if (isDisposed.value) return
 
-    // 检查是否为重复文档
+    // 妫€鏌ユ槸鍚︿负閲嶅鏂囨。
     if (res.data.duplicate) {
       try {
         await ElMessageBox.confirm(
-          res.data.message || '该文档已存在，是否覆盖？',
-          '文档重复',
+          res.data.message || '璇ユ枃妗ｅ凡瀛樺湪锛屾槸鍚﹁鐩栵紵',
+          '鏂囨。閲嶅',
           {
-            confirmButtonText: '确认覆盖',
-            cancelButtonText: '取消',
+            confirmButtonText: '纭瑕嗙洊',
+            cancelButtonText: '鍙栨秷',
             type: 'info',
             customClass: 'duplicate-doc-dialog'
           }
@@ -1144,7 +1144,7 @@ const uploadDocument = async () => {
           showExistingDocDialog(existingDoc)
         }
       } catch (error) {
-        console.log('用户取消操作')
+        console.log('鐢ㄦ埛鍙栨秷鎿嶄綔')
       }
       uploading.value = false
       return
@@ -1153,21 +1153,21 @@ const uploadDocument = async () => {
     docId.value = res.data.doc_id
     documentText.value = res.data.text_preview
 
-    ElMessage.success('文档上传成功')
+    ElMessage.success('鏂囨。涓婁紶鎴愬姛')
 
-    // 进入下一步
+    // 杩涘叆涓嬩竴姝?
     currentStep.value = 1
     await splitText()
   } catch (error) {
-    ElMessage.error(error.response?.data?.detail || '文档上传失败')
+    ElMessage.error(error.response?.data?.detail || '鏂囨。涓婁紶澶辫触')
   } finally {
     uploading.value = false
   }
 }
 
-// 显示已存在文档的对话框
+// 鏄剧ず宸插瓨鍦ㄦ枃妗ｇ殑瀵硅瘽妗?
 const showExistingDocDialog = (existingDoc) => {
-  // 格式化上传时间
+  // 鏍煎紡鍖栦笂浼犳椂闂?
   const uploadTime = existingDoc.upload_time 
     ? new Date(existingDoc.upload_time).toLocaleString('zh-CN', {
         year: 'numeric',
@@ -1177,9 +1177,9 @@ const showExistingDocDialog = (existingDoc) => {
         minute: '2-digit',
         second: '2-digit'
       })
-    : '未知'
+    : '鏈煡'
 
-  // 格式化文件大小
+  // 鏍煎紡鍖栨枃浠跺ぇ灏?
   const formatFileSize = (bytes) => {
     if (bytes === 0) return '0 B'
     const k = 1024
@@ -1188,12 +1188,12 @@ const showExistingDocDialog = (existingDoc) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   }
 
-  // 状态映射
+  // 鐘舵€佹槧灏?
   const statusMap = {
     'uploaded': { type: 'info', text: '已上传' },
     'processing': { type: 'warning', text: '处理中' },
     'completed': { type: 'success', text: '已完成' },
-    'failed': { type: 'danger', text: '处理失败' }
+    'failed': { type: 'danger', text: '澶勭悊澶辫触' }
   }
 
   const statusInfo = statusMap[existingDoc.status] || { type: '', text: existingDoc.status }
@@ -1202,29 +1202,29 @@ const showExistingDocDialog = (existingDoc) => {
     `
       <div class="doc-detail-content">
         <div class="doc-detail-header">
-          <div class="doc-icon">📦</div>
+          <div class="doc-icon">馃搫</div>
           <div class="doc-title">${existingDoc.filename}</div>
         </div>
         
         <div class="doc-detail-info">
           <div class="info-item">
-            <span class="info-label">文档 ID</span>
+            <span class="info-label">鏂囨。ID</span>
             <span class="info-value">${existingDoc.doc_id?.substring(0, 8)}...</span>
           </div>
           
           <div class="info-item">
-            <span class="info-label">上传时间</span>
+            <span class="info-label">涓婁紶鏃堕棿</span>
             <span class="info-value">${uploadTime}</span>
           </div>
           
           <div class="info-item">
-            <span class="info-label">文件大小</span>
+            <span class="info-label">鏂囦欢澶у皬</span>
             <span class="info-value">${formatFileSize(existingDoc.file_size)}</span>
           </div>
           
           <div class="info-item">
-            <span class="info-label">文档字数</span>
-            <span class="info-value">${existingDoc.text_length?.toLocaleString() || 0} 字符</span>
+            <span class="info-label">鏂囨。瀛楁暟</span>
+            <span class="info-value">${existingDoc.text_length?.toLocaleString() || 0} 瀛楃</span>
           </div>
           
           <div class="info-item">
@@ -1251,18 +1251,18 @@ const showExistingDocDialog = (existingDoc) => {
         if (action === 'confirm') {
           docId.value = existingDoc.doc_id
           
-          // 跳转到图谱展示
+          // 璺宠浆鍒板浘璋卞睍绀?
           currentStep.value = 3
           
-          // 等待 DOM 更新
+          // 绛夊緟 DOM 鏇存柊
           await nextTick()
           
-          // 加载图谱数据
+          // 鍔犺浇鍥捐氨鏁版嵁
           try {
             await loadGraphData()
-            ElMessage.success('成功加载知识图谱')
+            ElMessage.success('鎴愬姛鍔犺浇鐭ヨ瘑鍥捐氨')
           } catch (error) {
-            ElMessage.error('加载知识图谱失败')
+            ElMessage.error('鍔犺浇鐭ヨ瘑鍥捐氨澶辫触')
           }
         }
       }
@@ -1270,7 +1270,7 @@ const showExistingDocDialog = (existingDoc) => {
   )
 }
 
-// 文本分块
+// 鏂囨湰鍒嗗潡
 const splitText = async () => {
   try {
     const res = await request.post('/api/kg/split-text', {
@@ -1282,11 +1282,11 @@ const splitText = async () => {
     chunks.value = res.data.chunks
     ElMessage.success('文本分块完成，共 ' + chunks.value.length + ' 个块')
   } catch (error) {
-    ElMessage.error(error.response?.data?.detail || '文本分块失败')
+    ElMessage.error(error.response?.data?.detail || '鏂囨湰鍒嗗潡澶辫触')
   }
 }
 
-// 实体抽取
+// 瀹炰綋鎶藉彇
 const extractEntities = async () => {
   extracting.value = true
   try {
@@ -1300,13 +1300,13 @@ const extractEntities = async () => {
     ElMessage.success('实体抽取完成，共 ' + triplets.value.length + ' 个三元组')
     currentStep.value = 2
   } catch (error) {
-    ElMessage.error(error.response?.data?.detail || '实体抽取失败')
+    ElMessage.error(error.response?.data?.detail || '瀹炰綋鎶藉彇澶辫触')
   } finally {
     extracting.value = false
   }
 }
 
-// 构建图谱
+// 鏋勫缓鍥捐氨
 const buildGraph = async () => {
   building.value = true
   try {
@@ -1323,15 +1323,15 @@ const buildGraph = async () => {
     await nextTick()
     await loadGraphData()
   } catch (error) {
-    ElMessage.error(error.response?.data?.detail || '图谱构建失败')
+    ElMessage.error(error.response?.data?.detail || '鍥捐氨鏋勫缓澶辫触')
   } finally {
     building.value = false
   }
 }
 
-// ==================== 异步上传 Kafka + SSE ====================
+// ==================== 寮傛涓婁紶 Kafka + SSE ====================
 
-// 获取阶段标签
+// 鑾峰彇闃舵鏍囩
 const getStageLabel = (stage) => {
   const stageMap = {
     'initialized': '初始化',
@@ -1350,21 +1350,21 @@ const asyncUploadDocument = async () => {
   uploadingAsync.value = true
   uploadProgress.value = 0
   uploadStage.value = 'initializing'
-  uploadMessage.value = '正在初始化...'
+  uploadMessage.value = '姝ｅ湪鍒濆鍖?..'
 
   try {
-    // 1. 获取 task_id
+    // 1. 鑾峰彇 task_id
     const result = await uploadDocumentAsync(selectedFile.value)
-    console.log('异步上传任务创建成功', result)
+    console.log('寮傛涓婁紶浠诲姟鍒涘缓鎴愬姛', result)
     
     const { task_id, doc_id } = result
     
-    ElMessage.success('任务已创建，处理器会自动处理...')
+    ElMessage.success('浠诲姟宸插垱寤猴紝澶勭悊鍣ㄤ細鑷姩澶勭悊...')
     
-    // 保存 doc_id
+    // 淇濆瓨 doc_id
     docId.value = doc_id
     
-    // 2. 监听 SSE 获取进度
+    // 2. 鐩戝惉 SSE 鑾峰彇杩涘害
     sseConnection.value = watchTaskProgress(task_id, {
       onProgress: (progress, stage, message) => {
         uploadProgress.value = progress
@@ -1373,31 +1373,31 @@ const asyncUploadDocument = async () => {
         console.log('进度:', progress + '% | 阶段:', stage, '|', message)
       },
       onCompleted: async (data) => {
-        console.log('处理完成', data)
+        console.log('澶勭悊瀹屾垚', data)
         uploadProgress.value = 100
-        uploadMessage.value = '图谱构建完成'
+        uploadMessage.value = '鍥捐氨鏋勫缓瀹屾垚'
         
-        // 跳转到图谱展示
+        // 璺宠浆鍒板浘璋卞睍绀?
         currentStep.value = 3
         
-        // 加载图谱数据
+        // 鍔犺浇鍥捐氨鏁版嵁
         await nextTick()
         await loadGraphData()
       },
       onError: (errorMessage) => {
-        console.error('处理失败:', errorMessage)
-        ElMessage.error(errorMessage || '处理失败')
+        console.error('澶勭悊澶辫触:', errorMessage)
+        ElMessage.error(errorMessage || '澶勭悊澶辫触')
       }
     })
   } catch (error) {
-    console.error('异步上传失败', error)
-    ElMessage.error('上传失败，请重试')
+    console.error('寮傛涓婁紶澶辫触', error)
+    ElMessage.error('涓婁紶澶辫触锛岃閲嶈瘯')
   } finally {
     uploadingAsync.value = false
   }
 }
 
-// 加载图谱数据
+// 鍔犺浇鍥捐氨鏁版嵁
 const loadGraphData = async () => {
   try {
     const payload = {
@@ -1418,7 +1418,7 @@ const loadGraphData = async () => {
 
     renderGraph()
   } catch (error) {
-    ElMessage.error('加载图谱数据失败')
+    ElMessage.error('鍔犺浇鍥捐氨鏁版嵁澶辫触')
   }
 }
 
@@ -1477,12 +1477,12 @@ const buildGraphPlugins = () => {
   return [tooltip, minimap]
 }
 
-// 渲染图谱
+// 娓叉煋鍥捐氨
 const renderGraph = () => {
   if (!graphContainer.value) return
   if (isDisposed.value) return
 
-  // 销毁旧实例
+  // 閿€姣佹棫瀹炰緥
   if (graphInstance) {
     graphInstance.destroy()
     graphInstance = null
@@ -1618,7 +1618,7 @@ const renderGraph = () => {
       const comboStyle = getComboStyle(String(node.combo_id))
       map.set(node.combo_id, {
         id: String(node.combo_id),
-        label: String(node.combo_label || '来源分区'),
+        label: String(node.combo_label || '鏉ユ簮鍒嗗尯'),
         style: comboStyle
       })
       return map
@@ -1685,7 +1685,7 @@ const handleGraphResize = () => {
   graphInstance.fitView(20)
 }
 
-// 重置流程
+// 閲嶇疆娴佺▼
 const resetPipeline = () => {
   currentStep.value = 0
   selectedFile.value = null
@@ -1701,7 +1701,7 @@ const resetPipeline = () => {
   unbindResize()
 }
 
-// ==================== RAG 问答相关 ====================
+// ==================== RAG 闂瓟鐩稿叧 ====================
 const question = ref('')
 const answering = ref(false)
 const messages = ref([])
@@ -1722,45 +1722,45 @@ const editableNodeOptions = computed(() => {
   }))
 })
 
-// AI 模型列表
+// AI 妯″瀷鍒楄〃
 const availableModels = ref([])
 const selectedModel = ref('')
 
-// 加载状态
+// 鍔犺浇鐘舵€?
 const loadingStatus = ref({
   vectorSearch: false,
   graphSearch: false,
   answerGeneration: false
 })
 
-// 生成会话ID
+// 鐢熸垚浼氳瘽ID
 const generateConversationId = () => {
   return 'conv_' + Date.now() + '_' + Math.random().toString(36).substring(2, 15)
 }
 
-// 加载可用模型
+// 鍔犺浇鍙敤妯″瀷
 const loadAvailableModels = async () => {
   try {
     const res = await request.get('/api/kg/available-models')
     availableModels.value = res.data.models
     selectedModel.value = res.data.default
-    console.log('可用模型列表', availableModels.value)
+    console.log('鍙敤妯″瀷鍒楄〃', availableModels.value)
   } catch (error) {
-    console.error('加载模型列表失败:', error)
-    ElMessage.error('加载模型列表失败')
+    console.error('鍔犺浇妯″瀷鍒楄〃澶辫触:', error)
+    ElMessage.error('鍔犺浇妯″瀷鍒楄〃澶辫触')
   }
 }
 
-// 初始化会话ID
+// 鍒濆鍖栦細璇滻D
 if (!conversationId.value) {
   conversationId.value = generateConversationId()
-  console.log('当前会话ID:', conversationId.value)
+  console.log('褰撳墠浼氳瘽ID:', conversationId.value)
 }
 
-// 加载模型列表
+// 鍔犺浇妯″瀷鍒楄〃
 loadAvailableModels()
 
-// 新建对话
+// 鏂板缓瀵硅瘽
 const newConversation = () => {
   messages.value = []
   sourceChunks.value = []
@@ -1772,12 +1772,12 @@ const newConversation = () => {
   typewriterTimers.value = []
 
   conversationId.value = generateConversationId()
-  console.log('新建会话ID:', conversationId.value)
+  console.log('鏂板缓浼氳瘽ID:', conversationId.value)
 
   ElMessage.success('已创建新的对话')
 }
 
-// 发送问题
+// 鍙戦€侀棶棰?
 const cloneSubgraphForEditing = (graph) => {
   const rawNodes = Array.isArray(graph?.nodes) ? graph.nodes : []
   const rawEdges = Array.isArray(graph?.edges) ? graph.edges : []
@@ -1801,7 +1801,7 @@ const cloneSubgraphForEditing = (graph) => {
 
 const openGraphEditor = () => {
   if (!subgraphData.value?.nodes?.length) {
-    ElMessage.warning('当前没有可编辑的图谱数据')
+    ElMessage.warning('褰撳墠娌℃湁鍙紪杈戠殑鍥捐氨鏁版嵁')
     return
   }
 
@@ -1814,13 +1814,13 @@ const saveGraphEdits = async () => {
   const edges = editableSubgraph.value.edges || []
 
   if (!nodes.length && !edges.length) {
-    ElMessage.warning('当前没有可保存的修改')
+    ElMessage.warning('褰撳墠娌℃湁鍙繚瀛樼殑淇敼')
     return
   }
 
   const invalidNode = nodes.find(node => !String(node.label || '').trim() || !String(node.type || '').trim())
   if (invalidNode) {
-    ElMessage.warning('实体名称和实体类型都不能为空')
+    ElMessage.warning('瀹炰綋鍚嶇О鍜屽疄浣撶被鍨嬮兘涓嶈兘涓虹┖')
     return
   }
 
@@ -1867,10 +1867,10 @@ const saveGraphEdits = async () => {
     if (!isDisposed.value) {
       renderSubgraph()
     }
-    ElMessage.success('图谱修改已提交，正在后台异步保存')
+    ElMessage.success('鍥捐氨淇敼宸叉彁浜わ紝姝ｅ湪鍚庡彴寮傛淇濆瓨')
   } catch (error) {
-    console.error('保存图谱修改失败:', error)
-    ElMessage.error(error.response?.data?.detail || '保存图谱修改失败')
+    console.error('淇濆瓨鍥捐氨淇敼澶辫触:', error)
+    ElMessage.error(error.response?.data?.detail || '淇濆瓨鍥捐氨淇敼澶辫触')
   } finally {
     savingGraphEdits.value = false
   }
@@ -1917,7 +1917,7 @@ const askQuestion = async () => {
   try {
     const token = localStorage.getItem('token')
     if (!token) {
-      ElMessage.error('请先登录')
+      ElMessage.error('璇峰厛鐧诲綍')
       answering.value = false
       messages.value.splice(assistantIndex, 1)
       return
@@ -1972,18 +1972,18 @@ const askQuestion = async () => {
             scrollToBottom()
           } else if (data.type === 'answer_done') {
             loadingStatus.value.answerGeneration = false
-            console.log('回答生成完成')
+            console.log('鍥炵瓟鐢熸垚瀹屾垚')
           }
         } catch (e) {
-          console.error('解析SSE数据失败', e, line)
+          console.error('瑙ｆ瀽SSE鏁版嵁澶辫触', e, line)
         }
       }
     }
 
     scrollToBottom()
   } catch (error) {
-    console.error('问答失败:', error)
-    ElMessage.error(error.message || '问答失败')
+    console.error('闂瓟澶辫触:', error)
+    ElMessage.error(error.message || '闂瓟澶辫触')
     messages.value.splice(assistantIndex, 1)
   } finally {
     answering.value = false
@@ -1996,7 +1996,7 @@ const askQuestion = async () => {
   }
 }
 
-// 渲染子图
+// 娓叉煋瀛愬浘
 const renderSubgraph = async () => {
   if (!subgraphContainer.value) return
   if (!subgraphData.value) return
@@ -2079,7 +2079,7 @@ const renderSubgraph = async () => {
   subgraphInstance.data({ nodes: [], edges: [] });
   subgraphInstance.render();
 
-  // 处理节点和边数据
+  // 澶勭悊鑺傜偣鍜岃竟鏁版嵁
   const rawNodes = subgraphData.value.nodes || [];
   const rawEdges = subgraphData.value.edges || [];
   const palette = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#6366f1'];
@@ -2131,7 +2131,7 @@ const renderSubgraph = async () => {
   addNodesOneByOne();
 }
 
-// 滚动到底部
+// 婊氬姩鍒板簳閮?
 const scrollToBottom = () => {
   nextTick(() => {
     if (chatScroll.value) {
@@ -2143,7 +2143,7 @@ const scrollToBottom = () => {
   })
 }
 
-// 打字机效果
+// 鎵撳瓧鏈烘晥鏋?
 const startTypewriterEffect = () => {
   typewriterTimers.value.forEach(timer => clearInterval(timer))
   typewriterTimers.value = []
@@ -2183,26 +2183,26 @@ const typewriterForChunk = (text, index) => {
   typewriterTimers.value.push(timer)
 }
 
-// 格式化消息内容
+// 鏍煎紡鍖栨秷鎭唴瀹?
 const formatMessageContent = (content, role) => {
   if (!content) return ''
 
   if (role === 'assistant') {
     let formatted = content
 
-    // Markdown 格式化
+    // Markdown 鏍煎紡鍖?
     formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
     formatted = formatted.replace(/__(.+?)__/g, '<b>$1</b>')
     formatted = formatted.replace(/\*(.+?)\*/g, '<i>$1</i>')
     formatted = formatted.replace(/_(.+?)_/g, '<i>$1</i>')
     formatted = formatted.replace(/^#{1,6}\s+/gm, '')
-    formatted = formatted.replace(/^[\*\-]\s+/gm, '• ')
+    formatted = formatted.replace(/^[\*\-]\s+/gm, '鈥?')
     formatted = formatted.replace(/```[\s\S]*?```/g, (match) => {
       return match.replace(/```\w*\n?/g, '')
     })
     formatted = formatted.replace(/`(.+?)`/g, '<code class="inline-code">$1</code>')
 
-    // 分行处理
+    // 鍒嗚澶勭悊
     formatted = formatted.split('\n').map(line => {
       if (line.trim() === '') {
         return '<div class="paragraph-space"></div>'
@@ -2210,7 +2210,7 @@ const formatMessageContent = (content, role) => {
       return '<p class="text-line">' + line + '</p>'
     }).join('')
 
-    // Emoji 处理
+    // Emoji 澶勭悊
     const emojiRegex = /([\u{1F000}-\u{1FFFF}]|[\u{2600}-\u{27BF}]|[\u{E000}-\u{F8FF}]|[\u{FE00}-\u{FE0F}]|[\u{1F900}-\u{1F9FF}]|[\u{2300}-\u{23FF}]|[\u{2B50}]|[\u{203C}-\u{3299}])/gu
     formatted = formatted.replace(emojiRegex, '<span class="emoji-char">$1</span>')
 
@@ -2220,7 +2220,7 @@ const formatMessageContent = (content, role) => {
   return content.replace(/\n/g, '<br>')
 }
 
-// 监听步骤变化
+// 鐩戝惉姝ラ鍙樺寲
 watch(currentStep, (n, o) => {
   if (o === 3 && n !== 3) {
     destroyGraphs()
@@ -2228,7 +2228,7 @@ watch(currentStep, (n, o) => {
   }
 })
 
-// 监听标签页切换
+// 鐩戝惉鏍囩椤靛垏鎹?
 watch(activeTab, (tab) => {
   if (tab !== 'build') {
     destroyGraphs()
@@ -2282,7 +2282,7 @@ onUnmounted(() => {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-/* 背景极光动画 */
+/* 鑳屾櫙鏋佸厜鍔ㄧ敾 */
 .bg-aurora {
   position: fixed;
   inset: 0;
@@ -2444,14 +2444,14 @@ onUnmounted(() => {
   z-index: 1;
 }
 
-/* 聊天卡片样式 */
+/* 鑱婂ぉ鍗＄墖鏍峰紡 */
 .chat-card :deep(.el-card__body) {
   padding: 0 !important;
   height: 100% !important;
   overflow: hidden;
 }
 
-/* 聊天界面美化样式 */
+/* 鑱婂ぉ鐣岄潰缇庡寲鏍峰紡 */
 .chat-wrapper {
   display: flex;
   flex-direction: column;
@@ -2600,7 +2600,7 @@ onUnmounted(() => {
 }
 
 .message.assistant .message-text {
-  font-family: 'STKaiti', 'KaiTi', 'STXingkai', '华文行楷', '华文新魏', 'FangSong',
+  font-family: 'STKaiti', 'KaiTi', 'STXingkai', '鍗庢枃琛屾シ', '鍗庢枃鏂伴瓘', 'FangSong',
                'Noto Sans SC', 'Microsoft YaHei', serif;
   font-size: 15px;
   line-height: 1.8;
@@ -2666,7 +2666,7 @@ onUnmounted(() => {
 }
 .message.user .message-time { color: rgba(255,255,255,0.9); }
 
-/* 打字动画 */
+/* 鎵撳瓧鍔ㄧ敾 */
 .typing {
   display: flex;
   align-items: center;
@@ -2700,7 +2700,7 @@ onUnmounted(() => {
   to { opacity: 0.8; }
 }
 
-/* 输入区域样式 */
+/* 杈撳叆鍖哄煙鏍峰紡 */
 .chat-input-container {
   position: absolute;
   bottom: 0;
@@ -2800,7 +2800,7 @@ onUnmounted(() => {
   color: #475569;
 }
 
-/* 构建流程样式 */
+/* 鏋勫缓娴佺▼鏍峰紡 */
 .build-pipeline {
   padding: 6px 0;
 }
@@ -2881,7 +2881,7 @@ onUnmounted(() => {
 }
 
 .steps-container :deep(.el-step:nth-child(1) .el-step__icon.is-text::before) {
-  content: '📚' !important;
+  content: '馃摛' !important;
   position: absolute !important;
   top: 50% !important;
   left: 50% !important;
@@ -2892,7 +2892,7 @@ onUnmounted(() => {
 }
 
 .steps-container :deep(.el-step:nth-child(2) .el-step__icon.is-text::before) {
-  content: '📦' !important;
+  content: '馃搫' !important;
   position: absolute !important;
   top: 50% !important;
   left: 50% !important;
@@ -2903,7 +2903,7 @@ onUnmounted(() => {
 }
 
 .steps-container :deep(.el-step:nth-child(3) .el-step__icon.is-text::before) {
-  content: '🔍' !important;
+  content: '馃攳' !important;
   position: absolute !important;
   top: 50% !important;
   left: 50% !important;

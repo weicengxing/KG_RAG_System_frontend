@@ -3,7 +3,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import G6 from '@antv/g6'
 import request from '@/utils/request'
 import { watchTaskProgress, uploadDocumentAsync } from '@/utils/kafkaSSE'
-import { getComboStyle, getContainerSize } from './knowledgeGraphG6'
+import { ensureKnowledgeGraphThemeRegistered, getComboStyle, getContainerSize, getWobble } from './knowledgeGraphG6'
 
 export const useKnowledgeGraphBuild = ({ currentStep, active }) => {
   const selectedFile = ref(null)
@@ -26,6 +26,8 @@ export const useKnowledgeGraphBuild = ({ currentStep, active }) => {
   const isDisposed = ref(false)
   const resizeBound = ref(false)
   let graphInstance = null
+  let wobbleFrameId = null
+  let wobbleBasePositions = new Map()
 
   const graphRegionCount = computed(() => new Set(
     (graphData.value.nodes || [])
@@ -53,9 +55,62 @@ export const useKnowledgeGraphBuild = ({ currentStep, active }) => {
   }
 
   const destroyGraph = () => {
+    if (wobbleFrameId) {
+      cancelAnimationFrame(wobbleFrameId)
+      wobbleFrameId = null
+    }
+    wobbleBasePositions = new Map()
     if (!graphInstance) return
     graphInstance.destroy()
     graphInstance = null
+  }
+
+  const captureWobbleBasePositions = () => {
+    if (!graphInstance) return
+    wobbleBasePositions = new Map(
+      graphInstance.getNodes().map((item) => {
+        const model = item.getModel?.() || {}
+        return [String(model.id), { x: Number(model.x || 0), y: Number(model.y || 0) }]
+      })
+    )
+  }
+
+  const startGraphWobble = () => {
+    if (!graphInstance) return
+    if (!wobbleBasePositions.size) {
+      captureWobbleBasePositions()
+    }
+
+    if (wobbleFrameId) {
+      cancelAnimationFrame(wobbleFrameId)
+      wobbleFrameId = null
+    }
+
+    const tick = (timestamp) => {
+      if (!graphInstance || isDisposed.value) return
+
+      graphInstance.getNodes().forEach((item) => {
+        const model = item.getModel?.() || {}
+        const id = String(model.id || '')
+        const base = wobbleBasePositions.get(id)
+        if (!base) return
+
+        const offset = getWobble(id, timestamp)
+        model.x = base.x + offset.x
+        model.y = base.y + offset.y
+      })
+
+      if (typeof graphInstance.refreshPositions === 'function') {
+        graphInstance.refreshPositions()
+      }
+      if (typeof graphInstance.paint === 'function') {
+        graphInstance.paint()
+      }
+
+      wobbleFrameId = requestAnimationFrame(tick)
+    }
+
+    wobbleFrameId = requestAnimationFrame(tick)
   }
 
   const unbindResize = () => {
@@ -79,6 +134,16 @@ export const useKnowledgeGraphBuild = ({ currentStep, active }) => {
     } catch (error) {
       ElMessage.error(error.response?.data?.detail || '文本分块失败')
     }
+  }
+
+  const loadTriplets = async ({ silent = false } = {}) => {
+    const res = await request.post('/api/kg/extract-entities', { doc_id: docId.value })
+    if (isDisposed.value) return []
+    triplets.value = res.data.triplets || []
+    if (!silent) {
+      ElMessage.success(`实体抽取完成，共 ${triplets.value.length} 个三元组`)
+    }
+    return triplets.value
   }
 
   const showExistingDocDialog = (existingDoc) => {
@@ -221,10 +286,7 @@ export const useKnowledgeGraphBuild = ({ currentStep, active }) => {
   const extractEntities = async () => {
     extracting.value = true
     try {
-      const res = await request.post('/api/kg/extract-entities', { doc_id: docId.value })
-      if (isDisposed.value) return
-      triplets.value = res.data.triplets
-      ElMessage.success(`实体抽取完成，共 ${triplets.value.length} 个三元组`)
+      await loadTriplets()
       currentStep.value = 2
     } catch (error) {
       ElMessage.error(error.response?.data?.detail || '实体抽取失败')
@@ -234,6 +296,15 @@ export const useKnowledgeGraphBuild = ({ currentStep, active }) => {
   }
 
   const buildGraph = async () => {
+    if (graphData.value.nodes?.length || graphData.value.edges?.length) {
+      currentStep.value = 3
+      await nextTick()
+      if (!isDisposed.value && active.value) {
+        renderGraph()
+      }
+      return
+    }
+
     building.value = true
     try {
       const res = await request.post('/api/kg/build-graph', { doc_id: docId.value })
@@ -283,12 +354,30 @@ export const useKnowledgeGraphBuild = ({ currentStep, active }) => {
           uploadStage.value = stage
           uploadMessage.value = message
         },
-        onCompleted: async () => {
+        onCompleted: async (resultData) => {
+          if (isDisposed.value) return
           uploadProgress.value = 100
           uploadMessage.value = '图谱构建完成'
-          currentStep.value = 3
-          await nextTick()
-          await loadGraphData()
+
+          if (resultData?.doc_id) {
+            docId.value = resultData.doc_id
+          }
+          if (typeof resultData?.elapsed_time === 'number') {
+            buildTime.value = resultData.elapsed_time
+          }
+          if (resultData?.graph_data) {
+            graphData.value = resultData.graph_data
+          }
+
+          try {
+            await loadTriplets({ silent: true })
+            currentStep.value = 2
+          } catch (error) {
+            console.error('加载三元组失败', error)
+            currentStep.value = 3
+            await nextTick()
+            await loadGraphData()
+          }
         },
         onError: (errorMessage) => {
           ElMessage.error(errorMessage || '处理失败')
@@ -379,6 +468,7 @@ export const useKnowledgeGraphBuild = ({ currentStep, active }) => {
     if (!graphContainer.value || isDisposed.value) return
 
     destroyGraph()
+    ensureKnowledgeGraphThemeRegistered()
 
     const { width } = getContainerSize(graphContainer.value, 900, 620)
     graphInstance = new G6.Graph({
@@ -388,6 +478,7 @@ export const useKnowledgeGraphBuild = ({ currentStep, active }) => {
       plugins: buildGraphPlugins(),
       modes: { default: ['drag-canvas', 'zoom-canvas', 'drag-node', 'drag-combo'] },
       defaultNode: {
+        type: 'breathing-node',
         size: 34,
         style: {
           fill: 'rgba(59, 130, 246, 0.95)',
@@ -418,6 +509,7 @@ export const useKnowledgeGraphBuild = ({ currentStep, active }) => {
         }
       },
       defaultEdge: {
+        type: 'dynamic-edge',
         style: {
           stroke: 'rgba(148, 163, 184, 0.7)',
           lineWidth: 2,
@@ -514,11 +606,29 @@ export const useKnowledgeGraphBuild = ({ currentStep, active }) => {
     graphInstance.data({ nodes, edges, combos })
     graphInstance.render()
     graphInstance.fitView(20)
+    graphInstance.once('afterlayout', () => {
+      if (typeof graphInstance?.stopLayout === 'function') {
+        graphInstance.stopLayout()
+      }
+      captureWobbleBasePositions()
+      startGraphWobble()
+    })
+    setTimeout(() => {
+      if (!graphInstance || wobbleBasePositions.size) return
+      if (typeof graphInstance?.stopLayout === 'function') {
+        graphInstance.stopLayout()
+      }
+      captureWobbleBasePositions()
+      startGraphWobble()
+    }, 900)
 
     graphInstance.on('node:mouseenter', (evt) => evt.item && graphInstance.setItemState(evt.item, 'hover', true))
     graphInstance.on('node:mouseleave', (evt) => evt.item && graphInstance.setItemState(evt.item, 'hover', false))
     graphInstance.on('edge:mouseenter', (evt) => evt.item && graphInstance.setItemState(evt.item, 'hover', true))
     graphInstance.on('edge:mouseleave', (evt) => evt.item && graphInstance.setItemState(evt.item, 'hover', false))
+    graphInstance.on('node:dragend', () => {
+      captureWobbleBasePositions()
+    })
 
     bindResize()
   }

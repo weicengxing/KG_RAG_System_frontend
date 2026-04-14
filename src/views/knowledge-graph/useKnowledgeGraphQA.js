@@ -2,7 +2,12 @@ import { computed, nextTick, onUnmounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import G6 from '@antv/g6'
 import request, { createStreamRequest } from '@/utils/request'
-import { ensureKnowledgeGraphThemeRegistered, getContainerSize } from './knowledgeGraphG6'
+import {
+  ensureKnowledgeGraphThemeRegistered,
+  getContainerSize,
+  startGraphFloatAnimation,
+  stopGraphFloatAnimation
+} from './knowledgeGraphG6'
 
 export const useKnowledgeGraphQA = () => {
   const question = ref('')
@@ -45,12 +50,14 @@ export const useKnowledgeGraphQA = () => {
 
   const destroySubgraph = () => {
     if (!subgraphInstance) return
+    stopGraphFloatAnimation(subgraphInstance)
     subgraphInstance.destroy()
     subgraphInstance = null
   }
 
   const destroyExpandedGraph = () => {
     if (!expandedInstance) return
+    stopGraphFloatAnimation(expandedInstance)
     expandedInstance.destroy()
     expandedInstance = null
   }
@@ -298,6 +305,7 @@ export const useKnowledgeGraphQA = () => {
 
     expandedInstance.data({ nodes, edges })
     expandedInstance.render()
+    startGraphFloatAnimation(expandedInstance, { amplitudeX: 0.42, amplitudeY: 0.36 })
   }
 
   const renderSubgraph = async () => {
@@ -411,6 +419,7 @@ export const useKnowledgeGraphQA = () => {
 
       if (subgraphInstance) {
         subgraphInstance.fitView(40)
+        startGraphFloatAnimation(subgraphInstance, { amplitudeX: 0.34, amplitudeY: 0.3 })
       }
     }
 

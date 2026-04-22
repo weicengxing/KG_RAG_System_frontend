@@ -19,6 +19,7 @@ import PlantSelectionView from '../views/PlantSelectionView.vue'
 import ZombieSelectionView from '../views/ZombieSelectionView.vue'
 import PvZMultiplayerRoomView from '../views/PvZMultiplayerRoomView.vue'
 import PlantsVsZombiesMultiplayer from '../views/PlantsVsZombiesMultiplayer.vue'
+import ClaudeWebChatView from '../views/ClaudeWebChatView.vue'
 
 const routes = [
   // 无需登录的页面
@@ -40,6 +41,7 @@ const routes = [
       { path: 'security-privacy', name: 'SecurityPrivacy', component: SecurityPrivacyView },
       { path: 'novel-upload', name: 'NovelUpload', component: NovelUploadView },
       { path: 'chat-room', name: 'ChatRoom', component: ChatRoomView },
+      { path: 'claude-web-chat', name: 'ClaudeWebChat', component: ClaudeWebChatView },
       { path: 'knowledge-graph', name: 'KnowledgeGraph', component: KnowledgeGraphView },
       { path: 'game', name: 'Game', component: GameView },
       { path: 'plants-vs-zombies', name: 'PlantsVsZombies', component: PlantsVsZombiesView },

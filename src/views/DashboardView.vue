@@ -76,7 +76,7 @@
         </el-card>
         
         <!-- 系统信息 -->
-        <el-card class="box-card full-width">
+        <el-card class="box-card">
           <template #header>
             <div class="card-header">
               <span>📋 系统信息</span>
@@ -344,15 +344,17 @@ onMounted(() => {
 .container {
   display: flex;
   flex-direction: column;
-  padding: 40px 20px;
+  padding: 40px 24px !important;
   min-height: 100vh;
   background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  max-width: none !important;
+  width: 100% !important;
 }
 
 .top-bar {
   width: 100%;
-  max-width: 1400px;
-  margin: 0 auto 40px;
+  margin: 0 0 40px 0;
+  padding: 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -372,12 +374,13 @@ onMounted(() => {
 }
 
 .dashboard-content {
-  width: 100%;
-  max-width: 1400px;
-  margin: 0 auto;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(300px, 1fr) 3fr;
   gap: 24px;
+  padding: 0 !important;
 }
 
 .trending-section {
@@ -387,14 +390,18 @@ onMounted(() => {
 .cards-grid {
   grid-column: 2;
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 16px;
+  align-content: start;
+  width: 100%;
 }
 
 .box-card {
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   transition: transform 0.3s, box-shadow 0.3s;
+  max-width: none !important;
+  width: 100% !important;
 }
 
 .box-card:hover {

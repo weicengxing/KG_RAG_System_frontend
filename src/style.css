@@ -10,3 +10,14 @@ html, body, #app {
   overflow: auto !important; /* 允许滚动 */
   background: #764ba2; /* 设置一个和背景色相近的底色，防止滚动露白 */
 }
+
+/* 移除所有容器的默认宽度限制 */
+.el-card {
+  max-width: none !important;
+  width: 100% !important;
+}
+
+.el-card__body {
+  max-width: none !important;
+  width: 100% !important;
+}

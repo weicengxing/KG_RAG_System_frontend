@@ -1,4 +1,4 @@
-import { computed, nextTick, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import G6 from '@antv/g6'
 import request, { createStreamRequest } from '@/utils/request'
@@ -34,6 +34,8 @@ export const useKnowledgeGraphQA = () => {
   const expandVisible = ref(false)
   const expandedContainer = ref(null)
   const isDisposed = ref(false)
+  const editSessionSnapshot = ref(null)
+  const editSessionCommitted = ref(false)
   let subgraphInstance = null
   let expandedInstance = null
 
@@ -68,6 +70,8 @@ export const useKnowledgeGraphQA = () => {
     subgraphData.value = null
     graphEditVisible.value = false
     editableSubgraph.value = { nodes: [], edges: [] }
+    editSessionSnapshot.value = null
+    editSessionCommitted.value = false
     typewriterTimers.value.forEach(timer => clearInterval(timer))
     typewriterTimers.value = []
     destroySubgraph()
@@ -112,12 +116,123 @@ export const useKnowledgeGraphQA = () => {
     }
   }
 
+  const cloneGraphSnapshot = (graph) => {
+    if (!graph) return null
+
+    return {
+      nodes: Array.isArray(graph.nodes) ? graph.nodes.map(node => ({ ...node })) : [],
+      edges: Array.isArray(graph.edges) ? graph.edges.map(edge => ({ ...edge })) : []
+    }
+  }
+
+  const buildNodePositionMap = (graphInstance) => {
+    if (!graphInstance || typeof graphInstance.save !== 'function') {
+      return new Map()
+    }
+
+    const graphSnapshot = graphInstance.save()
+    const rawNodes = Array.isArray(graphSnapshot?.nodes) ? graphSnapshot.nodes : []
+    return new Map(
+      rawNodes.map(node => [
+        String(node.id),
+        {
+          x: Number(node.x),
+          y: Number(node.y)
+        }
+      ])
+    )
+  }
+
+  const buildProcessedSubgraphData = (graph, options = {}) => {
+    const {
+      width = 520,
+      height = 420,
+      positionMap = new Map()
+    } = options
+
+    const rawNodes = Array.isArray(graph?.nodes) ? graph.nodes : []
+    const rawEdges = Array.isArray(graph?.edges) ? graph.edges : []
+    const palette = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#6366f1']
+
+    return {
+      nodes: rawNodes.map((node, index) => {
+        const nodeId = String(node.id)
+        const savedPosition = positionMap.get(nodeId)
+        return {
+          id: nodeId,
+          label: String(node.label ?? node.name ?? node.id),
+          type: String(node.type ?? 'Entity'),
+          style: { fill: palette[index % palette.length] },
+          x: Number.isFinite(savedPosition?.x) ? savedPosition.x : width / 2 + (Math.random() - 0.5) * 50,
+          y: Number.isFinite(savedPosition?.y) ? savedPosition.y : height / 2 + (Math.random() - 0.5) * 50
+        }
+      }),
+      edges: rawEdges.map((edge, index) => ({
+        id: String(edge.id ?? `subedge-${index}`),
+        source: String(edge.source),
+        target: String(edge.target),
+        label: edge.label || '',
+        current_label: String(edge.current_label ?? edge.label ?? '')
+      }))
+    }
+  }
+
+  const syncExpandedGraphData = () => {
+    if (!expandedInstance || !subgraphData.value) return
+
+    const width = window.innerWidth
+    const height = window.innerHeight
+    const positionMap = buildNodePositionMap(expandedInstance)
+    const nodes = (subgraphData.value.nodes || []).map(node => {
+      const nodeId = String(node.id)
+      const savedPosition = positionMap.get(nodeId)
+      return {
+        ...node,
+        id: nodeId,
+        label: String(node.label ?? node.name ?? node.id),
+        x: Number.isFinite(savedPosition?.x) ? savedPosition.x : width / 2 + (Math.random() - 0.5) * 200,
+        y: Number.isFinite(savedPosition?.y) ? savedPosition.y : height / 2 + (Math.random() - 0.5) * 200
+      }
+    })
+    const edges = (subgraphData.value.edges || []).map((edge, index) => ({
+      ...edge,
+      id: `exp-edge-${index}`,
+      source: String(edge.source),
+      target: String(edge.target)
+    }))
+
+    expandedInstance.changeData({ nodes, edges })
+    expandedInstance.refresh()
+    expandedInstance.fitView(40)
+  }
+
+  const syncSubgraphDataToView = () => {
+    if (!subgraphInstance || !subgraphData.value || isDisposed.value) return
+
+    const { width } = getContainerSize(subgraphContainer.value, 520, 420)
+    const height = 420
+    const positionMap = buildNodePositionMap(subgraphInstance)
+    const processedData = buildProcessedSubgraphData(subgraphData.value, {
+      width,
+      height,
+      positionMap
+    })
+
+    subgraphInstance.changeData(processedData)
+    subgraphInstance.refresh()
+    subgraphInstance.fitView(40)
+    startGraphFloatAnimation(subgraphInstance, { amplitudeX: 0.34, amplitudeY: 0.3 })
+    syncExpandedGraphData()
+  }
+
   const openGraphEditor = () => {
     if (!subgraphData.value?.nodes?.length) {
       ElMessage.warning('当前没有可编辑的图谱数据')
       return
     }
 
+    editSessionSnapshot.value = cloneGraphSnapshot(subgraphData.value)
+    editSessionCommitted.value = false
     editableSubgraph.value = cloneSubgraphForEditing(subgraphData.value)
     graphEditVisible.value = true
   }
@@ -168,10 +283,11 @@ export const useKnowledgeGraphQA = () => {
         edges: payload.edges.map(edge => ({ ...edge, label: edge.label }))
       }
 
+      editSessionCommitted.value = true
       graphEditVisible.value = false
       await nextTick()
       if (!isDisposed.value) {
-        renderSubgraph()
+        syncSubgraphDataToView()
       }
       ElMessage.success('图谱修改已提交，正在后台异步保存')
     } catch (error) {
@@ -378,36 +494,17 @@ export const useKnowledgeGraphQA = () => {
     subgraphInstance.data({ nodes: [], edges: [] })
     subgraphInstance.render()
 
-    const rawNodes = subgraphData.value.nodes || []
-    const rawEdges = subgraphData.value.edges || []
-    const palette = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#6366f1']
-
-    const processedNodes = rawNodes.map((node, index) => ({
-      id: String(node.id),
-      label: String(node.label ?? node.name ?? node.id),
-      type: String(node.type ?? 'Entity'),
-      style: { fill: palette[index % palette.length] },
-      x: width / 2 + (Math.random() - 0.5) * 50,
-      y: height / 2 + (Math.random() - 0.5) * 50
-    }))
-
-    const processedEdges = rawEdges.map((edge, index) => ({
-      id: String(edge.id ?? `subedge-${index}`),
-      source: String(edge.source),
-      target: String(edge.target),
-      label: edge.label || '',
-      current_label: String(edge.current_label ?? edge.label ?? '')
-    }))
+    const processedData = buildProcessedSubgraphData(subgraphData.value, { width, height })
 
     const addItems = async () => {
-      for (const node of processedNodes) {
+      for (const node of processedData.nodes) {
         if (isDisposed.value || !subgraphInstance) return
         subgraphInstance.addItem('node', node)
         subgraphInstance.layout()
         await new Promise(resolve => setTimeout(resolve, 100))
       }
 
-      for (const edge of processedEdges) {
+      for (const edge of processedData.edges) {
         if (isDisposed.value || !subgraphInstance) return
         const source = subgraphInstance.findById(edge.source)
         const target = subgraphInstance.findById(edge.target)
@@ -555,6 +652,49 @@ export const useKnowledgeGraphQA = () => {
 
   conversationId.value = generateConversationId()
   loadAvailableModels()
+
+  watch(graphEditVisible, (visible) => {
+    if (visible || !editSessionSnapshot.value) return
+
+    if (!editSessionCommitted.value) {
+      subgraphData.value = cloneGraphSnapshot(editSessionSnapshot.value)
+      nextTick(() => {
+        if (!isDisposed.value) {
+          syncSubgraphDataToView()
+        }
+      })
+    }
+
+    editSessionSnapshot.value = null
+    editSessionCommitted.value = false
+    editableSubgraph.value = { nodes: [], edges: [] }
+  })
+
+  watch(editableSubgraph, (draft) => {
+    if (!graphEditVisible.value || !editSessionSnapshot.value) return
+
+    subgraphData.value = {
+      nodes: (draft.nodes || []).map(node => ({
+        id: String(node.id),
+        label: String(node.label ?? ''),
+        type: String(node.type ?? 'Entity'),
+        current_type: String(node.current_type ?? node.type ?? 'Entity')
+      })),
+      edges: (draft.edges || []).map(edge => ({
+        id: String(edge.id ?? `${edge.source}-${edge.label}-${edge.target}`),
+        source: String(edge.source ?? ''),
+        target: String(edge.target ?? ''),
+        label: String(edge.label ?? ''),
+        current_label: String(edge.current_label ?? edge.label ?? '')
+      }))
+    }
+
+    nextTick(() => {
+      if (!isDisposed.value) {
+        syncSubgraphDataToView()
+      }
+    })
+  }, { deep: true })
 
   onUnmounted(() => {
     isDisposed.value = true

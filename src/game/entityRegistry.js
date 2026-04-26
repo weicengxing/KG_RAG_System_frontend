@@ -20,6 +20,13 @@ const colorJitter = (baseColor, rng, amount = 0.12) => {
   return new THREE.Color().setHSL(hsl.h, hsl.s, hsl.l)
 }
 
+const oathColor = (key, fallback) => ({
+  hearth: 0xffb357,
+  trail: 0x74d5ff,
+  trade: 0xd8c16b,
+  beast: 0x9be59d
+}[key] || fallback)
+
 export function getEntityCollider(entity, globalSeed = 0) {
   if (!entity) return null
   const type = entity.type
@@ -316,13 +323,14 @@ export function createEntityMesh(entity, globalSeed = 0) {
   if (type === 'tribe_totem') {
     const group = new THREE.Group()
     const scale = typeof entity.size === 'number' ? entity.size : 1
+    const oathTint = oathColor(entity.oathKey, 0xf4d35e)
     const woodMaterial = new THREE.MeshStandardMaterial({
       color: colorJitter(0x7a4a1f, rng, 0.08),
       roughness: 0.9
     })
     const markMaterial = new THREE.MeshStandardMaterial({
-      color: colorJitter(0xf4d35e, rng, 0.05),
-      emissive: new THREE.Color(0xf4d35e).multiplyScalar(0.3),
+      color: colorJitter(oathTint, rng, 0.05),
+      emissive: new THREE.Color(oathTint).multiplyScalar(0.3),
       roughness: 0.45
     })
 
@@ -340,7 +348,14 @@ export function createEntityMesh(entity, globalSeed = 0) {
     mask.scale.set(0.75, 1.15, 0.35)
     group.add(mask)
 
-    const glow = new THREE.PointLight(0xf4d35e, 0.75, 9 * scale)
+    if (entity.oathKey) {
+      const oathRing = new THREE.Mesh(new THREE.TorusGeometry(0.72 * scale, 0.035 * scale, 8, 24), markMaterial)
+      oathRing.position.y = 1.45 * scale
+      oathRing.rotation.x = Math.PI / 2
+      group.add(oathRing)
+    }
+
+    const glow = new THREE.PointLight(oathTint, 0.75, 9 * scale)
     glow.position.y = 2.7 * scale
     group.add(glow)
 
@@ -537,12 +552,13 @@ export function createEntityMesh(entity, globalSeed = 0) {
   if (type === 'tribe_flag') {
     const group = new THREE.Group()
     const scale = typeof entity.size === 'number' ? entity.size : 1
+    const flagTint = oathColor(entity.oathKey, entity.tribeColor || 0xfb7185)
     const poleMaterial = new THREE.MeshStandardMaterial({
       color: colorJitter(0x6b4a28, rng, 0.08),
       roughness: 0.86
     })
     const clothMaterial = new THREE.MeshStandardMaterial({
-      color: colorJitter(entity.tribeColor || 0xfb7185, rng, 0.08),
+      color: colorJitter(flagTint, rng, 0.08),
       roughness: 0.78,
       side: THREE.DoubleSide
     })
@@ -560,6 +576,18 @@ export function createEntityMesh(entity, globalSeed = 0) {
     cloth.rotation.y = -0.08
     group.add(cloth)
 
+    if (entity.oathKey) {
+      const stripeMaterial = new THREE.MeshStandardMaterial({
+        color: 0xfff7df,
+        roughness: 0.66,
+        side: THREE.DoubleSide
+      })
+      const stripe = new THREE.Mesh(new THREE.PlaneGeometry(0.92 * scale, 0.08 * scale), stripeMaterial)
+      stripe.position.set(0.62 * scale, 2.58 * scale, 0.012 * scale)
+      stripe.rotation.y = -0.08
+      group.add(stripe)
+    }
+
     const marker = new THREE.Mesh(new THREE.ConeGeometry(0.22 * scale, 0.32 * scale, 5), clothMaterial)
     marker.position.y = 3.35 * scale
     group.add(marker)
@@ -572,7 +600,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
       group.add(stone)
     }
 
-    const light = new THREE.PointLight(0xfb7185, 0.28, 7 * scale)
+    const light = new THREE.PointLight(flagTint, 0.28, 7 * scale)
     light.position.y = 2.25 * scale
     group.add(light)
 

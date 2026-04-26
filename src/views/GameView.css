@@ -353,6 +353,40 @@
   box-shadow: 0 0 14px rgba(251, 113, 133, 0.72);
 }
 
+.map-marker.oath-hearth {
+  background: #ffb357;
+  box-shadow: 0 0 0 2px rgba(255, 179, 87, 0.28), 0 0 18px rgba(255, 179, 87, 0.78);
+}
+
+.map-marker.oath-trail {
+  background: #74d5ff;
+  box-shadow: 0 0 0 2px rgba(116, 213, 255, 0.26), 0 0 18px rgba(116, 213, 255, 0.76);
+}
+
+.map-marker.oath-trade {
+  background: #d8c16b;
+  box-shadow: 0 0 0 2px rgba(216, 193, 107, 0.26), 0 0 18px rgba(216, 193, 107, 0.78);
+}
+
+.map-marker.oath-beast {
+  background: #9be59d;
+  box-shadow: 0 0 0 2px rgba(155, 229, 157, 0.26), 0 0 18px rgba(155, 229, 157, 0.78);
+}
+
+.map-marker.boundary-tension {
+  border: 2px solid rgba(255, 99, 99, 0.96);
+  box-shadow: 0 0 0 3px rgba(255, 99, 99, 0.2), 0 0 22px rgba(255, 99, 99, 0.86);
+}
+
+.map-marker.boundary-neighbor {
+  border: 2px solid rgba(255, 247, 223, 0.82);
+}
+
+.map-marker.boundary-trade {
+  border: 2px solid rgba(116, 213, 255, 0.95);
+  box-shadow: 0 0 0 3px rgba(116, 213, 255, 0.18), 0 0 22px rgba(116, 213, 255, 0.8);
+}
+
 .map-marker.tribe_beast_marker {
   width: 13px;
   height: 13px;

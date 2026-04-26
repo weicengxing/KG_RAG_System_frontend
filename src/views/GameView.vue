@@ -6,6 +6,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { WorldEntityManager } from '../game/worldEntityManager.js'
 import { createWeatherSystem } from '../game/weatherSystem.js'
+import { buildTribeHistoryReplay } from '../game/tribeHistoryReplay.js'
 import request from '../utils/request.js'
 import { API_CONFIG } from '../config.js'
 
@@ -406,12 +407,15 @@ const formatMapPoint = (point) => {
   return `(${x}, ${z})`
 }
 
+const oathVisualClass = (oathKey) => oathKey ? `oath-${oathKey}` : ''
+
 const describeLandmark = (landmark) => {
   if (!landmark) return '未知地标'
   if (landmark.type === 'tribe_spawn' && landmark.isOwnTribe) return '本部落出生点'
-  if (landmark.type === 'tribe_camp' && landmark.isOwnTribe) return '本部落营地'
-  if (landmark.type === 'tribe_flag' && landmark.isOwnTribe) return '本部落领地旗帜'
+  if (landmark.type === 'tribe_camp' && landmark.isOwnTribe) return landmark.oathLabel ? `本部落营地 · ${landmark.oathLabel}` : '本部落营地'
+  if (landmark.type === 'tribe_flag' && landmark.isOwnTribe) return landmark.oathLabel ? `本部落领地旗帜 · ${landmark.oathLabel}` : '本部落领地旗帜'
   if (landmark.type === 'tribe_beast_marker' && landmark.isOwnTribe) return '本部落驯养幼兽'
+  if (landmark.type === 'tribe_totem' && landmark.oathLabel) return `${landmark.oathLabel}图腾`
   if (landmark.type === 'tribe_totem' && landmark.hasRuneHonor) return landmark.honorText
   return landmark.label || '未知地标'
 }
@@ -473,9 +477,11 @@ const mapLandmarks = computed(() => {
       honorText,
       isLegendaryRenown: Number(landmark.renownState?.level || 0) >= 3,
       hasRuneHonor: Boolean(honorText && honorText !== '图腾尚未刻下铭文'),
+      oathClass: oathVisualClass(landmark.oathKey),
+      boundaryClass: boundaryClass(landmark.boundaryRelation),
       title: honorText
-        ? `${landmark.label || '部落图腾'}｜${landmark.renownState?.title ? `${landmark.renownState.title}｜` : ''}${honorText}`
-        : landmark.label
+        ? `${landmark.label || '部落图腾'}｜${landmark.oathLabel ? `${landmark.oathLabel}｜` : ''}${landmark.renownState?.title ? `${landmark.renownState.title}｜` : ''}${honorText}`
+        : (landmark.oathLabel ? `${landmark.label || '部落地标'}｜${landmark.oathLabel}` : landmark.label)
     }
   })
 })
@@ -681,172 +687,7 @@ const openTribeHistoryDetail = (event) => {
   showHistoryDetail.value = true
 }
 
-const activeHistoryReplay = computed(() => {
-  const event = activeHistoryDetail.value || {}
-  const related = event.related || {}
-  if (related.kind === 'announcement') {
-    return {
-      title: '公告回放',
-      text: related.text || event.detail || '这条公告没有留下正文。',
-      meta: [
-        related.updatedByName ? `发布者：${related.updatedByName}` : '',
-        related.updatedAt ? `发布时间：${formatHistoryTime(related.updatedAt)}` : ''
-      ].filter(Boolean)
-    }
-  }
-  if (related.kind === 'vote') {
-    const statusMap = { active: '进行中', passed: '已通过', rejected: '未通过' }
-    return {
-      title: '投票回放',
-      text: `${related.starterName || '管理者'} 提名 ${related.candidateName || '候选人'} 竞选${related.roleLabel || '职位'}，结果：${statusMap[related.status] || related.status || '未知'}。`,
-      meta: [
-        `赞成 ${related.yesCount ?? 0}`,
-        `反对 ${related.noCount ?? 0}`,
-        `成员 ${related.memberCount ?? 0}`,
-        related.createdAt ? `发起：${formatHistoryTime(related.createdAt)}` : ''
-      ].filter(Boolean)
-    }
-  }
-  if (related.kind === 'allocation') {
-    const resources = related.resources || {}
-    const allocation = related.targetAllocation || {}
-    const storage = related.storageAfter || {}
-    return {
-      title: '分配回放',
-      text: `${related.actorName || '管理者'} 向 ${related.targetName || '成员'} 预分配公共资源，方便后续建设与行动。`,
-      meta: [
-        `分配 木${resources.wood || 0} / 石${resources.stone || 0}`,
-        `成员预分配 木${allocation.wood || 0} / 石${allocation.stone || 0}`,
-        `仓库剩余 木${storage.wood || 0} / 石${storage.stone || 0}`
-      ]
-    }
-  }
-  if (related.kind === 'punishment') {
-    return {
-      title: '惩罚回放',
-      text: `${related.actorName || '管理者'} 惩罚 ${related.targetName || '成员'}：${related.reason || '未记录原因'}。`,
-      meta: [
-        `扣除贡献 ${related.penalty || 0}`,
-        related.createdAt ? `执行：${formatHistoryTime(related.createdAt)}` : ''
-      ].filter(Boolean)
-    }
-  }
-  if (related.kind === 'cave') {
-    return {
-      title: '远征回放',
-      text: `${related.memberName || '成员'} 完成 ${related.caveLabel || '洞穴'} 远征，推进到深度 ${related.depth || 0}，带回 ${related.finds || 0} 份收获。`,
-      meta: [
-        related.routeLabel ? `路线 ${related.routeLabel}` : '',
-        related.foodSupported ? `补给食物 -${related.foodCost || 0}` : '食物不足，收益折减',
-        related.routeFindsBonus ? `路线额外 +${related.routeFindsBonus}` : '',
-        related.runeFindsBonus ? `铭文额外 +${related.runeFindsBonus}` : '',
-        related.discoveryUnlocked ? '发现幽洞回声' : ''
-      ].filter(Boolean)
-    }
-  }
-  if (related.kind === 'world_event') {
-    const rewardText = Array.isArray(related.rewardParts) && related.rewardParts.length
-      ? related.rewardParts.join(' / ')
-      : '无直接奖励'
-    return {
-      title: '事件回放',
-      text: `${related.memberName || '成员'} 在${related.regionLabel || '未知区域'}处理了${related.title || '世界事件'}。`,
-      meta: [
-        related.eventActionLabel ? `处理方式 ${related.eventActionLabel}` : '',
-        `奖励 ${rewardText}`,
-        related.discoveryKey ? `发现线索 ${related.discoveryKey}` : '',
-        related.rareSpawned ? '连锁触发稀有遗迹' : ''
-      ].filter(Boolean)
-    }
-  }
-  if (related.kind === 'scout') {
-    const titles = Array.isArray(related.eventTitles) && related.eventTitles.length
-      ? related.eventTitles.join('、')
-      : '新的世界事件'
-    return {
-      title: '侦察回放',
-      text: `${related.memberName || '成员'} 派出侦察队，标记了 ${related.regionLabel || '远方区域'}。`,
-      meta: [
-        `发现 ${titles}`,
-        related.createdAt ? `时间：${formatHistoryTime(related.createdAt)}` : ''
-      ].filter(Boolean)
-    }
-  }
-  if (related.kind === 'oral_epic') {
-    return {
-      title: '史诗回放',
-      text: `${related.composedBy || '长老'} 整理了《${related.title || '部落史诗'}》。`,
-      meta: [
-        related.summary || '',
-        related.renownBonus ? `声望 +${related.renownBonus}` : ''
-      ].filter(Boolean)
-    }
-  }
-  if (related.kind === 'beast_task') {
-    return {
-      title: '驯养回放',
-      text: `${related.memberName || '成员'} 派出幼兽执行${related.taskLabel || '任务'}。`,
-      meta: [
-        related.summary || '',
-        Array.isArray(related.rewardParts) ? related.rewardParts.join(' / ') : '',
-        related.beastTitle ? `幼兽成长：${related.beastTitle} Lv.${related.beastLevel || 1}` : ''
-      ].filter(Boolean)
-    }
-  }
-  if (related.kind === 'beast_specialty') {
-    return {
-      title: '专长回放',
-      text: `${related.memberName || '成员'} 为幼兽选择了${related.specialtyLabel || '专长'}。`,
-      meta: [related.summary || ''].filter(Boolean)
-    }
-  }
-  if (related.kind === 'season_celebration') {
-    return {
-      title: '庆典回放',
-      text: `${related.memberName || '管理者'} 举行了${related.choiceLabel || '庆典'}。`,
-      meta: [
-        related.summary || '',
-        Array.isArray(related.rewardParts) ? related.rewardParts.join(' / ') : ''
-      ].filter(Boolean)
-    }
-  }
-  if (related.kind === 'season_objective') {
-    return {
-      title: '季节回放',
-      text: `${related.memberName || '成员'} 完成 ${related.regionLabel || '未知区域'} 的 ${related.title || '季节目标'}。`,
-      meta: [
-        related.summary || '',
-        Array.isArray(related.rewardParts) ? related.rewardParts.join(' / ') : '',
-        related.celebrationUnlocked ? '触发跨区域丰收庆典' : ''
-      ].filter(Boolean)
-    }
-  }
-  if (related.kind === 'trade') {
-    const statusMap = { active: '进行中', accepted: '已完成', rejected: '已拒绝', cancelled: '已取消', expired: '已失效' }
-    const offer = related.offer || {}
-    const request = related.request || {}
-    return {
-      title: '贸易回放',
-      text: `${related.fromTribeName || '发起部落'} 出 ${tradeResourceText(offer.resource, offer.amount)}，向 ${related.toTribeName || '目标部落'} 换取 ${tradeResourceText(request.resource, request.amount)}。`,
-      meta: [
-        `状态 ${statusMap[related.status] || related.status || '未知'}`,
-        related.createdAt ? `发布：${formatHistoryTime(related.createdAt)}` : '',
-        related.resolvedAt ? `处理：${formatHistoryTime(related.resolvedAt)}` : ''
-      ].filter(Boolean)
-    }
-  }
-  if (related.kind === 'territory_flag') {
-    return {
-      title: '领地回放',
-      text: `${related.claimedBy || '成员'} 在 (${Math.round(related.x || 0)}, ${Math.round(related.z || 0)}) 插下 ${related.label || '领地旗帜'}。`,
-      meta: [
-        related.claimNote || '这里成为部落公开宣告的资源活动区',
-        related.claimedAt ? `时间：${formatHistoryTime(related.claimedAt)}` : ''
-      ].filter(Boolean)
-    }
-  }
-  return null
-})
+const activeHistoryReplay = computed(() => buildTribeHistoryReplay(activeHistoryDetail.value, { formatHistoryTime, tradeResourceText }))
 
 const closeTribeHistoryDetail = () => {
   showHistoryDetail.value = false
@@ -922,7 +763,33 @@ const celebrationDiscoveryHint = computed(() => activeCelebrationBuff.value?.dis
 const celebrationTradeHint = computed(() => activeCelebrationBuff.value?.tradeRenownBonus
   ? `集市余韵：完成贸易时双方声望额外 +${activeCelebrationBuff.value.tradeRenownBonus}`
   : '')
-const tribeGatherBonus = computed(() => (activeTribeRitual.value?.gatherBonus || 0) + celebrationGatherBonus.value)
+const activeOathKey = computed(() => currentTribe.value?.oath?.key || '')
+const oathGatherBonus = computed(() => (activeOathKey.value === 'hearth' ? 1 : 0))
+const oathOptions = computed(() => optionMapToList(currentTribe.value?.oathOptions))
+const oathText = computed(() => {
+  const oath = currentTribe.value?.oath
+  return oath ? `${oath.label || '部落誓约'}：${oath.summary || '长期方向已经确定'}` : '尚未立下长期誓约'
+})
+const oathTaskText = computed(() => {
+  const task = currentTribe.value?.oathTask
+  if (!task) return ''
+  const reward = task.reward || {}
+  const parts = []
+  if (reward.food) parts.push(`食物 +${reward.food}`)
+  if (reward.renown) parts.push(`声望 +${reward.renown}`)
+  if (reward.discoveryProgress) parts.push(`发现 +${reward.discoveryProgress}`)
+  if (reward.tradeReputation) parts.push(`信誉 +${reward.tradeReputation}`)
+  if (reward.beastExperience) parts.push(`幼兽熟练 +${reward.beastExperience}`)
+  return `${task.completed ? '已完成' : '待完成'}：${task.title || '誓约任务'}${parts.length ? ` · ${parts.join(' / ')}` : ''}`
+})
+const flagPatrolChainText = computed(() => {
+  const chain = currentTribe.value?.flagPatrolChain
+  if (!chain) return ''
+  const count = chain.regions?.length || 0
+  return `旗帜巡查连锁 ${count} / ${chain.target || 2} 个地形`
+})
+const tribeGatherBonus = computed(() => (activeTribeRitual.value?.gatherBonus || 0) + celebrationGatherBonus.value + oathGatherBonus.value)
+const boundaryClass = (relation) => relation?.state ? `boundary-${relation.state}` : ''
 
 const tribeTargetProgressPercent = computed(() => {
   const target = currentTribe.value?.target
@@ -1411,13 +1278,14 @@ const buildTribeInteraction = (entity) => {
   const target = currentTribe.value?.target
 
   if (entity.type === 'tribe_totem') {
+    const oathText = entity.oathLabel ? `，图腾旁保留着${entity.oathLabel}的标记` : ''
     return {
       entity,
       label: entity.label || '部落图腾',
       actionText: '查看',
       rewardText: ownTribe
-        ? '这里是你们部落的议事核心，靠近即可打开部落面板'
-        : `${tribeName}的图腾立在这里，说明附近已经有稳定营地`
+        ? `这里是你们部落的议事核心${oathText}，靠近即可打开部落面板`
+        : `${tribeName}的图腾立在这里${oathText}，说明附近已经有稳定营地`
     }
   }
 
@@ -1465,24 +1333,29 @@ const buildTribeInteraction = (entity) => {
   }
 
   if (entity.type === 'tribe_camp') {
+    const oathText = entity.oathLabel ? `，营地按${entity.oathLabel}布置了标记` : ''
     return {
       entity,
       label: entity.label || '营地',
       actionText: ownTribe ? '整队' : '查看',
       rewardText: ownTribe
-        ? '营地核心已经固定下来，图腾、仓库和石器台围绕这里展开'
-        : `${tribeName}已经把这里经营成了自己的核心营地`
+        ? `营地核心已经固定下来${oathText}，图腾、仓库和石器台围绕这里展开`
+        : `${tribeName}已经把这里经营成了自己的核心营地${oathText}`
     }
   }
 
   if (entity.type === 'tribe_flag') {
+    const oathText = entity.oathLabel ? `，旗面带着${entity.oathLabel}的纹样` : ''
+    const patrolText = entity.lastPatrolledBy ? `；上次由${entity.lastPatrolledBy}巡查` : ''
+    const relation = entity.boundaryRelation
+    const relationText = relation?.label ? `；${relation.label}：距${relation.otherTribeName || '其他部落'}约${relation.distance || '?'}m` : ''
     return {
       entity,
       label: entity.label || '领地旗帜',
       actionText: ownTribe ? '巡查' : '观察',
       rewardText: ownTribe
-        ? '这面旗帜宣告了你们部落的资源活动区'
-        : `${tribeName}已经在这里插旗，靠近时最好留意对方的资源宣告`
+        ? `这面旗帜宣告了你们部落的资源活动区${oathText}${patrolText}${relationText}`
+        : `${tribeName}已经在这里插旗${oathText}${relationText}，靠近时最好留意对方的资源宣告`
     }
   }
 
@@ -1711,7 +1584,11 @@ const collectInteractionTarget = () => {
   }
 
   if (target.entity.type === 'tribe_flag') {
-    showToast(isCurrentTribeEntity(target.entity) ? '你巡查了本部落的领地旗帜' : '这是其他部落的领地宣告')
+    if (isCurrentTribeEntity(target.entity)) {
+      patrolTribeFlag(target.entity)
+    } else {
+      showToast('这是其他部落的领地宣告')
+    }
     return
   }
 
@@ -1737,7 +1614,7 @@ const collectInteractionTarget = () => {
   inventory.value[reward.itemKey] += totalAmount
   addExperience(reward.experience)
   advanceQuest(1)
-  const bonusNotes = [celebrationBonus ? '庆典余韵' : '', toolBonus ? '石器加成' : ''].filter(Boolean)
+  const bonusNotes = [celebrationBonus ? '庆典余韵' : '', oathGatherBonus.value ? '守火誓约' : '', toolBonus ? '石器加成' : ''].filter(Boolean)
   showToast(`采集 ${reward.label}：+${totalAmount} ${reward.itemName}${bonusNotes.length ? `（${bonusNotes.join('，')}）` : ''}`)
   updateInteractionTarget()
   loadedObjectsCount.value = world?.getLoadedCount() ?? 0
@@ -1986,6 +1863,32 @@ const chooseSeasonCelebration = (choiceKey) => {
   }
 }
 
+const chooseTribeOath = (oathKey) => {
+  if (!canManageTribeTargets.value) {
+    showToast('只有首领或长老可以选择部落誓约')
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_choose_oath', oathKey })) {
+    const label = oathOptions.value.find((oath) => oath.key === oathKey)?.label || '部落誓约'
+    showToast(`部落誓约已确定：${label}`)
+  }
+}
+
+const completeOathTask = () => {
+  const task = currentTribe.value?.oathTask
+  if (!task) {
+    showToast('先立下部落誓约')
+    return
+  }
+  if (task.completed) {
+    showToast('今天的誓约任务已经完成')
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_complete_oath_task' })) {
+    showToast(`誓约任务已提交：${task.title || '部落目标'}`)
+  }
+}
+
 const claimTribeFlag = () => {
   if (!currentTribe.value) {
     showToast('请先加入部落')
@@ -2008,6 +1911,17 @@ const claimTribeFlag = () => {
     z: localPlayer.position.z
   })) {
     showToast('领地旗帜请求已提交')
+  }
+}
+
+const patrolTribeFlag = (flag) => {
+  if (!flag?.id) return
+  if (!isCurrentTribeEntity(flag)) {
+    showToast('这是其他部落的领地旗帜，只能观察')
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_patrol_flag', flagId: flag.id })) {
+    showToast('领地旗帜巡查已记录')
   }
 }
 

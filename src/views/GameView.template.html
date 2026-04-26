@@ -60,7 +60,7 @@
           v-for="landmark in minimapLandmarks"
           :key="landmark.id"
           class="map-marker"
-          :class="[landmark.type, { 'own-tribe': landmark.isOwnTribe, honored: landmark.hasRuneHonor, legendary: landmark.isLegendaryRenown }]"
+          :class="[landmark.type, landmark.oathClass, landmark.boundaryClass, { 'own-tribe': landmark.isOwnTribe, honored: landmark.hasRuneHonor, legendary: landmark.isLegendaryRenown }]"
           :style="{ left: landmark.left + '%', top: landmark.top + '%' }"
           :title="landmark.title || landmark.label"
         ></div>
@@ -247,6 +247,16 @@
               <button v-for="task in beastTaskOptions" :key="task.key" class="tribe-mini-btn" @click="assignBeastTask(task.key)">{{ task.label }}</button>
             </div>
             <div class="tribe-target-text" v-if="currentTribe.tradeReputation">贸易信誉：{{ currentTribe.tradeReputation.title }} · 已完成 {{ currentTribe.tradeReputation.completed }} 次</div>
+            <div class="tribe-target-text" v-if="currentTribe.oath || oathOptions.length">部落誓约：{{ oathText }}</div>
+            <div class="beast-task-row" v-if="oathOptions.length">
+              <button v-for="oath in oathOptions" :key="oath.key" class="tribe-mini-btn" :disabled="!canManageTribeTargets" @click="chooseTribeOath(oath.key)">
+                {{ oath.label }}
+              </button>
+            </div>
+            <div class="tribe-target-text" v-if="oathTaskText">誓约任务：{{ oathTaskText }}</div>
+            <div class="beast-task-row" v-if="currentTribe.oathTask && !currentTribe.oathTask.completed">
+              <button class="tribe-mini-btn" @click="completeOathTask">完成誓约任务</button>
+            </div>
             <div class="tribe-target-text" v-if="currentTribe.celebrationBuff">庆典余韵：{{ celebrationBuffText }}</div>
             <div class="tribe-target-text" v-if="currentTribe.seasonChain">季节连锁：{{ currentTribe.seasonChain.regions?.length || 0 }} / {{ currentTribe.seasonChain.target }} 个地形</div>
             <div class="tribe-target-text" v-if="currentTribe.seasonChain?.pendingCelebration">待举行：{{ currentTribe.seasonChain.pendingCelebration.title }}</div>
@@ -259,6 +269,7 @@
               <span>领地旗帜 {{ currentTribe.territoryFlags?.length || 0 }} / {{ currentTribe.flagConfig.max }}</span>
               <button class="tribe-mini-btn" :disabled="!canManageTribeTargets" @click="claimTribeFlag">插旗</button>
             </div>
+            <div class="tribe-target-text" v-if="flagPatrolChainText">{{ flagPatrolChainText }}</div>
             <div class="tribe-building-tags" v-if="tribeCampBuildingTags.length">
               <span v-for="building in tribeCampBuildingTags" :key="building.id" class="tribe-building-tag">{{ building.label }}</span>
             </div>

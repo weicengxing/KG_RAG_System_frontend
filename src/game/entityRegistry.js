@@ -87,6 +87,16 @@ export function getEntityCollider(entity, globalSeed = 0) {
     return { id, type, x: entity.x || 0, z: entity.z || 0, radius: 2.25 * scale }
   }
 
+  if (type === 'tribe_fence') {
+    const scale = typeof entity.size === 'number' ? entity.size : 1
+    return { id, type, x: entity.x || 0, z: entity.z || 0, radius: 2.2 * scale }
+  }
+
+  if (type === 'tribe_road') {
+    const scale = typeof entity.size === 'number' ? entity.size : 1
+    return { id, type, x: entity.x || 0, z: entity.z || 0, radius: 1.8 * scale }
+  }
+
   if (type === 'tribe_flag') {
     const scale = typeof entity.size === 'number' ? entity.size : 1
     return { id, type, x: entity.x || 0, z: entity.z || 0, radius: 1.3 * scale }
@@ -95,6 +105,11 @@ export function getEntityCollider(entity, globalSeed = 0) {
   if (type === 'tribe_beast_marker') {
     const scale = typeof entity.size === 'number' ? entity.size : 1
     return { id, type, x: entity.x || 0, z: entity.z || 0, radius: 1.45 * scale }
+  }
+
+  if (type === 'scouted_resource_site') {
+    const scale = typeof entity.size === 'number' ? entity.size : 1
+    return { id, type, x: entity.x || 0, z: entity.z || 0, radius: 1.8 * scale }
   }
 
   if (type === 'cave_entrance') {
@@ -495,6 +510,54 @@ export function createEntityMesh(entity, globalSeed = 0) {
     return group
   }
 
+  if (type === 'tribe_fence') {
+    const group = new THREE.Group()
+    const scale = typeof entity.size === 'number' ? entity.size : 1
+    const woodMaterial = new THREE.MeshStandardMaterial({
+      color: colorJitter(0x76502a, rng, 0.08),
+      roughness: 0.9
+    })
+    for (let i = 0; i < 7; i++) {
+      const x = (i - 3) * 0.58 * scale
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07 * scale, 0.09 * scale, 1.15 * scale, 6), woodMaterial)
+      post.position.set(x, 0.58 * scale, 0)
+      post.rotation.z = (rng() - 0.5) * 0.08
+      group.add(post)
+    }
+    for (const y of [0.48, 0.86]) {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(4.1 * scale, 0.1 * scale, 0.12 * scale), woodMaterial)
+      rail.position.y = y * scale
+      rail.rotation.z = (rng() - 0.5) * 0.04
+      group.add(rail)
+    }
+    group.rotation.y = rng() * Math.PI * 2
+    return group
+  }
+
+  if (type === 'tribe_road') {
+    const group = new THREE.Group()
+    const scale = typeof entity.size === 'number' ? entity.size : 1
+    const dirtMaterial = new THREE.MeshStandardMaterial({
+      color: colorJitter(0x8a6a43, rng, 0.08),
+      roughness: 0.98
+    })
+    const stoneMaterial = new THREE.MeshStandardMaterial({
+      color: colorJitter(0x8d877c, rng, 0.07),
+      roughness: 0.94
+    })
+    const path = new THREE.Mesh(new THREE.BoxGeometry(1.25 * scale, 0.05 * scale, 4.4 * scale), dirtMaterial)
+    path.position.y = 0.03 * scale
+    group.add(path)
+    for (let i = 0; i < 8; i++) {
+      const stone = new THREE.Mesh(new THREE.DodecahedronGeometry((0.12 + rng() * 0.06) * scale, 0), stoneMaterial)
+      stone.position.set((rng() - 0.5) * 0.85 * scale, 0.09 * scale, (-1.9 + i * 0.55) * scale)
+      stone.scale.y = 0.35
+      group.add(stone)
+    }
+    group.rotation.y = rng() * Math.PI * 2
+    return group
+  }
+
   if (type === 'tribe_spawn') {
     const group = new THREE.Group()
     const scale = typeof entity.size === 'number' ? entity.size : 1
@@ -676,6 +739,51 @@ export function createEntityMesh(entity, globalSeed = 0) {
       baseZ: 0,
       radius: typeof entity.patrolRadius === 'number' ? entity.patrolRadius : 1
     }
+    return group
+  }
+
+  if (type === 'scouted_resource_site') {
+    const group = new THREE.Group()
+    const scale = typeof entity.size === 'number' ? entity.size : 1
+    const colorByRegion = {
+      region_forest: 0x5ecf93,
+      region_mountain: 0xb8bec7,
+      region_coast: 0x74d5ff,
+      region_ruin: 0xf8df7b
+    }
+    const tint = colorByRegion[entity.regionType] || 0x5ecf93
+    const mat = new THREE.MeshStandardMaterial({
+      color: colorJitter(tint, rng, 0.08),
+      roughness: 0.78,
+      emissive: new THREE.Color(tint).multiplyScalar(0.18)
+    })
+    const wood = new THREE.MeshStandardMaterial({
+      color: colorJitter(0x7a4a1f, rng, 0.08),
+      roughness: 0.9
+    })
+
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.8 * scale, 1.05 * scale, 0.18 * scale, 7), wood)
+    base.position.y = 0.09 * scale
+    group.add(base)
+
+    for (let i = 0; i < 4; i++) {
+      const shard = new THREE.Mesh(new THREE.DodecahedronGeometry((0.22 + rng() * 0.16) * scale, 0), mat)
+      const angle = (i / 4) * Math.PI * 2 + rng() * 0.3
+      shard.position.set(Math.cos(angle) * (0.28 + rng() * 0.45) * scale, (0.35 + rng() * 0.35) * scale, Math.sin(angle) * (0.28 + rng() * 0.45) * scale)
+      shard.scale.set(1.1, 0.75 + rng() * 0.7, 0.9)
+      group.add(shard)
+    }
+
+    const marker = new THREE.Mesh(new THREE.TorusGeometry(0.9 * scale, 0.035 * scale, 8, 24), mat)
+    marker.position.y = 0.28 * scale
+    marker.rotation.x = Math.PI / 2
+    group.add(marker)
+
+    const light = new THREE.PointLight(tint, 0.35, 6 * scale)
+    light.position.y = 0.9 * scale
+    group.add(light)
+
+    group.rotation.y = rng() * Math.PI * 2
     return group
   }
 

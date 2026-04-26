@@ -200,10 +200,10 @@ const tradeResourceLabels = {
   food: '食物'
 }
 const tradeResourceOptions = Object.entries(tradeResourceLabels).map(([key, label]) => ({ key, label }))
-const tribeLandmarkDecorationTypes = new Set(['tribe_spawn', 'tribe_camp', 'tribe_flag', 'tribe_beast_marker'])
-const tribeInteractableTypes = ['tribe_storage', 'tribe_workbench', 'tribe_hut', 'tribe_spawn', 'tribe_camp', 'tribe_totem', 'tribe_flag', 'tribe_beast_marker']
+const tribeLandmarkDecorationTypes = new Set(['tribe_spawn', 'tribe_camp', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site'])
+const tribeInteractableTypes = ['tribe_storage', 'tribe_workbench', 'tribe_hut', 'tribe_fence', 'tribe_road', 'tribe_spawn', 'tribe_camp', 'tribe_totem', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site']
 const regionLandmarkTypes = ['region_forest', 'region_mountain', 'region_coast', 'region_ruin']
-const landmarkFallbackTypes = ['campfire', 'ruin', 'crystal', 'tribe_totem', 'tribe_storage', 'tribe_workbench', 'tribe_spawn', 'tribe_camp', 'tribe_flag', 'tribe_beast_marker', 'cave_entrance', ...regionLandmarkTypes]
+const landmarkFallbackTypes = ['campfire', 'ruin', 'crystal', 'tribe_totem', 'tribe_storage', 'tribe_workbench', 'tribe_fence', 'tribe_road', 'tribe_spawn', 'tribe_camp', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'cave_entrance', ...regionLandmarkTypes]
 const tribeBuildingTypeLabels = {
   tribe_totem: '图腾',
   tribe_storage: '仓库',
@@ -415,6 +415,7 @@ const describeLandmark = (landmark) => {
   if (landmark.type === 'tribe_camp' && landmark.isOwnTribe) return landmark.oathLabel ? `本部落营地 · ${landmark.oathLabel}` : '本部落营地'
   if (landmark.type === 'tribe_flag' && landmark.isOwnTribe) return landmark.oathLabel ? `本部落领地旗帜 · ${landmark.oathLabel}` : '本部落领地旗帜'
   if (landmark.type === 'tribe_beast_marker' && landmark.isOwnTribe) return '本部落驯养幼兽'
+  if (landmark.type === 'scouted_resource_site') return landmark.isOwnTribe ? `侦察资源点 · ${landmark.resourceLabel || landmark.label || '待确认'}` : '其他部落侦察资源点'
   if (landmark.type === 'tribe_totem' && landmark.oathLabel) return `${landmark.oathLabel}图腾`
   if (landmark.type === 'tribe_totem' && landmark.hasRuneHonor) return landmark.honorText
   return landmark.label || '未知地标'
@@ -479,6 +480,7 @@ const mapLandmarks = computed(() => {
       hasRuneHonor: Boolean(honorText && honorText !== '图腾尚未刻下铭文'),
       oathClass: oathVisualClass(landmark.oathKey),
       boundaryClass: boundaryClass(landmark.boundaryRelation),
+      contestClass: landmark.contested ? 'contested' : '',
       title: honorText
         ? `${landmark.label || '部落图腾'}｜${landmark.oathLabel ? `${landmark.oathLabel}｜` : ''}${landmark.renownState?.title ? `${landmark.renownState.title}｜` : ''}${honorText}`
         : (landmark.oathLabel ? `${landmark.label || '部落地标'}｜${landmark.oathLabel}` : landmark.label)
@@ -775,6 +777,7 @@ const oathTaskText = computed(() => {
   if (!task) return ''
   const reward = task.reward || {}
   const parts = []
+  if (task.sourceLabel) parts.push(task.sourceLabel)
   if (reward.food) parts.push(`食物 +${reward.food}`)
   if (reward.renown) parts.push(`声望 +${reward.renown}`)
   if (reward.discoveryProgress) parts.push(`发现 +${reward.discoveryProgress}`)
@@ -790,6 +793,21 @@ const flagPatrolChainText = computed(() => {
 })
 const tribeGatherBonus = computed(() => (activeTribeRitual.value?.gatherBonus || 0) + celebrationGatherBonus.value + oathGatherBonus.value)
 const boundaryClass = (relation) => relation?.state ? `boundary-${relation.state}` : ''
+const boundaryActionOptions = computed(() => optionMapToList(currentTribe.value?.boundaryActions))
+const activeBoundaryFlag = computed(() => {
+  const entity = interactionTarget.value?.entity
+  if (!entity || entity.type !== 'tribe_flag' || !isCurrentTribeEntity(entity) || !entity.boundaryRelation) return null
+  return entity
+})
+const activeBoundaryProgressText = computed(() => {
+  const relation = activeBoundaryFlag.value?.boundaryRelation
+  if (!relation) return ''
+  const score = Number(relation.relationScore || 0)
+  const trust = Number(relation.tradeTrust || 0)
+  const parts = [`关系 ${score > 0 ? '+' : ''}${score}`]
+  if (trust > 0) parts.push(`贸易信任 +${trust}`)
+  return `${relation.label || '边界关系'} · ${parts.join(' / ')}`
+})
 
 const tribeTargetProgressPercent = computed(() => {
   const target = currentTribe.value?.target
@@ -1321,6 +1339,28 @@ const buildTribeInteraction = (entity) => {
     }
   }
 
+  if (entity.type === 'tribe_fence') {
+    return {
+      entity,
+      label: entity.label || '营地围栏',
+      actionText: ownTribe ? '巡看' : '观察',
+      rewardText: ownTribe
+        ? '围栏把营地边界圈出来，后续可以接守边、驱离和防护收益'
+        : `${tribeName}已经在这里立起围栏，营地范围更加清楚`
+    }
+  }
+
+  if (entity.type === 'tribe_road') {
+    return {
+      entity,
+      label: entity.label || '营地道路',
+      actionText: ownTribe ? '巡看' : '观察',
+      rewardText: ownTribe
+        ? '道路把营地和外部路线接起来，后续可以接巡查、运输和贸易收益'
+        : `${tribeName}已经把通路整理出来，往来路线更加明显`
+    }
+  }
+
   if (entity.type === 'tribe_spawn') {
     return {
       entity,
@@ -1371,6 +1411,18 @@ const buildTribeInteraction = (entity) => {
       rewardText: ownTribe
         ? `幼兽在营地附近活动${specialty}${workText}`
         : `${tribeName}的驯养幼兽守在附近${workText}`
+    }
+  }
+
+  if (entity.type === 'scouted_resource_site') {
+    const contestText = entity.contested ? `；正在与${entity.contestedByTribeName || '其他部落'}争夺` : ''
+    return {
+      entity,
+      label: entity.label || '侦察资源点',
+      actionText: ownTribe ? '确认' : '观察',
+      rewardText: ownTribe
+        ? `${entity.regionLabel || '附近区域'}的临时线索，可转化为部落仓库、食物或发现进度${contestText}`
+        : `${tribeName}的侦察队留下了资源线索${contestText}`
     }
   }
 
@@ -1595,6 +1647,17 @@ const collectInteractionTarget = () => {
   if (target.entity.type === 'tribe_beast_marker') {
     const workText = target.entity.workLabel ? `，正在${target.entity.workLabel}` : ''
     showToast(isCurrentTribeEntity(target.entity) ? `幼兽蹭了蹭你的手${workText}` : `这是其他部落驯养的幼兽${workText}`)
+    return
+  }
+
+  if (target.entity.type === 'scouted_resource_site') {
+    if (!isCurrentTribeEntity(target.entity)) {
+      showToast('这是其他部落的侦察线索，暂时只能观察')
+      return
+    }
+    if (sendGameMessage({ type: 'tribe_secure_scout_site', siteId: target.entity.id })) {
+      showToast(`已确认${target.entity.label || '侦察资源点'}`)
+    }
     return
   }
 
@@ -1889,6 +1952,18 @@ const completeOathTask = () => {
   }
 }
 
+const resolveBoundaryOutcome = (outcomeId) => {
+  const outcomes = currentTribe.value?.boundaryOutcomes || []
+  const outcome = outcomes.find((item) => item.id === outcomeId)
+  if (!outcome) {
+    showToast('这条边界结果已经处理过了')
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_resolve_boundary_outcome', outcomeId })) {
+    showToast(`开始处理：${outcome.title || '边界结果'}`)
+  }
+}
+
 const claimTribeFlag = () => {
   if (!currentTribe.value) {
     showToast('请先加入部落')
@@ -1922,6 +1997,18 @@ const patrolTribeFlag = (flag) => {
   }
   if (sendGameMessage({ type: 'tribe_patrol_flag', flagId: flag.id })) {
     showToast('领地旗帜巡查已记录')
+  }
+}
+
+const resolveBoundaryAction = (actionKey) => {
+  const flag = activeBoundaryFlag.value
+  if (!flag?.id) {
+    showToast('靠近本部落边界旗帜后才能行动')
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_boundary_action', flagId: flag.id, actionKey })) {
+    const label = boundaryActionOptions.value.find((item) => item.key === actionKey)?.label || '边界行动'
+    showToast(`边界${label}已记录`)
   }
 }
 

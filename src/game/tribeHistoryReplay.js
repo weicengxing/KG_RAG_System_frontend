@@ -119,6 +119,7 @@ export function buildTribeHistoryReplay(event = {}, helpers = {}) {
       meta: [
         related.summary || '',
         Array.isArray(related.rewardParts) ? related.rewardParts.join(' / ') : '',
+        related.streakUnlocked ? `誓约连胜 ${related.streakTarget || 3} 次，触发庆祝余韵` : (related.streakCount ? `当前连胜 ${related.streakCount}` : ''),
         related.createdAt ? `时间：${formatHistoryTime(related.createdAt)}` : ''
       ].filter(Boolean)
     }
@@ -194,6 +195,19 @@ export function buildTribeHistoryReplay(event = {}, helpers = {}) {
         related.regionLabel ? `区域 ${related.regionLabel}` : '',
         Array.isArray(related.rewardParts) ? related.rewardParts.join(' / ') : '',
         related.chainUnlocked ? '旗帜巡查连锁触发资源潮汐线索' : '',
+        related.createdAt ? `时间：${formatHistoryTime(related.createdAt)}` : ''
+      ].filter(Boolean)
+    }
+  }
+  if (related.kind === 'boundary_action') {
+    const relation = related.relation || {}
+    return {
+      title: '边界行动回放',
+      text: `${related.memberName || '成员'} 在 ${related.flagLabel || '领地旗帜'} 执行了${related.actionLabel || '边界行动'}。`,
+      meta: [
+        related.summary || '',
+        relation.label ? `${relation.label}：${relation.otherTribeName || '其他部落'}，约 ${relation.distance || '?'}m` : '',
+        Array.isArray(related.rewardParts) ? related.rewardParts.join(' / ') : '',
         related.createdAt ? `时间：${formatHistoryTime(related.createdAt)}` : ''
       ].filter(Boolean)
     }

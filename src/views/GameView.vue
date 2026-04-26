@@ -200,10 +200,10 @@ const tradeResourceLabels = {
   food: '食物'
 }
 const tradeResourceOptions = Object.entries(tradeResourceLabels).map(([key, label]) => ({ key, label }))
-const tribeLandmarkDecorationTypes = new Set(['tribe_spawn', 'tribe_camp', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site'])
-const tribeInteractableTypes = ['tribe_storage', 'tribe_workbench', 'tribe_hut', 'tribe_fence', 'tribe_road', 'tribe_spawn', 'tribe_camp', 'tribe_totem', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site']
+const tribeLandmarkDecorationTypes = new Set(['tribe_spawn', 'tribe_camp', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'controlled_resource_site'])
+const tribeInteractableTypes = ['tribe_storage', 'tribe_workbench', 'tribe_hut', 'tribe_fence', 'tribe_road', 'tribe_spawn', 'tribe_camp', 'tribe_totem', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'controlled_resource_site']
 const regionLandmarkTypes = ['region_forest', 'region_mountain', 'region_coast', 'region_ruin']
-const landmarkFallbackTypes = ['campfire', 'ruin', 'crystal', 'tribe_totem', 'tribe_storage', 'tribe_workbench', 'tribe_fence', 'tribe_road', 'tribe_spawn', 'tribe_camp', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'cave_entrance', ...regionLandmarkTypes]
+const landmarkFallbackTypes = ['campfire', 'ruin', 'crystal', 'tribe_totem', 'tribe_storage', 'tribe_workbench', 'tribe_fence', 'tribe_road', 'tribe_spawn', 'tribe_camp', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'controlled_resource_site', 'cave_entrance', ...regionLandmarkTypes]
 const tribeBuildingTypeLabels = {
   tribe_totem: '图腾',
   tribe_storage: '仓库',
@@ -416,6 +416,7 @@ const describeLandmark = (landmark) => {
   if (landmark.type === 'tribe_flag' && landmark.isOwnTribe) return landmark.oathLabel ? `本部落领地旗帜 · ${landmark.oathLabel}` : '本部落领地旗帜'
   if (landmark.type === 'tribe_beast_marker' && landmark.isOwnTribe) return '本部落驯养幼兽'
   if (landmark.type === 'scouted_resource_site') return landmark.isOwnTribe ? `侦察资源点 · ${landmark.resourceLabel || landmark.label || '待确认'}` : '其他部落侦察资源点'
+  if (landmark.type === 'controlled_resource_site') return landmark.isOwnTribe ? `控制资源点 Lv.${landmark.level || 1} · ${landmark.resourceLabel || landmark.label || '可收取'}` : '其他部落控制资源点'
   if (landmark.type === 'tribe_totem' && landmark.oathLabel) return `${landmark.oathLabel}图腾`
   if (landmark.type === 'tribe_totem' && landmark.hasRuneHonor) return landmark.honorText
   return landmark.label || '未知地标'
@@ -1426,6 +1427,17 @@ const buildTribeInteraction = (entity) => {
     }
   }
 
+  if (entity.type === 'controlled_resource_site') {
+    return {
+      entity,
+      label: entity.label || '控制资源点',
+      actionText: ownTribe ? '收取' : '观察',
+      rewardText: ownTribe
+        ? `${entity.regionLabel || '附近区域'}的短时控制点，Lv.${entity.level || 1}，可周期带回资源`
+        : `${tribeName}已经控制了这处资源点`
+    }
+  }
+
   return null
 }
 
@@ -1657,6 +1669,17 @@ const collectInteractionTarget = () => {
     }
     if (sendGameMessage({ type: 'tribe_secure_scout_site', siteId: target.entity.id })) {
       showToast(`已确认${target.entity.label || '侦察资源点'}`)
+    }
+    return
+  }
+
+  if (target.entity.type === 'controlled_resource_site') {
+    if (!isCurrentTribeEntity(target.entity)) {
+      showToast('这是其他部落控制的资源点')
+      return
+    }
+    if (sendGameMessage({ type: 'tribe_collect_controlled_site', siteId: target.entity.id })) {
+      showToast(`已收取${target.entity.label || '控制资源点'}`)
     }
     return
   }
@@ -1952,15 +1975,17 @@ const completeOathTask = () => {
   }
 }
 
-const resolveBoundaryOutcome = (outcomeId) => {
+const resolveBoundaryOutcome = (outcomeId, responseKey = '') => {
   const outcomes = currentTribe.value?.boundaryOutcomes || []
   const outcome = outcomes.find((item) => item.id === outcomeId)
   if (!outcome) {
     showToast('这条边界结果已经处理过了')
     return
   }
-  if (sendGameMessage({ type: 'tribe_resolve_boundary_outcome', outcomeId })) {
-    showToast(`开始处理：${outcome.title || '边界结果'}`)
+  if (sendGameMessage({ type: 'tribe_resolve_boundary_outcome', outcomeId, responseKey })) {
+    const response = (outcome.responseOptions || []).find((item) => item.key === responseKey)
+    const suffix = response?.label ? `：${response.label}` : ''
+    showToast(`开始处理：${outcome.title || '边界结果'}${suffix}`)
   }
 }
 

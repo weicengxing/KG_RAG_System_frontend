@@ -107,7 +107,7 @@ export function getEntityCollider(entity, globalSeed = 0) {
     return { id, type, x: entity.x || 0, z: entity.z || 0, radius: 1.45 * scale }
   }
 
-  if (type === 'scouted_resource_site') {
+  if (type === 'scouted_resource_site' || type === 'controlled_resource_site') {
     const scale = typeof entity.size === 'number' ? entity.size : 1
     return { id, type, x: entity.x || 0, z: entity.z || 0, radius: 1.8 * scale }
   }
@@ -742,7 +742,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
     return group
   }
 
-  if (type === 'scouted_resource_site') {
+  if (type === 'scouted_resource_site' || type === 'controlled_resource_site') {
     const group = new THREE.Group()
     const scale = typeof entity.size === 'number' ? entity.size : 1
     const colorByRegion = {
@@ -751,7 +751,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
       region_coast: 0x74d5ff,
       region_ruin: 0xf8df7b
     }
-    const tint = colorByRegion[entity.regionType] || 0x5ecf93
+    const tint = type === 'controlled_resource_site' ? 0xf8df7b : (colorByRegion[entity.regionType] || 0x5ecf93)
     const mat = new THREE.MeshStandardMaterial({
       color: colorJitter(tint, rng, 0.08),
       roughness: 0.78,

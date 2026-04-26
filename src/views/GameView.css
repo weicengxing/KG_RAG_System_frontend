@@ -419,6 +419,15 @@
   box-shadow: 0 0 0 3px rgba(255, 129, 77, 0.2), 0 0 22px rgba(255, 129, 77, 0.88);
 }
 
+.map-marker.controlled_resource_site {
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  border: 2px solid rgba(255, 247, 223, 0.9);
+  background: #f8df7b;
+  box-shadow: 0 0 20px rgba(248, 223, 123, 0.72);
+}
+
 .map-marker.region_forest,
 .map-marker.region_mountain,
 .map-marker.region_coast,
@@ -1091,6 +1100,11 @@
 .scout-site-item.contested {
   border-color: rgba(255, 129, 77, 0.4);
   background: rgba(255, 129, 77, 0.09);
+}
+
+.controlled-site-item {
+  border-color: rgba(248, 223, 123, 0.38);
+  background: rgba(248, 223, 123, 0.09);
 }
 
 .tribe-flag-row {

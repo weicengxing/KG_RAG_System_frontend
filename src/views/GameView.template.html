@@ -234,6 +234,12 @@
                 <small>{{ site.contested ? `与 ${site.contestedByTribeName || '其他部落'} 的线索重叠；处理资源点争执或前往确认。` : '前往小地图标记处确认；附近有旗帜或营地道路会提高收益。' }}</small>
               </div>
             </div>
+            <div class="tribe-trade-list" v-if="currentTribe.controlledResourceSites?.length">
+              <div v-for="site in currentTribe.controlledResourceSites" :key="site.id" class="tribe-trade-item controlled-site-item">
+                <strong>{{ site.label }} · Lv.{{ site.level || 1 }} · 已控制</strong>
+                <small>回到地图标记处可周期收取；多次收取会升级，旗帜和道路会继续增加收益。</small>
+              </div>
+            </div>
             <div class="tribe-flag-row" v-if="hasTribeWorkbench">
               <span>石器工具：耐久 {{ stoneTool.durability }} / {{ stoneTool.max }}</span>
               <button class="tribe-mini-btn" @click="craftStoneTool">打磨</button>
@@ -274,7 +280,10 @@
                 <strong>{{ outcome.title }} · {{ outcome.otherTribeName }}</strong>
                 <small>{{ outcome.summary }}</small>
                 <small v-if="outcome.reward">奖励：木材 {{ outcome.reward.wood || 0 }} / 石块 {{ outcome.reward.stone || 0 }} / 食物 {{ outcome.reward.food || 0 }} / 声望 {{ outcome.reward.renown || 0 }}</small>
-                <div class="tribe-vote-actions" v-if="outcome.status === 'pending'">
+                <div class="tribe-vote-actions" v-if="outcome.status === 'pending' && outcome.responseOptions?.length">
+                  <button v-for="option in outcome.responseOptions" :key="option.key" @click="resolveBoundaryOutcome(outcome.id, option.key)">{{ option.label }}</button>
+                </div>
+                <div class="tribe-vote-actions" v-else-if="outcome.status === 'pending'">
                   <button @click="resolveBoundaryOutcome(outcome.id)">处理</button>
                 </div>
               </div>

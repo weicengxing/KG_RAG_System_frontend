@@ -1,0 +1,516 @@
+<div class="game-container">
+  <div class="game-canvas-wrapper" ref="canvasWrapper">
+    <div class="performance-monitor" v-if="showPerformance">
+      <div class="monitor-item">FPS: {{ fps }}</div>
+      <div class="monitor-item">延迟: {{ latency }}ms</div>
+      <div class="monitor-item">在线玩家: {{ playerCount }}</div>
+      <div class="monitor-item">地图: {{ currentMap }}</div>
+      <div class="monitor-item">已加载物体: {{ loadedObjectsCount }}/{{ totalObjectsCount }}</div>
+    </div>
+  </div>
+
+  <div class="game-ui">
+    <div class="top-bar">
+      <div class="player-info">
+        <div class="info-item">
+          <span class="info-label">血量:</span>
+          <div class="health-bar">
+            <div class="health-fill" :style="{ width: playerHealth + '%' }"></div>
+          </div>
+          <span class="info-value">{{ playerHealth }}/100</span>
+        </div>
+        <div class="info-item level-info">
+          <span class="info-label">等级:</span>
+          <span class="info-value">{{ playerLevel }}</span>
+          <div class="xp-bar">
+            <div class="xp-fill" :style="{ width: experiencePercent + '%' }"></div>
+          </div>
+          <span class="info-value">{{ playerExperience }}/{{ playerNextLevelExperience }}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">坐标:</span>
+          <span class="info-value">({{ Math.round(playerX) }}, {{ Math.round(displayPlayerZ) }})</span>
+        </div>
+      </div>
+
+      <div class="game-controls">
+        <button @click="saveMap" class="control-btn">保存地图</button>
+        <button @click="loadMap" class="control-btn">加载地图</button>
+        <button @click="togglePerformance" class="control-btn">{{ showPerformance ? '隐藏监视器' : '显示监视器' }}</button>
+        <button @click="toggleFullscreen" class="control-btn">{{ isFullscreen ? '退出全屏' : '全屏' }}</button>
+      </div>
+    </div>
+
+    <div class="announcement-bar">
+      <span class="announcement-label">公告</span>
+      <span>{{ announcementText }}</span>
+    </div>
+
+    <div class="minimap-panel">
+      <div class="minimap-header">
+        <div>
+          <div class="panel-eyebrow">探索</div>
+          <div class="minimap-title">{{ weatherLabel }}</div>
+        </div>
+        <div class="compass"><span>N</span><i></i></div>
+      </div>
+      <div class="minimap">
+        <div class="minimap-ring"></div>
+        <div
+          v-for="landmark in minimapLandmarks"
+          :key="landmark.id"
+          class="map-marker"
+          :class="[landmark.type, { 'own-tribe': landmark.isOwnTribe, honored: landmark.hasRuneHonor, legendary: landmark.isLegendaryRenown }]"
+          :style="{ left: landmark.left + '%', top: landmark.top + '%' }"
+          :title="landmark.title || landmark.label"
+        ></div>
+        <div class="player-marker" :style="{ left: minimapPlayer.left + '%', top: minimapPlayer.top + '%' }"></div>
+      </div>
+      <div class="nearest-landmark">{{ nearestLandmarkText }}</div>
+      <div class="resource-tide-hint" v-if="activeResourceTide" :class="{ inside: isInsideResourceTide }">
+        {{ isInsideResourceTide ? '你正在馈赠区域内' : resourceTideText }}
+      </div>
+      <div class="resource-tide-hint migration" v-if="activeMigrationSeason">{{ migrationSeasonText }}</div>
+      <div class="resource-tide-hint world-event" v-if="activeWorldEvent">{{ worldEventText }}</div>
+      <div class="resource-tide-hint season-objective" v-if="activeSeasonObjective" :class="{ inside: isInsideSeasonObjective }">
+        {{ isInsideSeasonObjective ? seasonObjectiveActiveHint : seasonObjectiveText }}
+      </div>
+      <div class="world-rumor-board" v-if="visibleWorldRumors.length">
+        <div class="world-rumor-header">
+          <span>传闻板</span>
+          <small>{{ visibleWorldRumors.length }} 条</small>
+        </div>
+        <div v-for="rumor in visibleWorldRumors" :key="rumor.id" class="world-rumor-item" :class="rumor.type">
+          <strong>{{ rumor.title }}</strong>
+          <span>{{ rumor.text }}</span>
+          <small>{{ formatHistoryTime(rumor.createdAt) }}</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="quest-panel collapsible-panel" :class="{ collapsed: !showQuestPanel }">
+      <button class="panel-toggle" @click="showQuestPanel = !showQuestPanel">
+        <span>新手任务</span>
+        <span>{{ showQuestPanel ? '收起' : '展开' }}</span>
+      </button>
+      <div class="panel-body" v-if="showQuestPanel">
+        <div class="panel-eyebrow">新手任务</div>
+        <div class="quest-title">{{ activeQuest.title }}</div>
+        <div class="quest-description">{{ activeQuest.description }}</div>
+        <div class="quest-progress-row">
+          <div class="quest-progress">
+            <div class="quest-progress-fill" :style="{ width: questProgressPercent + '%' }"></div>
+          </div>
+          <span>{{ activeQuest.progress }}/{{ activeQuest.target }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="inventory-panel collapsible-panel" :class="{ collapsed: !showInventoryPanel }">
+      <button class="panel-toggle" @click="showInventoryPanel = !showInventoryPanel">
+        <span>背包</span>
+        <span>{{ showInventoryPanel ? '收起' : '展开' }}</span>
+      </button>
+      <div class="panel-body" v-if="showInventoryPanel">
+        <div class="panel-eyebrow">背包</div>
+        <div class="inventory-grid">
+          <div v-for="item in inventoryItems" :key="item.key" class="inventory-slot" :class="{ active: item.count > 0 }">
+            <span class="inventory-name">{{ item.name }}</span>
+            <span class="inventory-count">{{ item.count }}</span>
+          </div>
+        </div>
+        <div class="tribe-target-text" v-if="stoneTool.durability">石器工具：{{ stoneTool.durability }} / {{ stoneTool.max }}</div>
+      </div>
+    </div>
+
+    <div class="tribe-panel collapsible-panel" :class="{ collapsed: !showTribePanel }">
+      <button class="panel-toggle" @click="showTribePanel = !showTribePanel">
+        <span>部落</span>
+        <span>{{ showTribePanel ? '收起' : '展开' }}</span>
+      </button>
+
+      <div class="panel-body tribe-body" v-if="showTribePanel">
+        <template v-if="!currentTribe">
+          <div class="panel-eyebrow">原始社会</div>
+          <div class="tribe-empty-title">还没有加入部落</div>
+          <div class="tribe-description">创建图腾或加入已有部落，一起采集、建设、选出首领。</div>
+          <div class="tribe-create-row">
+            <input v-model="newTribeName" maxlength="16" placeholder="部落名称" />
+            <button class="tribe-action-btn" @click="createTribe">创建</button>
+          </div>
+          <div class="tribe-list" v-if="tribeList.length">
+            <button v-for="tribe in tribeList" :key="tribe.id" class="tribe-list-item" @click="joinTribe(tribe.id)">
+              <span>{{ tribe.name }}</span>
+              <small>{{ tribe.memberCount }} 人 / {{ tribe.pendingApplications || 0 }} 待审</small>
+            </button>
+          </div>
+          <div v-else class="tribe-description">当前世界还没有部落。</div>
+        </template>
+
+        <template v-else>
+          <div class="panel-eyebrow">你的部落</div>
+          <div class="tribe-title-row">
+            <div>
+              <div class="tribe-name">{{ currentTribe.name }}</div>
+              <div class="tribe-description">{{ tribeRoleLabel }} · 贡献 {{ tribeContribution }}</div>
+            </div>
+            <div class="tribe-badge">{{ currentTribe.memberCount }} 人</div>
+          </div>
+
+          <div class="tribe-storage">
+            <div><span>木材</span><strong>{{ currentTribe.storage?.wood || 0 }}</strong></div>
+            <div><span>石块</span><strong>{{ currentTribe.storage?.stone || 0 }}</strong></div>
+            <div>
+              <span>食物</span>
+              <strong>{{ currentTribe.food || 0 }}</strong>
+              <small class="food-pressure-text" :class="{ warning: currentTribe.foodPressure?.active }">{{ foodPressureText }}</small>
+            </div>
+            <div><span>声望</span><strong>{{ currentTribe.renown || 0 }}</strong></div>
+          </div>
+
+          <div class="tribe-renown-card" v-if="currentTribe.renownState">
+            <div class="tribe-renown-title">
+              <strong>{{ currentTribe.renownState.title }}</strong>
+              <span>Lv.{{ currentTribe.renownState.level }} · {{ currentTribe.renownState.badge }}</span>
+            </div>
+            <div class="quest-progress tribe-progress">
+              <div class="quest-progress-fill" :style="{ width: currentTribe.renownState.progress + '%' }"></div>
+            </div>
+          </div>
+
+          <div class="tribe-announcement-card">
+            <div class="tribe-target-title">部落公告</div>
+            <div class="tribe-target-text">{{ currentTribe.announcement || '首领还没有留下公告。' }}</div>
+            <div v-if="canManageTribeTargets" class="tribe-announcement-edit">
+              <input v-model="tribeAnnouncementDraft" maxlength="120" placeholder="更新部落公告" />
+              <button class="tribe-mini-btn" @click="setTribeAnnouncement">发布</button>
+            </div>
+          </div>
+
+          <div class="tribe-trade-card">
+            <div class="tribe-target-title">部落贸易</div>
+            <div class="tribe-target-text">向其他部落发布交换请求，发布方会先托管给出的资源。</div>
+            <div v-if="canManageTribeTargets && currentTribe.tradeTargets?.length" class="tribe-trade-form">
+              <div v-if="celebrationTradeHint" class="tribe-action-hint">{{ celebrationTradeHint }}</div>
+              <select v-model="tradeDraft.targetTribeId">
+                <option value="">选择目标部落</option>
+                <option v-for="tribe in currentTribe.tradeTargets" :key="tribe.id" :value="tribe.id">
+                  {{ tribe.name }} · {{ tribe.tradeReputation?.title || '尚未建信' }}
+                </option>
+              </select>
+              <select v-model="tradeDraft.offerResource">
+                <option v-for="resource in tradeResourceOptions" :key="`offer-${resource.key}`" :value="resource.key">出 {{ resource.label }}</option>
+              </select>
+              <input v-model.number="tradeDraft.offerAmount" type="number" min="1" max="999" placeholder="给出数量" />
+              <select v-model="tradeDraft.requestResource">
+                <option v-for="resource in tradeResourceOptions" :key="`request-${resource.key}`" :value="resource.key">换 {{ resource.label }}</option>
+              </select>
+              <input v-model.number="tradeDraft.requestAmount" type="number" min="1" max="999" placeholder="换取数量" />
+              <button class="tribe-mini-btn" @click="createTribeTrade">发布贸易</button>
+            </div>
+            <div class="tribe-trade-list" v-if="currentTribe.tradeRequests?.length">
+              <div v-for="trade in currentTribe.tradeRequests" :key="trade.id" class="tribe-trade-item">
+                <strong>{{ tradeText(trade) }}</strong>
+                <small>{{ tradeDirectionText(trade) }} · {{ formatHistoryTime(trade.createdAt) }}</small>
+                <div class="tribe-vote-actions" v-if="canManageTribeTargets">
+                  <button v-if="trade.toTribeId === currentTribe.id" @click="resolveTribeTrade(trade.id, 'accept')">接受</button>
+                  <button v-if="trade.toTribeId === currentTribe.id" @click="resolveTribeTrade(trade.id, 'reject')">拒绝</button>
+                  <button v-if="trade.fromTribeId === currentTribe.id" @click="resolveTribeTrade(trade.id, 'cancel')">取消</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="tribe-camp-card" v-if="currentTribe.camp">
+            <div class="tribe-target-title">{{ currentTribe.camp.label || `${currentTribe.name}营地` }}</div>
+            <div class="tribe-target-text">{{ tribeCampSummaryText }}</div>
+            <div class="tribe-flag-row" v-if="currentTribe.scoutConfig">
+              <span>侦察：食物 -{{ currentTribe.scoutConfig.foodCost }}，标记远方事件</span>
+              <button class="tribe-mini-btn" @click="startTribeScout">派出</button>
+            </div>
+            <div class="tribe-flag-row" v-if="hasTribeWorkbench">
+              <span>石器工具：耐久 {{ stoneTool.durability }} / {{ stoneTool.max }}</span>
+              <button class="tribe-mini-btn" @click="craftStoneTool">打磨</button>
+            </div>
+            <div class="tribe-target-text" v-if="currentTribe.tamedBeasts">
+              驯养记录：{{ currentTribe.tamedBeasts }} 只幼兽 · {{ currentTribe.beastGrowth?.title || '初识火光' }} Lv.{{ currentTribe.beastGrowth?.level || 1 }}
+            </div>
+            <div class="tribe-target-text" v-if="currentTribe.beastGrowth?.remaining">幼兽再完成 {{ currentTribe.beastGrowth.remaining }} 次任务会继续成长。</div>
+            <div class="tribe-target-text" v-if="currentTribe.beastGrowth?.specialty">幼兽专长：{{ beastSpecialtyLabel(currentTribe.beastGrowth.specialty) }}</div>
+            <div class="tribe-target-text" v-if="activeBeastTaskText">幼兽动向：{{ activeBeastTaskText }}</div>
+            <div class="beast-task-row" v-if="beastSpecialtyOptions.length">
+              <button v-for="specialty in beastSpecialtyOptions" :key="specialty.key" class="tribe-mini-btn" @click="chooseBeastSpecialty(specialty.key)">
+                {{ specialty.label }}
+              </button>
+            </div>
+            <div class="beast-task-row" v-if="currentTribe.tamedBeasts">
+              <button v-for="task in beastTaskOptions" :key="task.key" class="tribe-mini-btn" @click="assignBeastTask(task.key)">{{ task.label }}</button>
+            </div>
+            <div class="tribe-target-text" v-if="currentTribe.tradeReputation">贸易信誉：{{ currentTribe.tradeReputation.title }} · 已完成 {{ currentTribe.tradeReputation.completed }} 次</div>
+            <div class="tribe-target-text" v-if="currentTribe.celebrationBuff">庆典余韵：{{ celebrationBuffText }}</div>
+            <div class="tribe-target-text" v-if="currentTribe.seasonChain">季节连锁：{{ currentTribe.seasonChain.regions?.length || 0 }} / {{ currentTribe.seasonChain.target }} 个地形</div>
+            <div class="tribe-target-text" v-if="currentTribe.seasonChain?.pendingCelebration">待举行：{{ currentTribe.seasonChain.pendingCelebration.title }}</div>
+            <div class="beast-task-row" v-if="celebrationChoiceOptions.length">
+              <button v-for="choice in celebrationChoiceOptions" :key="choice.key" class="tribe-mini-btn" :disabled="!canManageTribeTargets" @click="chooseSeasonCelebration(choice.key)">
+                {{ choice.label }}
+              </button>
+            </div>
+            <div class="tribe-flag-row" v-if="currentTribe.flagConfig">
+              <span>领地旗帜 {{ currentTribe.territoryFlags?.length || 0 }} / {{ currentTribe.flagConfig.max }}</span>
+              <button class="tribe-mini-btn" :disabled="!canManageTribeTargets" @click="claimTribeFlag">插旗</button>
+            </div>
+            <div class="tribe-building-tags" v-if="tribeCampBuildingTags.length">
+              <span v-for="building in tribeCampBuildingTags" :key="building.id" class="tribe-building-tag">{{ building.label }}</span>
+            </div>
+            <div class="tribe-build-options" v-if="currentTribe.buildOptions?.length">
+              <button
+                v-for="option in currentTribe.buildOptions"
+                :key="option.key"
+                class="tribe-build-option"
+                :class="{ built: option.built }"
+                :disabled="option.built || !option.affordable || !canManageTribeTargets"
+                @click="buildTribeStructure(option.key)"
+              >
+                <span>{{ option.built ? '已建成' : '建造' }}{{ option.label }}</span>
+                <small>木 {{ option.wood }} / 石 {{ option.stone }}</small>
+              </button>
+            </div>
+            <div class="tribe-ritual-card" :class="{ active: activeTribeRitual }">
+              <div class="tribe-target-title">部落仪式</div>
+              <div class="tribe-target-text">{{ tribeRitualText }}</div>
+              <small>{{ tribeRitualCostText }}</small>
+              <button v-if="canManageTribeTargets" class="tribe-mini-btn" :disabled="Boolean(activeTribeRitual)" @click="startTribeRitual">点燃丰收篝火</button>
+              <button v-if="canManageTribeTargets" class="tribe-mini-btn feast" :disabled="Boolean(activeTribeRitual)" @click="startTribeFeast">举办部落宴会</button>
+            </div>
+            <button class="tribe-action-btn wide muted" @click="returnToTribeSpawn">返回营地出生点</button>
+          </div>
+
+          <div class="tribe-runes-card" v-if="currentTribe.runeOptions?.length">
+            <div class="tribe-target-title">图腾铭文</div>
+            <div class="tribe-target-text">{{ currentTribe.publicRuneSummary?.text || tribeRuneHonorText() }}</div>
+            <div class="tribe-target-text" v-if="currentTribe.discoveryProgress">稀有发现进度：{{ currentTribe.discoveryProgress }}</div>
+            <div class="tribe-rune-list">
+              <button
+                v-for="rune in currentTribe.runeOptions"
+                :key="rune.key"
+                class="tribe-rune-item"
+                :class="{ unlocked: rune.unlocked, available: rune.available, rare: rune.rare }"
+                :disabled="rune.unlocked || !rune.available || !canManageTribeTargets"
+                @click="unlockTribeRune(rune.key)"
+              >
+                <strong>{{ rune.unlocked ? '已刻写' : rune.available ? '可刻写' : '未达成' }} / {{ rune.title }}</strong>
+                <em v-if="rune.rare">稀有</em>
+                <span>{{ rune.summary }}</span>
+                <small v-if="rune.effectSummary">效果：{{ rune.effectSummary }}</small>
+              </button>
+            </div>
+          </div>
+
+          <div class="tribe-history-card" v-if="currentTribe.history?.length">
+            <div class="tribe-target-title">部落日志</div>
+            <div class="tribe-history-tabs">
+              <button v-for="filter in tribeHistoryFilters" :key="filter.key" :class="{ active: tribeHistoryFilter === filter.key }" @click="tribeHistoryFilter = filter.key">
+                {{ filter.label }}
+              </button>
+            </div>
+            <div v-for="event in filteredTribeHistory" :key="event.id" class="tribe-history-item" @click="openTribeHistoryDetail(event)">
+              <strong>{{ event.title }}</strong>
+              <span>{{ event.detail || '部落留下了一条新的历史记录。' }}</span>
+            </div>
+            <div v-if="!filteredTribeHistory.length" class="tribe-target-text">当前筛选下暂无日志。</div>
+            <button v-if="hasMoreTribeHistory" class="tribe-history-more" :disabled="tribeHistoryLoading" @click="loadMoreTribeHistory">
+              {{ tribeHistoryLoading ? '加载中...' : `加载更早日志 ${Math.max((tribeHistoryTotal || 0) - tribeHistoryLoaded.length, 0)} 条` }}
+            </button>
+          </div>
+
+          <div class="tribe-target" v-if="currentTribe.target">
+            <div class="tribe-target-title">{{ currentTribe.target.title }}</div>
+            <div class="tribe-target-text">{{ currentTribe.target.summary || `目标：木材 ${currentTribe.target.wood} / 石块 ${currentTribe.target.stone}` }}</div>
+            <div class="tribe-target-progress-row">
+              <span>木材 {{ currentTribe.target.currentWood || 0 }}/{{ currentTribe.target.wood || 0 }}</span>
+              <span>石块 {{ currentTribe.target.currentStone || 0 }}/{{ currentTribe.target.stone || 0 }}</span>
+            </div>
+            <div class="quest-progress tribe-progress">
+              <div class="quest-progress-fill" :style="{ width: tribeTargetProgressPercent + '%' }"></div>
+            </div>
+            <button v-if="canManageTribeTargets && currentTribe.target.completed && !currentTribe.target.isFinal" class="tribe-action-btn wide" @click="advanceTribeTarget">
+              在石器台推进下一个目标
+            </button>
+          </div>
+
+          <button class="tribe-action-btn wide" @click="contributeResources">上交背包资源</button>
+
+          <div class="tribe-members" v-if="currentTribe.members?.length">
+            <div v-for="member in sortedTribeMembers" :key="member.id" class="tribe-member">
+              <div>
+                <span>{{ member.name }}</span>
+                <small>{{ roleLabel(member.role) }} · 贡献 {{ member.contribution }}</small>
+              </div>
+              <div class="tribe-vote-actions" v-if="member.id !== playerId">
+                <button v-if="canStartVote" class="tribe-mini-btn" :disabled="!canVoteForRole(member, 'elder')" @click="startTribeVote('elder', member.id)">选长老</button>
+                <button v-if="canGovernMember(member)" class="tribe-mini-btn" @click="allocateResources(member.id)">预分配</button>
+                <button v-if="canGovernMember(member)" class="tribe-mini-btn danger" @click="punishMember(member)">惩罚</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="tribe-vote-list" v-if="canReviewApplications && pendingApplications.length">
+            <div v-for="application in tribeApplications" :key="application.id" class="tribe-vote tribe-application">
+              <div>{{ application.playerName }} 申请加入部落</div>
+              <small>{{ application.message || '想加入部落' }}</small>
+              <div class="tribe-vote-actions">
+                <button @click="reviewTribeApplication(application.id, true)">同意</button>
+                <button @click="reviewTribeApplication(application.id, false)">拒绝</button>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <div class="interaction-prompt" v-if="interactionTarget">
+      <div>按 <kbd>E</kbd> {{ interactionTarget.actionText }} {{ interactionTarget.label }}</div>
+      <span>{{ interactionTarget.rewardText }}</span>
+      <small v-if="interactionTarget.hintText">{{ interactionTarget.hintText }}</small>
+    </div>
+
+    <div class="totem-overlay" v-if="showTotemOverlay">
+      <div class="totem-card">
+        <div class="panel-eyebrow">图腾荣誉</div>
+        <h2>{{ activeTotemDetail.label || '部落图腾' }}</h2>
+        <p>{{ activeTotemDetail.summaryText || '图腾尚未公开铭文。' }}</p>
+        <div class="totem-rune-list" v-if="activeTotemDetail.runes?.length">
+          <div v-for="rune in activeTotemDetail.runes" :key="rune.key || rune.title" class="totem-rune-item">
+            <strong>{{ rune.title || '未知铭文' }} <em v-if="rune.rare">稀有</em></strong>
+            <span>{{ rune.effectSummary || rune.summary || '这枚铭文的故事仍待补全。' }}</span>
+            <small>{{ rune.unlockedByName ? `刻写者：${rune.unlockedByName}` : '刻写者未知' }} <template v-if="rune.unlockedAt">· {{ formatHistoryTime(rune.unlockedAt) }}</template></small>
+          </div>
+        </div>
+        <button @click="closeTotemDetail">关闭</button>
+      </div>
+    </div>
+
+    <div class="history-overlay" v-if="showHistoryDetail">
+      <div class="history-detail-card">
+        <div class="panel-eyebrow">部落日志详情</div>
+        <h2>{{ activeHistoryDetail.title || '历史事件' }}</h2>
+        <p>{{ activeHistoryDetail.detail || '部落留下了一条新的历史记录。' }}</p>
+        <div class="history-detail-meta">
+          <span>类型：{{ tribeHistoryTypeLabel(activeHistoryDetail.type) }}</span>
+          <span v-if="activeHistoryDetail.createdAt">时间：{{ formatHistoryTime(activeHistoryDetail.createdAt) }}</span>
+        </div>
+        <div class="history-related-card" v-if="activeHistoryReplay">
+          <div class="history-related-title">{{ activeHistoryReplay.title }}</div>
+          <div class="history-related-text">{{ activeHistoryReplay.text }}</div>
+          <div class="history-related-meta" v-if="activeHistoryReplay.meta?.length">
+            <span v-for="item in activeHistoryReplay.meta" :key="item">{{ item }}</span>
+          </div>
+        </div>
+        <button @click="closeTribeHistoryDetail">关闭</button>
+      </div>
+    </div>
+
+    <div class="cave-overlay" v-if="showCaveOverlay">
+      <div class="cave-card">
+        <div class="panel-eyebrow">洞穴探索</div>
+        <h2>{{ activeCave?.label || '未知山洞' }}</h2>
+        <div class="cave-expedition-status" :class="{ ready: caveExpeditionReady }">{{ caveExpeditionStatusText }}</div>
+        <div class="cave-food-status" v-if="caveExpeditionReady">部落食物：{{ currentTribe?.food || 0 }} / {{ selectedCavePlan.foodCost }}</div>
+        <div class="cave-plan-tabs" v-if="caveExpeditionReady">
+          <button v-for="plan in caveExpeditionPlans" :key="plan.key" :class="{ active: caveExpeditionPlanKey === plan.key }" :disabled="caveDepth > 0" @click="selectCavePlan(plan.key)">
+            <strong>{{ plan.label }}</strong>
+            <span>{{ plan.summary }}</span>
+          </button>
+        </div>
+        <div class="cave-route-map" v-if="caveRoute.length">
+          <div class="cave-route-progress">
+            <div class="cave-route-progress-fill" :style="{ width: caveRouteProgressPercent + '%' }"></div>
+          </div>
+          <div class="cave-route-nodes">
+            <div v-for="node in caveRoute" :key="node.id" class="cave-node" :class="[node.type, node.status]" :title="node.description">
+              <span>{{ node.depth }}</span>
+            </div>
+          </div>
+          <div class="cave-node-detail" v-if="activeCaveNode">
+            <strong>{{ activeCaveNode.title }}</strong>
+            <span>{{ activeCaveNode.description }}</span>
+          </div>
+        </div>
+        <p>{{ caveExplorationLog }}</p>
+        <div class="cave-stats">
+          <div><span>深度</span><strong>{{ caveDepth }}</strong></div>
+          <div><span>补给</span><strong>{{ caveSupplies }}</strong></div>
+          <div><span>收获</span><strong>{{ caveFinds }}</strong></div>
+        </div>
+        <div class="cave-actions">
+          <button @click="exploreDeeper" :disabled="caveSupplies <= 0 || caveExpeditionSynced">{{ caveExpeditionSynced ? '已到达尽头' : '继续深入' }}</button>
+          <button @click="leaveCave">返回地表</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="herd-action-panel" v-if="activeWorldEvent?.key === 'herd'">
+      <div class="panel-eyebrow">兽群处理</div>
+      <div class="herd-action-options">
+        <button v-for="action in herdActionOptions" :key="action.key" :class="{ active: herdActionKey === action.key }" @click="herdActionKey = action.key">
+          <strong>{{ action.label }}</strong>
+          <span>{{ action.summary }}</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="toast-stack" v-if="toastMessages.length">
+      <div v-for="toast in toastMessages" :key="toast.id" class="game-toast" :class="{ rare: toast.rare }">{{ toast.text }}</div>
+    </div>
+
+    <div class="rare-rune-toast" v-if="rareRuneUnlock">
+      <div class="rare-rune-toast-card">
+        <div class="rare-rune-sigil">✦</div>
+        <div class="panel-eyebrow">稀有铭文觉醒</div>
+        <h2>{{ rareRuneUnlock.title || '未知铭文' }}</h2>
+        <p>{{ rareRuneUnlock.effectSummary || rareRuneUnlock.summary || '图腾正在回响新的力量。' }}</p>
+      </div>
+    </div>
+
+    <div class="chat-panel" v-if="showChat">
+      <div class="chat-header">
+        <span>聊天 (按 T 打开)</span>
+        <button @click="showChat = false" class="close-btn">×</button>
+      </div>
+      <div class="chat-messages" ref="chatMessagesEl">
+        <div v-for="(message, index) in chatMessages" :key="index" class="chat-message" :class="{ 'own-message': message.isOwn, 'system-message': message.isSystem }">
+          <span class="message-sender">{{ message.sender }}:</span>
+          <span class="message-text">{{ message.text }}</span>
+        </div>
+      </div>
+      <div class="chat-input">
+        <input ref="chatInputEl" v-model="chatInput" @keydown="handleChatKeyDown" placeholder="Enter 或 Ctrl+P 发送消息..." maxlength="100" />
+      </div>
+    </div>
+    <button v-else @click="openChat" class="chat-toggle-btn">聊天 (T)</button>
+
+    <div class="instructions-panel" v-if="showInstructions">
+      <div class="instructions-header">
+        <span>游戏说明</span>
+        <button @click="showInstructions = false" class="close-btn">×</button>
+      </div>
+      <div class="instructions-content">
+        <h3>控制说明：</h3>
+        <ul>
+          <li>WASD：移动角色</li>
+          <li>鼠标拖拽：旋转视角</li>
+          <li>T：打开聊天</li>
+          <li>空格：跳跃</li>
+          <li>E：互动、采集或处理事件</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="connection-status" :class="connectionStatus">
+      <span v-if="connectionStatus === 'connecting'">连接服务器中...</span>
+      <span v-if="connectionStatus === 'connected'">已连接</span>
+      <span v-if="connectionStatus === 'disconnected'">连接断开</span>
+      <span v-if="connectionStatus === 'reconnecting'">重新连接中...</span>
+    </div>
+  </div>
+</div>

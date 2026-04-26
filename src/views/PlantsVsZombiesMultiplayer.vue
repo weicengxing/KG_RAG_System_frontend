@@ -1,6 +1,5 @@
 <template>
   <div class="plants-vs-zombies-view">
-    <!-- 游戏标题 -->
     <div class="game-header">
       <h1>🌻 植物大战僵尸 🧟</h1>
       <div class="header-buttons">
@@ -12,17 +11,16 @@
     </div>
 
     <div class="game-container">
-      <!-- 左侧：植物/僵尸选择栏 -->
       <div class="plants-sidebar" v-if="role === 'plant'">
         <h3>🌻 植物选择</h3>
         <div class="plant-slots">
-          <div 
-            class="plant-slot" 
-            v-for="plant in plantOptions" 
+          <div
+            v-for="plant in plantOptions"
             :key="plant.id"
+            class="plant-slot"
             :class="{
-              'selected': selectedPlant === plant.id,
-              'disabled': sunEnergy < plant.cost
+              selected: selectedPlant === plant.id,
+              disabled: sunEnergy < plant.cost
             }"
             @click="selectPlant(plant.id)"
           >
@@ -36,13 +34,13 @@
       <div class="zombies-sidebar" v-if="role === 'zombie'">
         <h3>🧟 僵尸选择</h3>
         <div class="zombie-slots">
-          <div 
-            class="zombie-slot" 
-            v-for="zombie in zombieOptions" 
+          <div
+            v-for="zombie in zombieOptions"
             :key="zombie.rawId"
+            class="zombie-slot"
             :class="{
-              'selected': selectedZombie === zombie.rawId,
-              'disabled': zombieEnergy < zombie.cost
+              selected: selectedZombie === zombie.rawId,
+              disabled: zombieEnergy < zombie.cost
             }"
             @click="selectZombie(zombie.rawId)"
           >
@@ -53,19 +51,17 @@
         </div>
       </div>
 
-      <!-- 中间：游戏画布 -->
       <div class="game-canvas">
         <canvas ref="gameCanvas" @click="handleCanvasClick"></canvas>
       </div>
 
-      <!-- 右侧：信息面板 -->
       <div class="info-panel">
-        <div class="info-item">
+        <div class="panel-content">
           <div class="panel-header">
-            <h3>{{ role === 'plant' ? '植物选择' : '僵尸选择' }}</h3>
+            <h3>{{ role === 'plant' ? '植物阵营' : '僵尸阵营' }}</h3>
             <div class="resource-info">
               <span v-if="role === 'plant'">☀️ 阳光: {{ sunEnergy }}</span>
-              <span v-if="role === 'zombie'">⚡ 能量: {{ zombieEnergy }}</span>
+              <span v-if="role === 'zombie'">🧠 能量: {{ zombieEnergy }}</span>
             </div>
           </div>
 
@@ -89,13 +85,12 @@
       </div>
     </div>
 
-    <!-- 游戏说明 -->
     <div class="game-instructions">
       <h3>游戏说明</h3>
-      <p>1. 植物玩家选择植物后点击画布网格进行种植。</p>
-      <p>2. 僵尸玩家选择僵尸后点击画布对应行召唤僵尸。</p>
-      <p>3. 双方根据资源消耗放置单位，先突破防线的一方获胜。</p>
-      <p>4. 房间状态与延迟会实时同步，必要时可使用同步按钮。</p>
+      <p>1. 植物方现在是权威端，完整运行单人版战斗逻辑。</p>
+      <p>2. 僵尸方只负责选怪和出怪，战场结果由植物方快照同步。</p>
+      <p>3. 所有植物攻击、子弹命中、减速和爆炸都以植物方结果为准。</p>
+      <p>4. 如果画面有延迟，可以手动点击“同步状态”强制刷新一次。</p>
     </div>
   </div>
 </template>
@@ -110,41 +105,37 @@ import { plantConfig, zombieConfig, gameConfig } from '../pvz/config.js'
 const router = useRouter()
 const route = useRoute()
 
-// 游戏引擎实例
 let gameEngine = null
 let pingInterval = null
+let syncEngineStateInterval = null
+let ws = null
+let reportedGameOver = false
+let authoritySyncInterval = null
+const PANEL_SYNC_INTERVAL_MS = 100
+const AUTHORITY_SYNC_INTERVAL_MS = 33
 
-// 响应式状态
 const roomId = ref(route.params.roomId)
 const userId = ref(route.params.userId || localStorage.getItem('username'))
 const fromSelection = ref(route.query.from_selection === '1')
 const role = ref('')
 const connectionStatus = ref('连接中...')
-const gameState = ref(null)
 const latency = ref(0)
 const gameCanvas = ref(null)
 
-// 植物玩家状态（从engine读取）
 const sunEnergy = ref(10000)
 const selectedPlant = ref(null)
 const selectedPlantsList = ref([])
 
-// 僵尸玩家状态（从engine读取）
 const zombieEnergy = ref(10000)
 const selectedZombie = ref(null)
 const selectedZombiesList = ref([])
 
-// 用于UI渲染的游戏实体（从engine同步）
 const plants = ref([])
 const zombies = ref([])
 const fallingSuns = ref([])
 const lawnMowers = ref([])
 const animations = ref([])
 
-// WebSocket
-let ws = null
-
-// 配置别名
 const zombieTypeAlias = {
   basic: 'normal'
 }
@@ -165,7 +156,8 @@ const plantIdAlias = {
   cherrybomb: 'cherryBomb'
 }
 
-// 计算属性
+const isAuthority = computed(() => role.value === 'plant')
+
 const plantOptions = computed(() => {
   return selectedPlantsList.value
     .map((rawId) => {
@@ -190,104 +182,23 @@ const zombieOptions = computed(() => {
     .filter((item) => item && item.rawId)
 })
 
-// 应用选择
 const applySelectionsFromQuery = () => {
   const plantSelection = route.query.plant_selection
   if (plantSelection && selectedPlantsList.value.length === 0) {
-    const raw = Array.isArray(plantSelection)
-      ? plantSelection.join(',')
-      : plantSelection
+    const raw = Array.isArray(plantSelection) ? plantSelection.join(',') : plantSelection
     selectedPlantsList.value = raw.split(',').filter(Boolean)
   }
 
   const zombieSelection = route.query.zombie_selection
   if (zombieSelection && selectedZombiesList.value.length === 0) {
-    const raw = Array.isArray(zombieSelection)
-      ? zombieSelection.join(',')
-      : zombieSelection
+    const raw = Array.isArray(zombieSelection) ? zombieSelection.join(',') : zombieSelection
     selectedZombiesList.value = raw.split(',').filter(Boolean)
   }
 }
 
-// 自动收集阳光
-const collectAllSuns = () => {
-  if (!gameEngine || role.value !== 'plant') return
-  gameEngine.toggleAutoCollectSun()
-}
-
-// 初始化引擎
-const initEngine = () => {
-  console.log('[initEngine] called', {
-    hasCanvas: !!gameCanvas.value,
-    hasWs: !!ws,
-  })
-  
-  if (!gameCanvas.value) {
-    console.warn('[initEngine] aborted because missing canvas/ws', {
-      canvas: gameCanvas.value,
-      ws
-    })
-    ElMessage.error('游戏画布未准备好！')
-    return
-  }
-  
-  if (!ws || ws.readyState !== WebSocket.OPEN) {
-    console.warn('[initEngine] aborted because WebSocket not connected', {
-      ws: ws?.readyState
-    })
-    ElMessage.error('WebSocket 未连接！')
-    return
-  }
-  
-  const canvasWidth = gameConfig.gridCols * gameConfig.cellWidth
-  const canvasHeight = gameConfig.gridRows * gameConfig.cellHeight
-  
-  console.log('[initEngine] canvas sizing', {
-    width: gameCanvas.value.width,
-    height: gameCanvas.value.height,
-    rect: gameCanvas.value.getBoundingClientRect()
-  })
-
-  // 创建MultiplayerGameEngine
-  gameEngine = new MultiplayerGameEngine(
-    gameCanvas.value,
-    canvasWidth,
-    canvasHeight,
-    ws,
-    role.value
-  )
-  console.log('[initEngine] engine created', {
-    isPlaying: gameEngine.isPlaying,
-    hasCanvas: !!gameEngine.canvas
-  })
-
-  // 设置回调
-  gameEngine.onPlantPlaced = (plant, payload) => {
-    if (role.value === 'zombie') {
-      syncEngineState()
-    }
-  }
-  
-  gameEngine.onZombieSpawned = (zombie, payload) => {
-    if (role.value === 'plant') {
-      syncEngineState()
-    }
-  }
-  
-  gameEngine.start()
-  console.log('[initEngine] engine started')
-  
-  syncEngineStateInterval = setInterval(() => {
-    syncEngineState()
-  }, 100)
-  
-  console.log('[initEngine] completed')
-}
-
-// 同步引擎状态到UI
 const syncEngineState = () => {
   if (!gameEngine) return
-  
+
   sunEnergy.value = gameEngine.sunEnergy
   zombieEnergy.value = gameEngine.zombieEnergy
   plants.value = [...gameEngine.plants]
@@ -295,9 +206,186 @@ const syncEngineState = () => {
   fallingSuns.value = [...gameEngine.suns]
   lawnMowers.value = [...gameEngine.lawnMowers]
   animations.value = [...gameEngine.animations]
+
+  if (!gameEngine.selectedPlant) {
+    selectedPlant.value = ''
+  }
+  if (!gameEngine.selectedZombie) {
+    selectedZombie.value = ''
+  }
 }
 
-// WebSocket连接
+const maybeBroadcastAuthorityState = () => {
+  if (!gameEngine || !isAuthority.value) return
+
+  gameEngine.syncRealtimeState()
+
+  if (gameEngine.gameOver && !reportedGameOver && ws?.readyState === WebSocket.OPEN) {
+    reportedGameOver = true
+    ws.send(JSON.stringify({
+      type: 'game_over',
+      payload: {
+        winner: 'zombie',
+        reason: 'zombie_reached_home'
+      }
+    }))
+  }
+}
+
+const collectAllSuns = () => {
+  if (!gameEngine || !isAuthority.value) return
+  gameEngine.toggleAutoCollectSun()
+  syncEngineState()
+  maybeBroadcastAuthorityState()
+}
+
+const ensureCanvasSize = async () => {
+  await nextTick()
+  if (!gameCanvas.value) return false
+
+  const canvasWidth = gameConfig.gridCols * gameConfig.cellWidth
+  const canvasHeight = gameConfig.gridRows * gameConfig.cellHeight
+  gameCanvas.value.width = canvasWidth
+  gameCanvas.value.height = canvasHeight
+  return true
+}
+
+const initEngine = () => {
+  if (!gameCanvas.value || !ws || ws.readyState !== WebSocket.OPEN) {
+    ElMessage.error('游戏初始化条件未满足')
+    return
+  }
+
+  const canvasWidth = gameConfig.gridCols * gameConfig.cellWidth
+  const canvasHeight = gameConfig.gridRows * gameConfig.cellHeight
+
+  gameCanvas.value.width = canvasWidth
+  gameCanvas.value.height = canvasHeight
+
+  gameEngine = new MultiplayerGameEngine(
+    gameCanvas.value,
+    canvasWidth,
+    canvasHeight,
+    ws,
+    role.value
+  )
+
+  gameEngine.onGameOver = () => {
+    maybeBroadcastAuthorityState()
+  }
+
+  gameEngine.start()
+  reportedGameOver = false
+  syncEngineState()
+
+  if (syncEngineStateInterval) {
+    clearInterval(syncEngineStateInterval)
+  }
+
+  syncEngineStateInterval = setInterval(() => {
+    syncEngineState()
+  }, PANEL_SYNC_INTERVAL_MS)
+
+  if (authoritySyncInterval) {
+    clearInterval(authoritySyncInterval)
+    authoritySyncInterval = null
+  }
+
+  if (isAuthority.value) {
+    authoritySyncInterval = setInterval(() => {
+      if (!gameEngine || !isAuthority.value || gameEngine.gameOver || ws?.readyState !== WebSocket.OPEN) {
+        if (authoritySyncInterval) {
+          clearInterval(authoritySyncInterval)
+          authoritySyncInterval = null
+        }
+        return
+      }
+
+      maybeBroadcastAuthorityState()
+    }, AUTHORITY_SYNC_INTERVAL_MS)
+  }
+
+  if (isAuthority.value) {
+    gameEngine.syncRealtimeState(true)
+  }
+}
+
+const handleRealtimeGameMessage = (message) => {
+  if (!gameEngine) return
+  gameEngine.onServerMessage(message)
+  syncEngineState()
+}
+
+const handleServerMessage = async (message) => {
+  switch (message.type) {
+    case 'event.connected':
+      role.value = message.payload.role
+      sunEnergy.value = 10000
+      zombieEnergy.value = 10000
+
+      await ensureCanvasSize()
+
+      if (message.payload.room_status === 'playing' && !gameEngine) {
+        initEngine()
+        connectionStatus.value = '游戏中'
+      }
+
+      if (!fromSelection.value) {
+        setTimeout(() => {
+          redirectToSelection()
+        }, 500)
+      }
+      break
+
+    case 'event.game_start':
+      connectionStatus.value = '游戏中'
+
+      if (message.payload.plant_selection && selectedPlantsList.value.length === 0) {
+        selectedPlantsList.value = message.payload.plant_selection
+      }
+      if (message.payload.zombie_selection && selectedZombiesList.value.length === 0) {
+        selectedZombiesList.value = message.payload.zombie_selection
+      }
+
+      await nextTick()
+      initEngine()
+      ElMessage.success('游戏开始！')
+      break
+
+    case 'event.game_over': {
+      const winner = message.payload.winner
+      const winnerText = winner === 'plant' ? '植物' : '僵尸'
+      connectionStatus.value = '已结束'
+      if (gameEngine) {
+        gameEngine.gameOver = true
+        gameEngine.isPlaying = false
+      }
+      ElMessage.success(`游戏结束，${winnerText}获胜`)
+      break
+    }
+
+    case 'pong':
+      latency.value = Date.now() - message.payload.timestamp
+      break
+
+    default:
+      if (
+        message.type === 'state.snapshot' ||
+        message.type === 'state.sync' ||
+        message.type === 'zombie_spawn_request' ||
+        message.type.startsWith('zombie_spawn_') ||
+        message.type.startsWith('plant_')
+      ) {
+        if (!gameEngine && (message.type === 'state.snapshot' || message.type === 'state.sync')) {
+          await ensureCanvasSize()
+          initEngine()
+        }
+        handleRealtimeGameMessage(message)
+      }
+      break
+  }
+}
+
 const initWebSocket = () => {
   const wsUrl = `ws://localhost:8000/api/ws/pvz/room/${roomId.value}?user_id=${userId.value}`
   ws = new WebSocket(wsUrl)
@@ -308,68 +396,7 @@ const initWebSocket = () => {
 
   ws.onmessage = async (event) => {
     const message = JSON.parse(event.data)
-    
-    switch (message.type) {
-      case 'event.connected':
-        role.value = message.payload.role
-        if (role.value === 'plant') {
-          sunEnergy.value = 10000
-        } else {
-          zombieEnergy.value = 10000
-        }
-
-        if (!fromSelection.value) {
-          setTimeout(() => {
-            redirectToSelection()
-          }, 500)
-        }
-        break
-        
-      case 'event.game_start':
-        console.log('hjjdsabfcsvs') 
-        connectionStatus.value = '游戏中'
-        
-        if (message.payload.plant_selection && selectedPlantsList.value.length === 0) {
-          selectedPlantsList.value = message.payload.plant_selection
-        }
-        if (message.payload.zombie_selection && selectedZombiesList.value.length === 0) {
-          selectedZombiesList.value = message.payload.zombie_selection
-        }
-        
-        ElMessage.success('游戏开始！')
-        
-        // 初始化引擎
-        await nextTick()
-        initEngine()
-        break
-        
-      case 'event.game_over':
-        const winner = message.payload.winner
-        const winnerText = winner === 'plant' ? '植物' : '僵尸'
-        ElMessage.success(`游戏结束！${winnerText}获胜！`)
-        break
-        
-      case 'state.snapshot':
-      case 'state.sync':
-        // 服务器同步状态
-        if (gameEngine) {
-          gameEngine.onServerMessage(message)
-        }
-        syncEngineState()
-        break
-        
-      case 'plant_place_':
-      case 'zombie_spawn_':
-        // 将消息传递给engine处理
-        if (gameEngine) {
-          gameEngine.onServerMessage(message)
-        }
-        break
-        
-      case 'pong':
-        latency.value = Date.now() - message.payload.timestamp
-        break
-    }
+    await handleServerMessage(message)
   }
 
   ws.onerror = (error) => {
@@ -387,10 +414,13 @@ const initWebSocket = () => {
       clearInterval(syncEngineStateInterval)
       syncEngineStateInterval = null
     }
+    if (authoritySyncInterval) {
+      clearInterval(authoritySyncInterval)
+      authoritySyncInterval = null
+    }
   }
 }
 
-// 跳转到选择界面
 const redirectToSelection = () => {
   if (role.value === 'plant') {
     router.push({
@@ -412,71 +442,79 @@ const redirectToSelection = () => {
   }
 }
 
-// 选择植物
 const selectPlant = (plantType) => {
-  selectedPlant.value = plantType
+  if (!gameEngine || !isAuthority.value) {
+    selectedPlant.value = plantType
+    return
+  }
+
+  if (gameEngine.selectPlant(plantType)) {
+    selectedPlant.value = plantType
+  }
 }
 
-// 选择僵尸
 const selectZombie = (zombieType) => {
-  selectedZombie.value = zombieType
+  if (!gameEngine) {
+    selectedZombie.value = zombieType
+    return
+  }
+
+  if (gameEngine.selectZombie(zombieType)) {
+    selectedZombie.value = zombieType
+  }
 }
 
-// 处理画布点击
 const handleCanvasClick = (event) => {
   if (!gameEngine) return
-  
+  event.stopImmediatePropagation()
+
   const canvas = event.target
   const rect = canvas.getBoundingClientRect()
   const x = event.clientX - rect.left
   const y = event.clientY - rect.top
 
-  // 计算网格位置
-  const cellWidth = gameConfig.cellWidth
-  const cellHeight = gameConfig.cellHeight
-  const col = Math.floor(x / cellWidth)
-  const row = Math.floor(y / cellHeight)
-  
-  if (role.value === 'plant' && selectedPlant.value) {
-    // 植物玩家：种植植物
+  const col = Math.floor(x / gameConfig.cellWidth)
+  const row = Math.floor(y / gameConfig.cellHeight)
+
+  if (isAuthority.value && selectedPlant.value) {
     if (col >= 0 && col < gameConfig.gridCols && row >= 0 && row < gameConfig.gridRows) {
-      gameEngine.plant(col, row, selectedPlant.value)
-      selectedPlant.value = ''
-      syncEngineState()
+      const planted = gameEngine.plant(col, row, selectedPlant.value)
+      if (planted) {
+        selectedPlant.value = ''
+        gameEngine.selectedPlant = null
+        syncEngineState()
+        maybeBroadcastAuthorityState()
+      }
     }
   } else if (role.value === 'zombie' && selectedZombie.value) {
-    // 僵尸玩家：在对应行生成僵尸
     if (row >= 0 && row < gameConfig.gridRows) {
-      gameEngine.spawnZombie(row, selectedZombie.value)
-      selectedZombie.value = ''
-      syncEngineState()
+      const spawned = gameEngine.spawnZombie(row, selectedZombie.value)
+      if (spawned) {
+        selectedZombie.value = ''
+        gameEngine.selectedZombie = null
+        syncEngineState()
+      }
     }
   }
 }
 
-// 发送游戏状态更新
 const sendGameStateUpdate = () => {
+  if (!gameEngine || !isAuthority.value) {
+    ElMessage.warning('只有植物方可以同步权威状态')
+    return
+  }
+
+  if (gameEngine.syncRealtimeState(true)) {
+    ElMessage.success('状态已同步')
+  }
+}
+
+const declareGameOver = async () => {
   if (!ws || ws.readyState !== WebSocket.OPEN) {
     ElMessage.error('WebSocket未连接')
     return
   }
 
-  const state = {
-    sun_energy: sunEnergy.value,
-    zombie_energy: zombieEnergy.value,
-    plants: plants.value,
-    zombies: zombies.value,
-    timestamp: Date.now()
-  }
-
-  ws.send(JSON.stringify({
-    type: 'game_state_update',
-    payload: state
-  }))
-}
-
-// 宣布游戏结束
-const declareGameOver = async () => {
   try {
     await ElMessageBox.confirm(
       '确定要结束游戏吗？',
@@ -487,21 +525,19 @@ const declareGameOver = async () => {
         type: 'warning'
       }
     )
-    
-    const winner = role.value === 'plant' ? 'plant' : 'zombie'
+
     ws.send(JSON.stringify({
       type: 'game_over',
       payload: {
-        winner: winner,
-        reason: `${role.value}玩家宣布结束游戏`
+        winner: role.value === 'plant' ? 'plant' : 'zombie',
+        reason: `${role.value} player declared game over`
       }
     }))
   } catch {
-    // 用户取消
+    // ignore
   }
 }
 
-// 返回房间
 const goBack = () => {
   if (gameEngine) {
     gameEngine.stop()
@@ -517,16 +553,18 @@ const goBack = () => {
     clearInterval(syncEngineStateInterval)
     syncEngineStateInterval = null
   }
+  if (authoritySyncInterval) {
+    clearInterval(authoritySyncInterval)
+    authoritySyncInterval = null
+  }
   router.push({ name: 'PvZMultiplayerRoom' })
 }
 
-// 挂载
-let syncEngineStateInterval = null
-
 onMounted(() => {
   applySelectionsFromQuery()
+  ensureCanvasSize()
   initWebSocket()
-  
+
   pingInterval = setInterval(() => {
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({
@@ -537,7 +575,6 @@ onMounted(() => {
   }, 10000)
 })
 
-// 卸载
 onUnmounted(() => {
   if (gameEngine) {
     gameEngine.stop()
@@ -553,6 +590,10 @@ onUnmounted(() => {
     clearInterval(syncEngineStateInterval)
     syncEngineStateInterval = null
   }
+  if (authoritySyncInterval) {
+    clearInterval(authoritySyncInterval)
+    authoritySyncInterval = null
+  }
 })
 </script>
 
@@ -563,7 +604,6 @@ onUnmounted(() => {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
-/* 游戏标题 */
 .game-header {
   display: flex;
   align-items: center;
@@ -585,57 +625,65 @@ onUnmounted(() => {
   background-clip: text;
 }
 
-/* 游戏容器 */
 .game-container {
   display: flex;
   gap: 20px;
   margin-bottom: 20px;
 }
 
-/* 植物选择栏 */
-.plants-sidebar {
-  width: 200px;
-  max-height: calc(100vh - 20px);
-  padding: 20px;
+.plants-sidebar,
+.zombies-sidebar,
+.info-panel,
+.game-instructions,
+.game-canvas {
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
   border-radius: 16px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.plants-sidebar,
+.zombies-sidebar {
+  width: 200px;
+  max-height: calc(100vh - 20px);
+  padding: 20px;
   overflow-y: auto;
 }
 
-.plants-sidebar h3 {
+.plants-sidebar h3,
+.zombies-sidebar h3 {
   margin: 0 0 16px 0;
   font-size: 1.2rem;
   color: white;
   position: sticky;
   top: 0;
   background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
   padding: 10px 0;
   z-index: 1;
 }
 
-.plant-slots {
+.plant-slots,
+.zombie-slots {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.plant-slot {
-  position: relative;
+.plant-slot,
+.zombie-slot {
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.3s ease;
   border: 2px solid transparent;
+  background: rgba(255, 255, 255, 0.1);
 }
 
-.plant-slot:hover {
+.plant-slot:hover,
+.zombie-slot:hover {
   background: rgba(255, 255, 255, 0.2);
   transform: scale(1.05);
 }
@@ -645,17 +693,25 @@ onUnmounted(() => {
   box-shadow: 0 0 16px rgba(251, 191, 36, 0.5);
 }
 
-.plant-slot.disabled {
+.zombie-slot.selected {
+  border-color: #ef4444;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.5);
+}
+
+.plant-slot.disabled,
+.zombie-slot.disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.plant-icon {
+.plant-icon,
+.zombie-icon {
   font-size: 2.5rem;
   margin-bottom: 8px;
 }
 
-.plant-name {
+.plant-name,
+.zombie-name {
   font-size: 0.9rem;
   color: white;
   margin-bottom: 4px;
@@ -666,87 +722,13 @@ onUnmounted(() => {
   color: #fbbf24;
 }
 
-/* 僵尸选择栏 */
-.zombies-sidebar {
-  width: 200px;
-  max-height: calc(100vh - 20px);
-  padding: 20px;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  overflow-y: auto;
-}
-
-.zombies-sidebar h3 {
-  margin: 0 0 16px 0;
-  font-size: 1.2rem;
-  color: white;
-  position: sticky;
-  top: 0;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  padding: 10px 0;
-  z-index: 1;
-}
-
-.zombie-slots {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.zombie-slot {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  border: 2px solid transparent;
-}
-
-.zombie-slot:hover {
-  background: rgba(255, 255, 255, 0.2);
-  transform: scale(1.05);
-}
-
-.zombie-slot.selected {
-  border-color: #ef4444;
-  box-shadow: 0 0 16px rgba(239, 68, 68, 0.5);
-}
-
-.zombie-slot.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.zombie-icon {
-  font-size: 2.5rem;
-  margin-bottom: 8px;
-}
-
-.zombie-name {
-  font-size: 0.9rem;
-  color: white;
-  margin-bottom: 4px;
-}
-
 .zombie-cost {
   font-size: 0.8rem;
   color: #ef4444;
 }
 
-/* 游戏画布 */
 .game-canvas {
   flex: 1;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -756,16 +738,49 @@ onUnmounted(() => {
 .game-canvas canvas {
   display: block;
   cursor: crosshair;
+  background: #4a7c4e;
 }
 
-/* 信息面板 */
 .info-panel {
   width: 180px;
   padding: 20px;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.panel-content {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.panel-content .info-item {
+  width: 100%;
+}
+
+.panel-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 16px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.panel-header h3 {
+  margin: 0;
+  color: white;
+  font-size: 1.1rem;
+  text-align: center;
+}
+
+.resource-info {
+  display: flex;
+  justify-content: center;
+  text-align: center;
+}
+
+.resource-info .info-value {
+  font-size: 1rem;
 }
 
 .info-item {
@@ -787,68 +802,37 @@ onUnmounted(() => {
 }
 
 .info-value {
-  font-size: 1.8rem;
+  font-size: 1.2rem;
   font-weight: 700;
   color: white;
   text-align: center;
 }
 
-/* 响应式设计 */
-@media (max-width: 1024px) {
-  .game-container {
-    flex-direction: column;
-  }
-
-  .plants-sidebar,
-  .zombies-sidebar,
-  .info-panel {
-    width: 100%;
-  }
-
-  .plant-slots,
-  .zombie-slots {
-    flex-direction: row;
-    overflow-x: auto;
-  }
-
-  .info-panel {
-    display: flex;
-    justify-content: space-around;
-  }
-
-  .info-item {
-    border-bottom: none;
-    border-right: 1px solid rgba(255, 255, 255, 0.1);
-    flex-direction: row;
-    gap: 12px;
-  }
-
-  .info-item:last-child {
-    border-right: none;
-  }
+.info-value.sun {
+  color: #fbbf24;
 }
 
-@media (max-width: 768px) {
-  .plants-vs-zombies-view {
-    padding: 10px;
-  }
-
-  .game-header {
-    flex-direction: column;
-    gap: 16px;
-    padding: 16px;
-  }
-
-  .game-header h1 {
-    font-size: 1.8rem;
-  }
-
-  .game-canvas {
-    overflow-x: auto;
-  }
+.info-value.energy {
+  color: #f87171;
 }
 
-/* 控制按钮样式 */
+.game-instructions {
+  padding: 20px;
+}
+
+.game-instructions h3 {
+  margin: 0 0 12px 0;
+  font-size: 1.2rem;
+  color: white;
+}
+
+.game-instructions p {
+  margin: 8px 0;
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.6;
+}
+
 .header-buttons {
   display: flex;
   gap: 8px;
@@ -872,7 +856,6 @@ onUnmounted(() => {
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
 }
 
-/* 自定义滚动条样式 */
 .plants-sidebar::-webkit-scrollbar,
 .zombies-sidebar::-webkit-scrollbar {
   width: 6px;
@@ -895,25 +878,76 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.5);
 }
 
-/* 游戏说明 */
-.game-instructions {
-  padding: 20px;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+@media (max-width: 1024px) {
+  .game-container {
+    flex-direction: column;
+  }
+
+  .plants-sidebar,
+  .zombies-sidebar,
+  .info-panel {
+    width: 100%;
+  }
+
+  .plant-slots,
+  .zombie-slots {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+
+  .info-panel {
+    display: flex;
+    justify-content: space-around;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .panel-header {
+    width: 100%;
+    margin-bottom: 0;
+  }
+
+  .panel-content {
+    width: 100%;
+    display: flex;
+    justify-content: space-around;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .info-item {
+    border-bottom: none;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    flex-direction: row;
+    gap: 12px;
+  }
+
+  .info-item:last-child {
+    border-right: none;
+  }
+
+  .panel-content .info-item {
+    padding: 0 12px;
+  }
 }
 
-.game-instructions h3 {
-  margin: 0 0 12px 0;
-  font-size: 1.2rem;
-  color: white;
-}
+@media (max-width: 768px) {
+  .plants-vs-zombies-view {
+    padding: 10px;
+  }
 
-.game-instructions p {
-  margin: 8px 0;
-  font-size: 0.95rem;
-  color: rgba(255, 255, 255, 0.9);
-  line-height: 1.6;
+  .game-header {
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px;
+  }
+
+  .game-header h1 {
+    font-size: 1.8rem;
+  }
+
+  .game-canvas {
+    overflow-x: auto;
+  }
 }
 </style>

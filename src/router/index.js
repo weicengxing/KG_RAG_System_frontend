@@ -1,25 +1,25 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import LoginView from '../views/LoginView.vue'
-import ForgotPasswordView from '../views/ForgotPasswordView.vue'
-import MainLayout from '../layouts/MainLayout.vue'
-import DashboardView from '../views/DashboardView.vue'
-import ProfileView from '../views/ProfileView.vue'
-import AccountSettingsView from '../views/AccountSettingsView.vue'
-import SecurityPrivacyView from '../views/SecurityPrivacyView.vue'
-import NovelSimpleView from '../views/NovelSimple.vue'
-import MusicPlayerView from '../views/MusicPlayerView.vue'
-import MusicPlayerView_simple from '../views/MusicPlayerView_simple.vue'
-import MusicRankingsView from '../views/MusicRankingsView.vue'
-import NovelUploadView from '../views/NovelUploadView.vue'
-import ChatRoomView from '../views/ChatRoomView.vue'
-import KnowledgeGraphView from '../views/KnowledgeGraphView.vue'
-import GameView from '../views/GameView.vue'
-import PlantsVsZombiesView from '../views/PlantsVsZombiesView.vue'
-import PlantSelectionView from '../views/PlantSelectionView.vue'
-import ZombieSelectionView from '../views/ZombieSelectionView.vue'
-import PvZMultiplayerRoomView from '../views/PvZMultiplayerRoomView.vue'
-import PlantsVsZombiesMultiplayer from '../views/PlantsVsZombiesMultiplayer.vue'
-import ClaudeWebChatView from '../views/ClaudeWebChatView.vue'
+
+const LoginView = () => import('../views/LoginView.vue')
+const ForgotPasswordView = () => import('../views/ForgotPasswordView.vue')
+const MainLayout = () => import('../layouts/MainLayout.vue')
+const DashboardView = () => import('../views/DashboardView.vue')
+const ProfileView = () => import('../views/ProfileView.vue')
+const AccountSettingsView = () => import('../views/AccountSettingsView.vue')
+const SecurityPrivacyView = () => import('../views/SecurityPrivacyView.vue')
+const NovelSimpleView = () => import('../views/NovelSimple.vue')
+const MusicPlayerViewSimple = () => import('../views/MusicPlayerView_simple.vue')
+const MusicRankingsView = () => import('../views/MusicRankingsView.vue')
+const NovelUploadView = () => import('../views/NovelUploadView.vue')
+const ChatRoomView = () => import('../views/ChatRoomView.vue')
+const KnowledgeGraphView = () => import('../views/KnowledgeGraphView.vue')
+const GameView = () => import('../views/GameView.vue')
+const PlantsVsZombiesView = () => import('../views/PlantsVsZombiesView.vue')
+const PlantSelectionView = () => import('../views/PlantSelectionView.vue')
+const ZombieSelectionView = () => import('../views/ZombieSelectionView.vue')
+const PvZMultiplayerRoomView = () => import('../views/PvZMultiplayerRoomView.vue')
+const PlantsVsZombiesMultiplayer = () => import('../views/PlantsVsZombiesMultiplayer.vue')
+const ClaudeWebChatView = () => import('../views/ClaudeWebChatView.vue')
 
 const routes = [
   // 无需登录的页面
@@ -34,7 +34,7 @@ const routes = [
     children: [
       { path: 'dashboard', name: 'Dashboard', component: DashboardView },
       { path: 'novel', name: 'NovelSimple', component: NovelSimpleView },
-      { path: 'music', name: 'MusicPlayer', component: MusicPlayerView_simple },
+      { path: 'music', name: 'MusicPlayer', component: MusicPlayerViewSimple },
       { path: 'music-rankings', name: 'MusicRankings', component: MusicRankingsView },
       { path: 'profile', name: 'Profile', component: ProfileView },
       { path: 'account-settings', name: 'AccountSettings', component: AccountSettingsView },

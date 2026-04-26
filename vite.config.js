@@ -22,11 +22,43 @@ export default defineConfig({
     sourcemap: false,
     rollupOptions: {
       output: {
-        manualChunks: {
-          // 将第三方库拆分
-          'element-plus': ['element-plus'],
-          'three': ['three'],
-          'vue-vendor': ['vue', 'vue-router', 'pinia']
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined
+
+          if (id.includes('node_modules/three/')) {
+            return 'three'
+          }
+
+          if (id.includes('node_modules/element-plus/') || id.includes('node_modules/@element-plus/')) {
+            return 'element-plus'
+          }
+
+          if (id.includes('node_modules/@antv/')) {
+            return 'antv'
+          }
+
+          if (id.includes('node_modules/pixi.js/')) {
+            return 'pixi'
+          }
+
+          if (id.includes('node_modules/mammoth/')) {
+            return 'mammoth'
+          }
+
+          if (
+            id.includes('node_modules/@vue/') ||
+            id.includes('node_modules/vue/') ||
+            id.includes('node_modules/vue-router/') ||
+            id.includes('node_modules/pinia/')
+          ) {
+            return 'vue-vendor'
+          }
+
+          if (id.includes('node_modules/axios/')) {
+            return 'http-vendor'
+          }
+
+          return 'vendor'
         }
       },
       input: {

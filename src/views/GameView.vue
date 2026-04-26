@@ -1,144 +1,23 @@
-<template>
-  <div class="game-container">
-    <!-- 游戏画布容器 -->
-    <div class="game-canvas-wrapper" ref="canvasWrapper">
-      <!-- Three.js 会自动创建 canvas -->
-      <!-- 性能监视器 -->
-      <div class="performance-monitor" v-if="showPerformance">
-        <div class="monitor-item">FPS: {{ fps }}</div>
-        <div class="monitor-item">延迟: {{ latency }}ms</div>
-        <div class="monitor-item">在线玩家: {{ playerCount }}</div>
-        <div class="monitor-item">地图: {{ currentMap }}</div>
-        <div class="monitor-item">已加载物体: {{ loadedObjectsCount }}/{{ totalObjectsCount }}</div>
-      </div>
-    </div>
-
-    <!-- 游戏 UI 层 -->
-    <div class="game-ui">
-      <!-- 顶部信息栏 -->
-      <div class="top-bar">
-        <div class="player-info">
-          <div class="info-item">
-            <span class="info-label">血量:</span>
-            <div class="health-bar">
-              <div class="health-fill" :style="{ width: playerHealth + '%' }"></div>
-            </div>
-            <span class="info-value">{{ playerHealth }}/100</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">等级:</span>
-            <span class="info-value">{{ playerLevel }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">坐标:</span>
-            <span class="info-value">({{ Math.round(playerX) }}, {{ Math.round(playerZ) }})</span>
-          </div>
-        </div>
-
-        <div class="game-controls">
-          <button @click="saveMap" class="control-btn">
-            💾 保存地图
-          </button>
-          <button @click="loadMap" class="control-btn">
-            📂 加载地图
-          </button>
-          <button @click="togglePerformance" class="control-btn">
-            {{ showPerformance ? '隐藏监视器' : '显示监视器' }}
-          </button>
-          <button @click="toggleFullscreen" class="control-btn">
-            {{ isFullscreen ? '退出全屏' : '全屏' }}
-          </button>
-        </div>
-      </div>
-
-      <!-- 聊天窗口 -->
-      <div class="chat-window" v-if="showChat">
-        <div class="chat-header">
-          <span>聊天 (按 T 打开)</span>
-          <button @click="showChat = false" class="close-btn">×</button>
-        </div>
-        <div class="chat-messages" ref="chatMessages">
-          <div
-            v-for="(msg, index) in chatMessages"
-            :key="index"
-            class="chat-message"
-            :class="{ 'own-message': msg.isOwn, 'system-message': msg.isSystem }"
-          >
-            <span class="message-sender">{{ msg.sender }}:</span>
-            <span class="message-text">{{ msg.text }}</span>
-          </div>
-        </div>
-        <div class="chat-input">
-          <input
-            ref="chatInputEl"
-            v-model="chatInput"
-            @keydown="handleChatKeyDown"
-            placeholder="Enter 或 Ctrl+P 发送消息..."
-            maxlength="100"
-          />
-        </div>
-      </div>
-
-      <!-- 聊天按钮（收起时显示） -->
-      <button v-if="!showChat" @click="openChat" class="chat-toggle-btn">
-        💬 聊天 (T)
-      </button>
-
-      <!-- 游戏说明 -->
-      <div class="game-instructions" v-if="showInstructions">
-        <div class="instructions-header">
-          <span>游戏说明</span>
-          <button @click="showInstructions = false" class="close-btn">×</button>
-        </div>
-        <div class="instructions-content">
-          <h3>控制说明：</h3>
-          <ul>
-            <li>WASD：移动角色</li>
-            <li>鼠标拖拽：旋转视角</li>
-            <li>鼠标滚轮：缩放视角</li>
-            <li>T：打开聊天</li>
-            <li>ESC：打开/关闭菜单</li>
-            <li>空格：跳跃</li>
-          </ul>
-          <h3>游戏目标：</h3>
-          <ul>
-            <li>探索 3D 世界地图</li>
-            <li>与其他玩家实时互动</li>
-            <li>收集资源，提升等级</li>
-          </ul>
-          <h3>多人模式：</h3>
-          <ul>
-            <li>实时同步所有玩家位置</li>
-            <li>支持聊天交流</li>
-            <li>地图可保存和加载</li>
-          </ul>
-        </div>
-      </div>
-
-      <!-- 连接状态提示 -->
-      <div class="connection-status" :class="connectionStatus">
-        <span v-if="connectionStatus === 'connecting'">🔄 连接服务器中...</span>
-        <span v-if="connectionStatus === 'connected'">✅ 已连接</span>
-        <span v-if="connectionStatus === 'disconnected'">❌ 连接断开</span>
-        <span v-if="connectionStatus === 'reconnecting'">🔄 重新连接中...</span>
-      </div>
-    </div>
-  </div>
-</template>
+<template src="./GameView.template.html"></template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { computed, ref, onMounted, onUnmounted, nextTick } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { WorldEntityManager } from '../game/worldEntityManager.js'
 import { createWeatherSystem } from '../game/weatherSystem.js'
+import request from '../utils/request.js'
+import { API_CONFIG } from '../config.js'
 
 // 游戏状态
 const canvasWrapper = ref(null)
-const showPerformance = ref(true)
+const showPerformance = ref(false)
 const showChat = ref(false)
 const showInstructions = ref(true)
 const isFullscreen = ref(false)
+const showQuestPanel = ref(true)
+const showInventoryPanel = ref(true)
+const showTribePanel = ref(true)
 
 // 性能监控
 const fps = ref(60)
@@ -149,14 +28,90 @@ const mapSeed = ref(null)
 const mapEnvironment = ref(null)
 const loadedObjectsCount = ref(0)
 const totalObjectsCount = ref(0)
+const currentWeather = ref('sunny')
+const resourceTideTick = ref(Date.now())
 
 // 玩家状态
 const playerHealth = ref(100)
 const playerLevel = ref(1)
+const playerExperience = ref(0)
+const playerNextLevelExperience = ref(100)
 const playerX = ref(0)
 const playerZ = ref(0)
 const playerId = ref(null)
 const playerName = ref('我')
+
+const inventory = ref({
+  wood: 0,
+  stone: 0
+})
+
+const activeQuest = ref({
+  id: 'starter_gather',
+  title: '熟悉这片岛屿',
+  description: '采集任意 5 份木材或矿石，建立探索的第一批物资。',
+  progress: 0,
+  target: 5,
+  completed: false
+})
+
+const interactionTarget = ref(null)
+const toastMessages = ref([])
+let toastId = 0
+
+const newTribeName = ref('黎明部落')
+const tribeList = ref([])
+const currentTribe = ref(null)
+const tribeRole = ref(null)
+const tribeContribution = ref(0)
+const tribeVotes = ref([])
+const pendingTribeJoinRequests = ref(new Set())
+const tribeAnnouncementDraft = ref('')
+const allocationDraft = ref({ wood: 0, stone: 0 })
+const tradeDraft = ref({
+  targetTribeId: '',
+  offerResource: 'wood',
+  offerAmount: 5,
+  requestResource: 'stone',
+  requestAmount: 5
+})
+const tribeRitualTick = ref(Date.now())
+const tribeHistoryFilter = ref('all')
+const tribeHistoryPageSize = 6
+const tribeHistoryLoaded = ref([])
+const tribeHistoryNextCursor = ref(null)
+const tribeHistoryTotal = ref(0)
+const tribeHistoryLoading = ref(false)
+const showHistoryDetail = ref(false)
+const activeHistoryDetail = ref({})
+const showTotemOverlay = ref(false)
+const activeTotemDetail = ref({})
+const rareRuneUnlock = ref(null)
+let rareRuneUnlockTimer = null
+const seasonSummary = ref({
+  currentSeason: '',
+  lastSettlement: null,
+  settlementHistory: []
+})
+const worldRumors = ref([])
+const showCaveOverlay = ref(false)
+const activeCave = ref(null)
+const caveDepth = ref(0)
+const caveSupplies = ref(0)
+const caveFinds = ref(0)
+const caveExplorationLog = ref('')
+const caveRoute = ref([])
+const activeCaveNodeIndex = ref(0)
+const caveExpeditionSynced = ref(false)
+const caveFoodCost = 6
+const caveFoodSupported = ref(false)
+const caveExpeditionPlanKey = ref('deep')
+const herdActionKey = ref('hunt')
+const stoneTool = ref({
+  durability: 0,
+  max: 12,
+  bonus: 1
+})
 
 // 聊天
 const chatMessages = ref([
@@ -171,6 +126,8 @@ const connectionStatus = ref('connecting')
 
 // Three.js 相关
 let scene, camera, renderer, controls
+let ambientLight = null
+let directionalLight = null
 let localPlayer = null
 let remotePlayers = new Map()
 let terrain = null
@@ -194,6 +151,14 @@ const loadDistance = 80 // 加载距离
 const unloadDistance = 100 // 卸载距离
 
 let heartbeatTimerId = null
+let reconnectTimerId = null
+let keepAliveTimerId = null
+let tribeRitualTimerId = null
+let resourceTideTimerId = null
+let beastFeedbackClearTimerId = null
+let manualClose = false
+let reconnectAttempt = 0
+let authRefreshInFlight = null
 
 // 键盘状态
 const keys = {
@@ -201,7 +166,8 @@ const keys = {
   a: false,
   s: false,
   d: false,
-  space: false
+  space: false,
+  e: false
 }
 
 // 玩家移动速度
@@ -210,8 +176,891 @@ const jumpPower = 5
 let velocity = new THREE.Vector3()
 const gravity = -20
 const playerRadius = 0.7
+const interactionDistance = 4
+const resourceRewards = {
+  tree: {
+    label: '树木',
+    itemKey: 'wood',
+    itemName: '木材',
+    amount: 1,
+    experience: 20
+  },
+  rock: {
+    label: '矿石',
+    itemKey: 'stone',
+    itemName: '矿石',
+    amount: 1,
+    experience: 25
+  }
+}
+const tradeResourceLabels = {
+  wood: '木材',
+  stone: '石块',
+  food: '食物'
+}
+const tradeResourceOptions = Object.entries(tradeResourceLabels).map(([key, label]) => ({ key, label }))
+const tribeLandmarkDecorationTypes = new Set(['tribe_spawn', 'tribe_camp', 'tribe_flag', 'tribe_beast_marker'])
+const tribeInteractableTypes = ['tribe_storage', 'tribe_workbench', 'tribe_hut', 'tribe_spawn', 'tribe_camp', 'tribe_totem', 'tribe_flag', 'tribe_beast_marker']
+const regionLandmarkTypes = ['region_forest', 'region_mountain', 'region_coast', 'region_ruin']
+const landmarkFallbackTypes = ['campfire', 'ruin', 'crystal', 'tribe_totem', 'tribe_storage', 'tribe_workbench', 'tribe_spawn', 'tribe_camp', 'tribe_flag', 'tribe_beast_marker', 'cave_entrance', ...regionLandmarkTypes]
+const tribeBuildingTypeLabels = {
+  tribe_totem: '图腾',
+  tribe_storage: '仓库',
+  tribe_workbench: '石器台',
+  tribe_hut: '棚屋',
+  tribe_flag: '领地旗帜',
+  tribe_beast_marker: '驯养幼兽',
+  campfire: '营火'
+}
+const caveNodeLibrary = [
+  {
+    type: 'entrance',
+    title: '洞口斜坡',
+    description: '潮湿空气从石缝里涌出，脚下还能看到外面的天光。'
+  },
+  {
+    type: 'crossroad',
+    title: '潮湿岔路',
+    description: '两条窄路在这里分开，墙面上有动物爪痕。'
+  },
+  {
+    type: 'ore',
+    title: '萤石裂隙',
+    description: '蓝白色矿光从裂缝里透出，适合采集石料。'
+  },
+  {
+    type: 'lore',
+    title: '古痕石厅',
+    description: '石壁上有部落刻痕，像是在记录一次迁徙。'
+  },
+  {
+    type: 'hazard',
+    title: '落石窄道',
+    description: '上方偶尔滚落碎石，继续前进会消耗更多补给。'
+  },
+  {
+    type: 'deep',
+    title: '深层矿脉',
+    description: '这里已经远离洞口，矿石更多，也更适合部落远征。'
+  }
+]
+const caveExpeditionPlans = [
+  { key: 'steady', label: '稳健', summary: '少耗食物，路线较短', foodCost: 5, depthBonus: -1, supplyBonus: 3, findBonus: 0, findMultiplier: 0.9, oreRoll: 0.72, loreRoll: 0.34 },
+  { key: 'deep', label: '深入', summary: '均衡推进，收获稳定', foodCost: 7, depthBonus: 0, supplyBonus: 1, findBonus: 1, findMultiplier: 1.12, oreRoll: 0.66, loreRoll: 0.36 },
+  { key: 'risky', label: '冒险', summary: '高消耗，高稀有机会', foodCost: 9, depthBonus: 1, supplyBonus: -1, findBonus: 2, findMultiplier: 1.3, oreRoll: 0.58, loreRoll: 0.42 }
+]
+const herdActionOptions = [
+  { key: 'drive', label: '驱赶', summary: '声望更高，食物较少' },
+  { key: 'hunt', label: '追猎', summary: '带回更多食物' },
+  { key: 'tame', label: '驯养', summary: '获得幼兽记录' }
+]
+const beastTaskOptions = [
+  { key: 'guard', label: '守营' },
+  { key: 'hunt', label: '助猎' },
+  { key: 'haul', label: '驮运' }
+]
+
+const optionMapToList = (options = {}) => Object.entries(options || {}).map(([key, value]) => ({
+  key,
+  label: value?.label || key,
+  summary: value?.summary || ''
+}))
 
 const PLAYER_STAND_HEIGHT = 2
+const minimapRadius = 95
+const weatherMeta = {
+  sunny: { label: '晴朗海风', announcement: '按 T 呼出交流板，附近玩家可以看到你的消息。' },
+  rain: { label: '雨幕森林', announcement: '雨声变密了，营火和晶石会成为更醒目的路标。' },
+  snow: { label: '细雪海岸', announcement: '雪天视野更柔和，留意小地图上的地标方向。' },
+  fog: { label: '薄雾岛屿', announcement: '雾气正在靠近，建议沿着地标探索，不要离海岸太远。' }
+}
+
+const inventoryItems = computed(() => [
+  { key: 'wood', name: '木材', count: inventory.value.wood },
+  { key: 'stone', name: '矿石', count: inventory.value.stone }
+])
+
+const experiencePercent = computed(() => {
+  const next = playerNextLevelExperience.value || 1
+  return Math.min(100, Math.round((playerExperience.value / next) * 100))
+})
+
+const questProgressPercent = computed(() => {
+  const quest = activeQuest.value
+  const target = quest.target || 1
+  return Math.min(100, Math.round((quest.progress / target) * 100))
+})
+
+const displayPlayerZ = computed(() => playerZ.value)
+
+const weatherLabel = computed(() => weatherMeta[currentWeather.value]?.label || '未知天气')
+
+const formatCountdown = (seconds) => {
+  const safeSeconds = Math.max(0, Math.ceil(Number(seconds) || 0))
+  const minutes = Math.floor(safeSeconds / 60)
+  const remainder = safeSeconds % 60
+  return `${minutes}:${String(remainder).padStart(2, '0')}`
+}
+
+const announcementText = computed(() => worldEventText.value || migrationSeasonText.value || resourceTideText.value || weatherMeta[currentWeather.value]?.announcement || weatherMeta.sunny.announcement)
+
+const activeResourceTide = computed(() => {
+  resourceTideTick.value
+  const tide = mapEnvironment.value?.resourceTide
+  if (!tide?.activeUntil) return null
+  const remainingSeconds = Math.max(0, Math.ceil((new Date(tide.activeUntil).getTime() - Date.now()) / 1000))
+  if (remainingSeconds <= 0) return null
+  return { ...tide, remainingSeconds }
+})
+
+const resourceTideText = computed(() => {
+  const tide = activeResourceTide.value
+  if (!tide) return null
+  const seasonText = tide.seasonBoosted ? '（迁徙季节增强）' : ''
+  return `${tide.regionLabel}出现大地馈赠${seasonText}：区域内采集额外 +${tide.gatherBonus || 0}，剩余 ${formatCountdown(tide.remainingSeconds)}`
+})
+
+const activeMigrationSeason = computed(() => {
+  resourceTideTick.value
+  const season = mapEnvironment.value?.migrationSeason
+  if (!season?.activeUntil) return null
+  const remainingSeconds = Math.max(0, Math.ceil((new Date(season.activeUntil).getTime() - Date.now()) / 1000))
+  if (remainingSeconds <= 0) return null
+  return { ...season, remainingSeconds }
+})
+
+const migrationSeasonText = computed(() => {
+  const season = activeMigrationSeason.value
+  if (!season) return null
+  return `${season.title || '迁徙季节'}：兽群更频繁，大地馈赠采集额外 +${season.tideBonus || 0}，剩余 ${formatCountdown(season.remainingSeconds)}`
+})
+
+const activeWorldEvent = computed(() => {
+  resourceTideTick.value
+  const events = Array.isArray(mapEnvironment.value?.worldEvents) ? mapEnvironment.value.worldEvents : []
+  const event = events.find((item) => item?.activeUntil && new Date(item.activeUntil).getTime() > Date.now())
+  if (!event) return null
+  const remainingSeconds = Math.max(0, Math.ceil((new Date(event.activeUntil).getTime() - Date.now()) / 1000))
+  return { ...event, remainingSeconds }
+})
+
+const activeSeasonObjective = computed(() => {
+  resourceTideTick.value
+  const objective = mapEnvironment.value?.seasonObjective
+  if (!objective?.activeUntil) return null
+  const remainingSeconds = Math.max(0, Math.ceil((new Date(objective.activeUntil).getTime() - Date.now()) / 1000))
+  if (remainingSeconds <= 0) return null
+  return { ...objective, remainingSeconds }
+})
+
+const seasonObjectiveText = computed(() => {
+  const objective = activeSeasonObjective.value
+  if (!objective) return null
+  return `${objective.regionLabel || '未知区域'}出现${objective.title || '季节目标'}：${objective.summary || '短暂机会正在出现'}，剩余 ${formatCountdown(objective.remainingSeconds)}`
+})
+
+const seasonObjectiveActiveHint = computed(() => {
+  const base = '你正在季节目标区域内'
+  return celebrationDiscoveryHint.value ? `${base} · ${celebrationDiscoveryHint.value}` : base
+})
+
+const worldEventText = computed(() => {
+  const event = activeWorldEvent.value
+  if (!event) return null
+  const rewardText = worldEventRewardText(event)
+  const rewardSuffix = rewardText ? `，处理奖励：${rewardText}` : ''
+  return `${event.regionLabel || '未知区域'}出现${event.title || '世界事件'}：${event.summary || '新的动态事件正在发生'}${rewardSuffix}，剩余 ${formatCountdown(event.remainingSeconds)}`
+})
+
+const worldEventRewardText = (event) => {
+  const reward = event?.reward || {}
+  const parts = []
+  if (reward.wood) parts.push(`木材${reward.wood > 0 ? '+' : ''}${reward.wood}`)
+  if (reward.stone) parts.push(`石块${reward.stone > 0 ? '+' : ''}${reward.stone}`)
+  if (reward.food) parts.push(`食物+${reward.food}`)
+  if (reward.discoveryProgress) parts.push(`发现进度+${reward.discoveryProgress}`)
+  if (reward.renown) parts.push(`声望+${reward.renown}`)
+  return parts.join('、')
+}
+
+const isInsideResourceTide = computed(() => {
+  const tide = activeResourceTide.value
+  if (!tide) return false
+  const dx = playerX.value - (tide.x || 0)
+  const dz = playerZ.value - (tide.z || 0)
+  const radius = tide.radius || 0
+  return dx * dx + dz * dz <= radius * radius
+})
+
+const resourceTideGatherBonus = computed(() => (isInsideResourceTide.value ? (activeResourceTide.value?.gatherBonus || 0) : 0))
+
+const isCurrentTribeEntity = (entity) => {
+  const tribeId = currentTribe.value?.id
+  return Boolean(tribeId && entity?.tribeId && entity.tribeId === tribeId)
+}
+
+const formatMapPoint = (point) => {
+  if (!point) return '未知位置'
+  const x = Math.round(point.x || 0)
+  const z = Math.round(point.z || 0)
+  return `(${x}, ${z})`
+}
+
+const describeLandmark = (landmark) => {
+  if (!landmark) return '未知地标'
+  if (landmark.type === 'tribe_spawn' && landmark.isOwnTribe) return '本部落出生点'
+  if (landmark.type === 'tribe_camp' && landmark.isOwnTribe) return '本部落营地'
+  if (landmark.type === 'tribe_flag' && landmark.isOwnTribe) return '本部落领地旗帜'
+  if (landmark.type === 'tribe_beast_marker' && landmark.isOwnTribe) return '本部落驯养幼兽'
+  if (landmark.type === 'tribe_totem' && landmark.hasRuneHonor) return landmark.honorText
+  return landmark.label || '未知地标'
+}
+
+const tribeRuneHonorText = (tribe = currentTribe.value) => {
+  if (tribe?.publicRuneSummary?.text) return tribe.publicRuneSummary.text
+  const runes = Array.isArray(tribe?.runes) ? tribe.runes : []
+  if (!runes.length) return '图腾尚未刻下铭文'
+  const names = runes.map((rune) => rune.title || '未知铭文').filter(Boolean)
+  return `图腾铭文 ${runes.length} 枚：${names.slice(0, 3).join('、')}${names.length > 3 ? '…' : ''}`
+}
+
+const mapToMinimap = (x, z) => {
+  const clamp = (value) => Math.max(0, Math.min(100, value))
+  return {
+    left: clamp(((x + minimapRadius) / (minimapRadius * 2)) * 100),
+    top: clamp(((z + minimapRadius) / (minimapRadius * 2)) * 100)
+  }
+}
+
+const minimapPlayer = computed(() => mapToMinimap(playerX.value, playerZ.value))
+
+const mapLandmarks = computed(() => {
+  const envLandmarks = Array.isArray(mapEnvironment.value?.landmarks) ? mapEnvironment.value.landmarks : []
+  const landmarks = envLandmarks.length
+    ? envLandmarks
+    : decorations.filter((item) => item?.label && landmarkFallbackTypes.includes(item.type))
+  const activeEvents = Array.isArray(mapEnvironment.value?.worldEvents)
+    ? mapEnvironment.value.worldEvents.filter((item) => item?.activeUntil && new Date(item.activeUntil).getTime() > Date.now())
+    : []
+  const worldEventLandmarks = activeEvents.map((event) => ({
+    id: event.id,
+    type: `world_event_${event.key || 'generic'}`,
+    label: event.title || '世界事件',
+    x: event.x || 0,
+    z: event.z || 0,
+    eventSummary: event.summary || ''
+  }))
+  const seasonObjective = activeSeasonObjective.value
+  const seasonLandmarks = seasonObjective
+    ? [{
+        id: seasonObjective.id,
+        type: 'season_objective',
+        label: seasonObjective.title || '季节目标',
+        x: seasonObjective.x || 0,
+        z: seasonObjective.z || 0,
+        eventSummary: seasonObjective.summary || ''
+      }]
+    : []
+
+  return [...landmarks, ...worldEventLandmarks, ...seasonLandmarks].map((landmark) => {
+    const isOwnTribe = isCurrentTribeEntity(landmark)
+    const honorText = landmark.type === 'tribe_totem'
+      ? (landmark.runeSummary?.text || (isOwnTribe ? tribeRuneHonorText() : '图腾尚未刻下铭文'))
+      : ''
+    return {
+      ...landmark,
+      isOwnTribe,
+      honorText,
+      isLegendaryRenown: Number(landmark.renownState?.level || 0) >= 3,
+      hasRuneHonor: Boolean(honorText && honorText !== '图腾尚未刻下铭文'),
+      title: honorText
+        ? `${landmark.label || '部落图腾'}｜${landmark.renownState?.title ? `${landmark.renownState.title}｜` : ''}${honorText}`
+        : landmark.label
+    }
+  })
+})
+
+const isInsideSeasonObjective = computed(() => {
+  const objective = activeSeasonObjective.value
+  if (!objective) return false
+  const dx = playerX.value - (objective.x || 0)
+  const dz = playerZ.value - (objective.z || 0)
+  const radius = objective.radius || 0
+  return dx * dx + dz * dz <= radius * radius
+})
+
+const minimapLandmarks = computed(() => mapLandmarks.value.map((landmark) => ({
+  ...landmark,
+  ...mapToMinimap(landmark.x || 0, landmark.z || 0)
+})))
+
+const nearestLandmarkText = computed(() => {
+  if (!mapLandmarks.value.length) return '附近暂无已知地标'
+
+  let nearest = null
+  let nearestDistance = Infinity
+  for (const landmark of mapLandmarks.value) {
+    const dx = (landmark.x || 0) - playerX.value
+    const dz = (landmark.z || 0) - playerZ.value
+    const distance = Math.sqrt(dx * dx + dz * dz)
+    if (distance < nearestDistance) {
+      nearest = landmark
+      nearestDistance = distance
+    }
+  }
+
+  if (!nearest) return '附近暂无已知地标'
+  return `最近地标：${describeLandmark(nearest)} · ${Math.round(nearestDistance)}m`
+})
+
+const roleLabel = (role) => {
+  const labels = {
+    leader: '首领',
+    elder: '长老',
+    member: '成员'
+  }
+  return labels[role] || '成员'
+}
+
+const tribeRoleLabel = computed(() => roleLabel(tribeRole.value))
+const canManageTribeTargets = computed(() => ['leader', 'elder'].includes(tribeRole.value))
+
+const syncTribeAnnouncementDraft = () => {
+  tribeAnnouncementDraft.value = currentTribe.value?.announcement || ''
+}
+
+const lastSeasonChampion = computed(() => {
+  const lastSettlement = seasonSummary.value?.lastSettlement
+  const topTribes = Array.isArray(lastSettlement?.topTribes) ? lastSettlement.topTribes : []
+  return topTribes[0] || null
+})
+
+const normalizeWorldRumors = (rumors) => {
+  const seen = new Set()
+  const unique = []
+  ;(Array.isArray(rumors) ? rumors : []).forEach((rumor) => {
+    if (rumor?.id && !seen.has(rumor.id)) {
+      seen.add(rumor.id)
+      unique.push(rumor)
+    }
+  })
+  return unique
+    .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+    .slice(0, 6)
+}
+
+const visibleWorldRumors = computed(() => normalizeWorldRumors(worldRumors.value).slice(0, 4))
+
+const mergeWorldRumor = (rumor, rumors = []) => {
+  worldRumors.value = normalizeWorldRumors([
+    ...(rumor ? [rumor] : []),
+    ...worldRumors.value,
+    ...(Array.isArray(rumors) ? rumors : [])
+  ])
+}
+
+const tribeCampBuildingTags = computed(() => {
+  const buildings = currentTribe.value?.camp?.buildings || []
+  return buildings
+    .filter((building) => building?.id)
+    .map((building) => ({
+      id: building.id,
+      label: tribeBuildingTypeLabels[building.type] || building.label || '建筑'
+    }))
+})
+
+const tribeCampSummaryText = computed(() => {
+  const camp = currentTribe.value?.camp
+  if (!camp) return '营地正在搭建中。'
+  const center = formatMapPoint(camp.center)
+  const spawn = formatMapPoint(camp.spawn)
+  return `营地核心位于 ${center}，新成员会从 ${spawn} 集结出发。`
+})
+
+const foodPressureText = computed(() => {
+  const pressure = currentTribe.value?.foodPressure
+  if (!pressure) return '安全线 --'
+  const safeLine = pressure.safeLine || 0
+  if (pressure.active) {
+    return `超出 ${pressure.excess || 0}，每 ${pressure.decayIntervalMinutes || 0} 分钟缓慢腐坏`
+  }
+  return `安全线 ${safeLine}${pressure.storageBonus ? '，仓库加成中' : ''}`
+})
+
+const tradeResourceText = (resource, amount) => `${amount || 0} ${tradeResourceLabels[resource] || resource || '资源'}`
+
+const tradeText = (trade) => {
+  const offer = trade?.offer || {}
+  const request = trade?.request || {}
+  return `${trade.fromTribeName || '部落'} 出 ${tradeResourceText(offer.resource, offer.amount)}，换 ${tradeResourceText(request.resource, request.amount)}`
+}
+
+const tradeDirectionText = (trade) => {
+  if (trade?.fromTribeId === currentTribe.value?.id) return `发给 ${trade.toTribeName || '目标部落'}`
+  if (trade?.toTribeId === currentTribe.value?.id) return `来自 ${trade.fromTribeName || '其他部落'}`
+  return '部落贸易'
+}
+
+const beastSpecialtyLabel = (specialtyKey) => {
+  const specialtyLabels = {
+    guardian: '守卫',
+    hunter: '猎伴',
+    carrier: '驮兽'
+  }
+  return specialtyLabels[specialtyKey] || specialtyKey || '未定'
+}
+
+const tribeHistoryFilters = [
+  { key: 'all', label: '全部' },
+  { key: 'build', label: '建设' },
+  { key: 'rune', label: '铭文' },
+  { key: 'ritual', label: '仪式' },
+  { key: 'governance', label: '治理' },
+  { key: 'cave', label: '远征' },
+  { key: 'world_event', label: '事件' },
+  { key: 'food', label: '食物' },
+  { key: 'trade', label: '贸易' }
+]
+
+const governanceHistoryTypes = ['application', 'announcement', 'allocation', 'punishment', 'vote']
+const mergeHistoryEvents = (events) => {
+  const merged = []
+  const seen = new Set()
+  ;(events || []).forEach((event) => {
+    if (!event?.id || seen.has(event.id)) return
+    seen.add(event.id)
+    merged.push(event)
+  })
+  return merged.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+}
+
+const allTribeHistory = computed(() => mergeHistoryEvents([
+  ...(currentTribe.value?.history || []),
+  ...tribeHistoryLoaded.value
+]))
+
+const filteredTribeHistory = computed(() => {
+  const history = allTribeHistory.value
+  const filter = tribeHistoryFilter.value
+  const filtered = filter === 'all'
+    ? history
+    : filter === 'governance'
+      ? history.filter((event) => governanceHistoryTypes.includes(event.type))
+      : history.filter((event) => event.type === filter)
+  return filtered
+})
+
+const visibleTribeHistory = computed(() => filteredTribeHistory.value)
+const hasMoreTribeHistory = computed(() => tribeHistoryNextCursor.value !== null && tribeHistoryNextCursor.value !== undefined)
+
+const historyTypeLabel = (type) => {
+  const labels = {
+    build: '建设',
+    rune: '铭文',
+    ritual: '仪式',
+    cave: '远征',
+    world_event: '事件',
+    application: '申请',
+    announcement: '公告',
+    allocation: '预分配',
+    punishment: '惩罚',
+    vote: '投票',
+    trade: '贸易'
+  }
+  return labels[type] || '历史'
+}
+
+const formatHistoryTime = (value) => {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString()
+}
+
+const openTribeHistoryDetail = (event) => {
+  activeHistoryDetail.value = event || {}
+  showHistoryDetail.value = true
+}
+
+const activeHistoryReplay = computed(() => {
+  const event = activeHistoryDetail.value || {}
+  const related = event.related || {}
+  if (related.kind === 'announcement') {
+    return {
+      title: '公告回放',
+      text: related.text || event.detail || '这条公告没有留下正文。',
+      meta: [
+        related.updatedByName ? `发布者：${related.updatedByName}` : '',
+        related.updatedAt ? `发布时间：${formatHistoryTime(related.updatedAt)}` : ''
+      ].filter(Boolean)
+    }
+  }
+  if (related.kind === 'vote') {
+    const statusMap = { active: '进行中', passed: '已通过', rejected: '未通过' }
+    return {
+      title: '投票回放',
+      text: `${related.starterName || '管理者'} 提名 ${related.candidateName || '候选人'} 竞选${related.roleLabel || '职位'}，结果：${statusMap[related.status] || related.status || '未知'}。`,
+      meta: [
+        `赞成 ${related.yesCount ?? 0}`,
+        `反对 ${related.noCount ?? 0}`,
+        `成员 ${related.memberCount ?? 0}`,
+        related.createdAt ? `发起：${formatHistoryTime(related.createdAt)}` : ''
+      ].filter(Boolean)
+    }
+  }
+  if (related.kind === 'allocation') {
+    const resources = related.resources || {}
+    const allocation = related.targetAllocation || {}
+    const storage = related.storageAfter || {}
+    return {
+      title: '分配回放',
+      text: `${related.actorName || '管理者'} 向 ${related.targetName || '成员'} 预分配公共资源，方便后续建设与行动。`,
+      meta: [
+        `分配 木${resources.wood || 0} / 石${resources.stone || 0}`,
+        `成员预分配 木${allocation.wood || 0} / 石${allocation.stone || 0}`,
+        `仓库剩余 木${storage.wood || 0} / 石${storage.stone || 0}`
+      ]
+    }
+  }
+  if (related.kind === 'punishment') {
+    return {
+      title: '惩罚回放',
+      text: `${related.actorName || '管理者'} 惩罚 ${related.targetName || '成员'}：${related.reason || '未记录原因'}。`,
+      meta: [
+        `扣除贡献 ${related.penalty || 0}`,
+        related.createdAt ? `执行：${formatHistoryTime(related.createdAt)}` : ''
+      ].filter(Boolean)
+    }
+  }
+  if (related.kind === 'cave') {
+    return {
+      title: '远征回放',
+      text: `${related.memberName || '成员'} 完成 ${related.caveLabel || '洞穴'} 远征，推进到深度 ${related.depth || 0}，带回 ${related.finds || 0} 份收获。`,
+      meta: [
+        related.routeLabel ? `路线 ${related.routeLabel}` : '',
+        related.foodSupported ? `补给食物 -${related.foodCost || 0}` : '食物不足，收益折减',
+        related.routeFindsBonus ? `路线额外 +${related.routeFindsBonus}` : '',
+        related.runeFindsBonus ? `铭文额外 +${related.runeFindsBonus}` : '',
+        related.discoveryUnlocked ? '发现幽洞回声' : ''
+      ].filter(Boolean)
+    }
+  }
+  if (related.kind === 'world_event') {
+    const rewardText = Array.isArray(related.rewardParts) && related.rewardParts.length
+      ? related.rewardParts.join(' / ')
+      : '无直接奖励'
+    return {
+      title: '事件回放',
+      text: `${related.memberName || '成员'} 在${related.regionLabel || '未知区域'}处理了${related.title || '世界事件'}。`,
+      meta: [
+        related.eventActionLabel ? `处理方式 ${related.eventActionLabel}` : '',
+        `奖励 ${rewardText}`,
+        related.discoveryKey ? `发现线索 ${related.discoveryKey}` : '',
+        related.rareSpawned ? '连锁触发稀有遗迹' : ''
+      ].filter(Boolean)
+    }
+  }
+  if (related.kind === 'scout') {
+    const titles = Array.isArray(related.eventTitles) && related.eventTitles.length
+      ? related.eventTitles.join('、')
+      : '新的世界事件'
+    return {
+      title: '侦察回放',
+      text: `${related.memberName || '成员'} 派出侦察队，标记了 ${related.regionLabel || '远方区域'}。`,
+      meta: [
+        `发现 ${titles}`,
+        related.createdAt ? `时间：${formatHistoryTime(related.createdAt)}` : ''
+      ].filter(Boolean)
+    }
+  }
+  if (related.kind === 'oral_epic') {
+    return {
+      title: '史诗回放',
+      text: `${related.composedBy || '长老'} 整理了《${related.title || '部落史诗'}》。`,
+      meta: [
+        related.summary || '',
+        related.renownBonus ? `声望 +${related.renownBonus}` : ''
+      ].filter(Boolean)
+    }
+  }
+  if (related.kind === 'beast_task') {
+    return {
+      title: '驯养回放',
+      text: `${related.memberName || '成员'} 派出幼兽执行${related.taskLabel || '任务'}。`,
+      meta: [
+        related.summary || '',
+        Array.isArray(related.rewardParts) ? related.rewardParts.join(' / ') : '',
+        related.beastTitle ? `幼兽成长：${related.beastTitle} Lv.${related.beastLevel || 1}` : ''
+      ].filter(Boolean)
+    }
+  }
+  if (related.kind === 'beast_specialty') {
+    return {
+      title: '专长回放',
+      text: `${related.memberName || '成员'} 为幼兽选择了${related.specialtyLabel || '专长'}。`,
+      meta: [related.summary || ''].filter(Boolean)
+    }
+  }
+  if (related.kind === 'season_celebration') {
+    return {
+      title: '庆典回放',
+      text: `${related.memberName || '管理者'} 举行了${related.choiceLabel || '庆典'}。`,
+      meta: [
+        related.summary || '',
+        Array.isArray(related.rewardParts) ? related.rewardParts.join(' / ') : ''
+      ].filter(Boolean)
+    }
+  }
+  if (related.kind === 'season_objective') {
+    return {
+      title: '季节回放',
+      text: `${related.memberName || '成员'} 完成 ${related.regionLabel || '未知区域'} 的 ${related.title || '季节目标'}。`,
+      meta: [
+        related.summary || '',
+        Array.isArray(related.rewardParts) ? related.rewardParts.join(' / ') : '',
+        related.celebrationUnlocked ? '触发跨区域丰收庆典' : ''
+      ].filter(Boolean)
+    }
+  }
+  if (related.kind === 'trade') {
+    const statusMap = { active: '进行中', accepted: '已完成', rejected: '已拒绝', cancelled: '已取消', expired: '已失效' }
+    const offer = related.offer || {}
+    const request = related.request || {}
+    return {
+      title: '贸易回放',
+      text: `${related.fromTribeName || '发起部落'} 出 ${tradeResourceText(offer.resource, offer.amount)}，向 ${related.toTribeName || '目标部落'} 换取 ${tradeResourceText(request.resource, request.amount)}。`,
+      meta: [
+        `状态 ${statusMap[related.status] || related.status || '未知'}`,
+        related.createdAt ? `发布：${formatHistoryTime(related.createdAt)}` : '',
+        related.resolvedAt ? `处理：${formatHistoryTime(related.resolvedAt)}` : ''
+      ].filter(Boolean)
+    }
+  }
+  if (related.kind === 'territory_flag') {
+    return {
+      title: '领地回放',
+      text: `${related.claimedBy || '成员'} 在 (${Math.round(related.x || 0)}, ${Math.round(related.z || 0)}) 插下 ${related.label || '领地旗帜'}。`,
+      meta: [
+        related.claimNote || '这里成为部落公开宣告的资源活动区',
+        related.claimedAt ? `时间：${formatHistoryTime(related.claimedAt)}` : ''
+      ].filter(Boolean)
+    }
+  }
+  return null
+})
+
+const closeTribeHistoryDetail = () => {
+  showHistoryDetail.value = false
+  activeHistoryDetail.value = {}
+}
+
+const resetTribeHistoryPage = (tribe) => {
+  tribeHistoryLoaded.value = []
+  tribeHistoryNextCursor.value = Array.isArray(tribe?.history) ? tribe.history.length : null
+  tribeHistoryTotal.value = Number(tribe?.historyTotal || tribe?.history?.length || 0)
+  tribeHistoryLoading.value = false
+}
+
+const loadMoreTribeHistory = () => {
+  if (tribeHistoryLoading.value || !hasMoreTribeHistory.value) return
+  tribeHistoryLoading.value = true
+  if (!sendGameMessage({
+    type: 'tribe_history_page',
+    cursor: tribeHistoryNextCursor.value || 0,
+    limit: currentTribe.value?.historyPageSize || tribeHistoryPageSize
+  })) {
+    tribeHistoryLoading.value = false
+  }
+}
+
+const activeTribeRitual = computed(() => {
+  tribeRitualTick.value
+  const ritual = currentTribe.value?.ritual
+  if (!ritual?.activeUntil) return null
+  const remainingSeconds = Math.max(0, Math.ceil((new Date(ritual.activeUntil).getTime() - Date.now()) / 1000))
+  if (remainingSeconds <= 0) return null
+  return { ...ritual, remainingSeconds }
+})
+
+const tribeRitualText = computed(() => {
+  const ritual = activeTribeRitual.value
+  if (!ritual) return '未点燃：建成营火后可选择丰收篝火或部落宴会，短时间提升全员采集。'
+  const renownText = ritual.renownBonus ? `，已鼓舞声望 +${ritual.renownBonus}` : ''
+  return `${ritual.title || '丰收篝火'}持续中：采集额外 +${ritual.gatherBonus || 0}${renownText}，剩余 ${formatCountdown(ritual.remainingSeconds)}`
+})
+
+const tribeRitualCostText = computed(() => {
+  const config = currentTribe.value?.ritualConfig || {}
+  const feast = currentTribe.value?.feastConfig || {}
+  const durationBonus = config.durationBonusMinutes ? `（铭文 +${config.durationBonusMinutes}）` : ''
+  const gatherBonus = config.extraGatherBonus ? `，采集 +${config.gatherBonus || 0}（铭文 +${config.extraGatherBonus}）` : `，采集 +${config.gatherBonus || 0}`
+  const feastText = `；宴会食物${feast.food || 0}，持续 ${feast.durationMinutes || 0} 分钟，采集 +${feast.gatherBonus || 0}，声望 +${feast.renownBonus || 0}`
+  return `篝火消耗木${config.wood || 0} / 石${config.stone || 0}，持续 ${config.durationMinutes || 0} 分钟${durationBonus}${gatherBonus}${feastText}`
+})
+
+const activeCelebrationBuff = computed(() => {
+  tribeRitualTick.value
+  const buff = currentTribe.value?.celebrationBuff
+  if (!buff?.activeUntil) return null
+  const remainingSeconds = Math.max(0, Math.ceil((new Date(buff.activeUntil).getTime() - Date.now()) / 1000))
+  if (remainingSeconds <= 0) return null
+  return { ...buff, remainingSeconds }
+})
+const celebrationBuffText = computed(() => {
+  const buff = activeCelebrationBuff.value
+  if (!buff) return ''
+  const parts = []
+  if (buff.gatherBonus) parts.push(`采集 +${buff.gatherBonus}`)
+  if (buff.discoveryBonus) parts.push(`发现 +${buff.discoveryBonus}`)
+  if (buff.tradeRenownBonus) parts.push(`交易声望 +${buff.tradeRenownBonus}`)
+  const effects = parts.length ? `（${parts.join('，')}）` : ''
+  return `${buff.title}${effects} · 剩余 ${formatCountdown(buff.remainingSeconds)}`
+})
+const celebrationGatherBonus = computed(() => activeCelebrationBuff.value?.gatherBonus || 0)
+const celebrationDiscoveryHint = computed(() => activeCelebrationBuff.value?.discoveryBonus
+  ? `祭祀余韵：完成后发现进度额外 +${activeCelebrationBuff.value.discoveryBonus}`
+  : '')
+const celebrationTradeHint = computed(() => activeCelebrationBuff.value?.tradeRenownBonus
+  ? `集市余韵：完成贸易时双方声望额外 +${activeCelebrationBuff.value.tradeRenownBonus}`
+  : '')
+const tribeGatherBonus = computed(() => (activeTribeRitual.value?.gatherBonus || 0) + celebrationGatherBonus.value)
+
+const tribeTargetProgressPercent = computed(() => {
+  const target = currentTribe.value?.target
+  const total = target?.progressTotal || ((target?.wood || 0) + (target?.stone || 0)) || 1
+  const progress = target?.progress ?? ((target?.currentWood || 0) + (target?.currentStone || 0))
+  return Math.min(100, Math.round((progress / total) * 100))
+})
+
+const caveExpeditionReady = computed(() => {
+  const target = currentTribe.value?.target
+  return Boolean(currentTribe.value && target?.isFinal && target?.completed)
+})
+
+const caveRuneFindsBonus = computed(() => Number(currentTribe.value?.runeEffects?.caveFindsBonus || 0))
+const hasTribeWorkbench = computed(() => {
+  const buildings = currentTribe.value?.camp?.buildings || []
+  return buildings.some((building) => building?.type === 'tribe_workbench')
+})
+const beastSpecialtyOptions = computed(() => optionMapToList(currentTribe.value?.beastGrowth?.specialtyOptions))
+const activeBeastTask = computed(() => {
+  resourceTideTick.value
+  const task = currentTribe.value?.activeBeastTask
+  if (!task?.activeUntil) return null
+  const remainingSeconds = Math.max(0, Math.ceil((new Date(task.activeUntil).getTime() - Date.now()) / 1000))
+  if (remainingSeconds <= 0) return null
+  return { ...task, remainingSeconds }
+})
+const activeBeastTaskText = computed(() => {
+  const task = activeBeastTask.value
+  if (!task) return ''
+  return `${task.memberName || '成员'}刚派出幼兽执行${task.taskLabel || '任务'}，剩余 ${formatCountdown(task.remainingSeconds)}`
+})
+const celebrationChoiceOptions = computed(() => {
+  if (!currentTribe.value?.seasonChain?.pendingCelebration) return []
+  return optionMapToList(currentTribe.value?.seasonChain?.celebrationChoices)
+})
+const selectedCavePlan = computed(() => {
+  return caveExpeditionPlans.find((plan) => plan.key === caveExpeditionPlanKey.value) || caveExpeditionPlans[1]
+})
+
+const caveExpeditionStatusText = computed(() => {
+  const runeText = caveRuneFindsBonus.value ? ` 稀有铭文额外收获 +${caveRuneFindsBonus.value}。` : ''
+  const plan = selectedCavePlan.value
+  if (!currentTribe.value) return '未加入部落：这是一次个人试探，收益较少且没有部落记录。'
+  if (caveExpeditionReady.value && caveFoodSupported.value) return `部落远征已就绪：${plan.label}路线将消耗食物 ${plan.foodCost}，${plan.summary}。${runeText}`
+  if (caveExpeditionReady.value) return `部落远征缺少食物：${plan.label}路线需要 ${plan.foodCost}，仍可出发但最终收益会下降。${runeText}`
+  return '远征筹备中：继续通过仓库和石器台推进部落目标，洞穴会逐渐成为正式行动。'
+})
+
+const activeCaveNode = computed(() => caveRoute.value[activeCaveNodeIndex.value] || null)
+
+const caveRouteComplete = computed(() => {
+  return caveRoute.value.length > 0 && caveRoute.value.every((node) => node.status === 'completed')
+})
+
+const caveRouteProgressPercent = computed(() => {
+  if (!caveRoute.value.length) return 0
+  const completed = caveRoute.value.filter((node) => node.status === 'completed').length
+  return Math.round((completed / caveRoute.value.length) * 100)
+})
+
+const tribeRoadmapItems = computed(() => {
+  const hasTribe = Boolean(currentTribe.value)
+  const target = currentTribe.value?.target
+  const storage = currentTribe.value?.storage || {}
+  const hasSupplies = (storage.wood || 0) + (storage.stone || 0) > 0
+
+  return [
+    {
+      key: 'camp',
+      title: '固定营地与出生点',
+      description: hasTribe ? '已完成，图腾、建筑和出生点都绑定到部落营地。' : '创建或加入部落后解锁固定营地。',
+      status: hasTribe ? 'done' : 'next'
+    },
+    {
+      key: 'storage',
+      title: '公共仓库与贡献',
+      description: hasSupplies ? '已推进，部落已经开始累积公共补给。' : '下一步就是把资源稳定送进公共仓库。',
+      status: hasSupplies ? 'doing' : 'next'
+    },
+    {
+      key: 'governance',
+      title: '职位与选举',
+      description: '当前已经有首领、长老和基础投票，后面可以继续强化治理。',
+      status: hasTribe ? 'doing' : 'next'
+    },
+    {
+      key: 'expansion',
+      title: '大地图与山洞远征',
+      description: caveExpeditionReady.value ? '洞穴远征已就绪，下一步可以做团队副本化和洞内资源链。' : '地图已拆出森林、山地、海岸、遗迹等区域，洞穴远征正在筹备。',
+      status: target?.isFinal ? 'doing' : 'next'
+    }
+  ]
+})
+
+const sortedTribeMembers = computed(() => {
+  const members = currentTribe.value?.members || []
+  return [...members].sort((a, b) => (b.contribution || 0) - (a.contribution || 0))
+})
+
+const canStartVote = computed(() => ['leader', 'elder'].includes(tribeRole.value))
+const canReviewApplications = computed(() => ['leader', 'elder'].includes(tribeRole.value))
+const tribeApplications = computed(() => currentTribe.value?.applications || [])
+
+const voteRules = computed(() => currentTribe.value?.voteRules || {
+  leaderMinMembers: 5,
+  elderMinMembers: 3,
+  leaderMinContribution: 50,
+  elderMinContribution: 20,
+  leaderCooldownHours: 72,
+  elderCooldownHours: 24
+})
+
+const voteRuleHint = computed(() => {
+  const rules = voteRules.value
+  return `首领选举：${rules.leaderMinMembers} 人 / ${rules.leaderMinContribution} 贡献 / ${rules.leaderCooldownHours} 小时冷却；长老：${rules.elderMinMembers} 人 / ${rules.elderMinContribution} 贡献。`
+})
+
+const canNominate = (member, role) => {
+  if (!currentTribe.value || !member) return false
+  const rules = voteRules.value
+  const memberCount = currentTribe.value.memberCount || currentTribe.value.members?.length || 0
+  const minMembers = role === 'leader' ? rules.leaderMinMembers : rules.elderMinMembers
+  const minContribution = role === 'leader' ? rules.leaderMinContribution : rules.elderMinContribution
+  return memberCount >= minMembers && (member.contribution || 0) >= minContribution
+}
+
+const canNominateSelfLeader = computed(() => {
+  const self = sortedTribeMembers.value.find((member) => member.id === playerId.value)
+  return canNominate(self, 'leader')
+})
+
+const canGovernMember = (member) => {
+  if (!member || member.id === playerId.value) return false
+  if (tribeRole.value === 'leader') return ['elder', 'member'].includes(member.role)
+  if (tribeRole.value === 'elder') return member.role === 'member'
+  return false
+}
 
 const getSeaLevel = () => {
   const sea = mapEnvironment.value?.seaLevel
@@ -339,10 +1188,10 @@ const initGame = async () => {
     const tempCameraPosition = new THREE.Vector3()
     const tempTargetPosition = new THREE.Vector3()
     // 添加光源
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6)
+    ambientLight = new THREE.AmbientLight(0xffffff, 0.6)
     scene.add(ambientLight)
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8)
+    directionalLight = new THREE.DirectionalLight(0xffffff, 0.8)
     directionalLight.position.set(50, 100, 50)
     directionalLight.castShadow = true
     directionalLight.shadow.camera.left = -50
@@ -384,12 +1233,36 @@ const resetLoadedDecorations = () => {
   loadedObjectsCount.value = 0
 }
 
-const applyEnvironment = (environment) => {
-  if (!scene || !environment) return
+const applyWeatherLighting = (weather) => {
+  if (!ambientLight || !directionalLight) return
 
-  mapEnvironment.value = environment
-  world?.setEnvironment(environment)
-  weatherSystem?.apply(environment.weather || 'sunny')
+  const presets = {
+    sunny: {
+      ambient: 0.68,
+      directional: 0.9,
+      lightColor: 0xffffff
+    },
+    rain: {
+      ambient: 0.48,
+      directional: 0.42,
+      lightColor: 0xb6c6d5
+    },
+    snow: {
+      ambient: 0.78,
+      directional: 0.52,
+      lightColor: 0xe8f4ff
+    },
+    fog: {
+      ambient: 0.56,
+      directional: 0.28,
+      lightColor: 0xc9d0cf
+    }
+  }
+
+  const preset = presets[weather] || presets.sunny
+  ambientLight.intensity = preset.ambient
+  directionalLight.intensity = preset.directional
+  directionalLight.color.set(preset.lightColor)
 }
 
 const clearRemotePlayers = () => {
@@ -404,13 +1277,20 @@ const clearRemotePlayers = () => {
   remotePlayers.clear()
 }
 
-const applyMapData = (mapData) => {
+function applyMapData(mapData) {
   if (!mapData) return
 
   mapSeed.value = mapData.seed ?? null
   const serverDecorations = Array.isArray(mapData.decorations) ? mapData.decorations : []
+  const extraDecorations = (Array.isArray(mapData.environment?.landmarks) ? mapData.environment.landmarks : [])
+    .filter((landmark) => landmark?.id && tribeLandmarkDecorationTypes.has(landmark.type))
+    .filter((landmark) => !serverDecorations.some((decoration) => decoration.id === landmark.id))
+    .map((landmark) => ({
+      ...landmark,
+      y: typeof landmark.y === 'number' ? landmark.y : 0
+    }))
 
-  decorations = serverDecorations
+  decorations = [...serverDecorations, ...extraDecorations]
   totalObjectsCount.value = decorations.length
 
   world?.setSeed(mapData.seed ?? 0)
@@ -418,6 +1298,66 @@ const applyMapData = (mapData) => {
   world?.setDecorations(decorations)
 
   if (mapData.environment) applyEnvironment(mapData.environment)
+}
+
+function beastTaskVisualPatch(task) {
+  const taskKey = task?.taskKey
+  const taskBehavior = {
+    guard: { behavior: 'guard', patrolRadius: 1.3, workLabel: '执行守营' },
+    hunt: { behavior: 'patrol', patrolRadius: 2.4, workLabel: '执行助猎' },
+    haul: { behavior: 'carry', patrolRadius: 1.8, workLabel: '执行驮运' }
+  }[taskKey]
+  if (!taskBehavior) return null
+  return {
+    ...taskBehavior,
+    activeTask: task,
+    y: 0
+  }
+}
+
+function syncActiveBeastVisual() {
+  const tribeId = currentTribe.value?.id
+  const task = activeBeastTask.value
+  if (!tribeId || !world) return
+  const markerId = `${tribeId}_beast_marker`
+  const patch = beastTaskVisualPatch(task)
+  if (!patch) return
+  if (world.updateDecoration(markerId, patch)) {
+    const decoration = decorations.find((item) => item?.id === markerId)
+    if (decoration) Object.assign(decoration, patch)
+    updateInteractionTarget()
+  }
+  if (beastFeedbackClearTimerId) clearTimeout(beastFeedbackClearTimerId)
+  beastFeedbackClearTimerId = setTimeout(() => {
+    applyTribeLandmarkState()
+    beastFeedbackClearTimerId = null
+  }, Math.max(1000, (task.remainingSeconds + 1) * 1000))
+}
+
+function applyTribeLandmarkState() {
+  const landmarks = Array.isArray(mapEnvironment.value?.landmarks) ? mapEnvironment.value.landmarks : []
+  let changed = false
+  for (const landmark of landmarks) {
+    if (!landmark?.id || !tribeLandmarkDecorationTypes.has(landmark.type)) continue
+    const patch = { ...landmark, y: typeof landmark.y === 'number' ? landmark.y : 0 }
+    if (world?.updateDecoration(landmark.id, patch)) {
+      const decoration = decorations.find((item) => item?.id === landmark.id)
+      if (decoration) Object.assign(decoration, patch)
+      changed = true
+    }
+  }
+  if (changed) updateInteractionTarget()
+}
+
+function applyEnvironment(environment) {
+  if (!scene || !environment) return
+
+  mapEnvironment.value = environment
+  currentWeather.value = environment.weather || 'sunny'
+  world?.setEnvironment(environment)
+  applyTribeLandmarkState()
+  weatherSystem?.apply(environment.weather || 'sunny')
+  applyWeatherLighting(environment.weather || 'sunny')
 }
 
 // 创建地形
@@ -439,7 +1379,7 @@ const createTerrain = () => {
 
   // 创建材质
   const material = new THREE.MeshStandardMaterial({
-    color: 0x228B22,
+    color: 0x2e7d32,
     roughness: 0.8,
     metalness: 0.2,
     wireframe: false
@@ -461,6 +1401,768 @@ const updateDecorations = () => {
   if (!localPlayer) return
   world?.updateDecorations(localPlayer.position)
   loadedObjectsCount.value = world?.getLoadedCount() ?? 0
+}
+
+const buildTribeInteraction = (entity) => {
+  if (!entity) return null
+
+  const ownTribe = isCurrentTribeEntity(entity)
+  const tribeName = entity.label?.replace(/(图腾|仓库|石器台|棚屋|营地|出生点)$/u, '') || '这个部落'
+  const target = currentTribe.value?.target
+
+  if (entity.type === 'tribe_totem') {
+    return {
+      entity,
+      label: entity.label || '部落图腾',
+      actionText: '查看',
+      rewardText: ownTribe
+        ? '这里是你们部落的议事核心，靠近即可打开部落面板'
+        : `${tribeName}的图腾立在这里，说明附近已经有稳定营地`
+    }
+  }
+
+  if (entity.type === 'tribe_storage') {
+    return {
+      entity,
+      label: entity.label || '部落仓库',
+      actionText: ownTribe ? '上交' : '查看',
+      rewardText: ownTribe
+        ? '把木材和石块送入公共仓库，推动营地建设'
+        : `${tribeName}的公共仓库就在这里，外人只能远观`
+    }
+  }
+
+  if (entity.type === 'tribe_workbench') {
+    const targetText = target ? `当前目标：${target.title}` : '这里会逐步承担建造和部落目标规划'
+    return {
+      entity,
+      label: entity.label || '石器台',
+      actionText: ownTribe ? (target?.completed && canManageTribeTargets.value ? '推进' : '规划') : '观察',
+      rewardText: ownTribe ? targetText : `${tribeName}正在这里加工工具和安排建造`
+    }
+  }
+
+  if (entity.type === 'tribe_hut') {
+    return {
+      entity,
+      label: entity.label || '棚屋',
+      actionText: ownTribe ? '歇脚' : '查看',
+      rewardText: ownTribe
+        ? '棚屋让营地更像家，后面很适合接睡眠和休整玩法'
+        : `${tribeName}已经在这里住下来了`
+    }
+  }
+
+  if (entity.type === 'tribe_spawn') {
+    return {
+      entity,
+      label: entity.label || '出生点',
+      actionText: ownTribe ? '确认' : '查看',
+      rewardText: ownTribe
+        ? '这是你们部落的固定集结点，新成员加入后会从这里出发'
+        : `${tribeName}的人会从这个位置进入营地`
+    }
+  }
+
+  if (entity.type === 'tribe_camp') {
+    return {
+      entity,
+      label: entity.label || '营地',
+      actionText: ownTribe ? '整队' : '查看',
+      rewardText: ownTribe
+        ? '营地核心已经固定下来，图腾、仓库和石器台围绕这里展开'
+        : `${tribeName}已经把这里经营成了自己的核心营地`
+    }
+  }
+
+  if (entity.type === 'tribe_flag') {
+    return {
+      entity,
+      label: entity.label || '领地旗帜',
+      actionText: ownTribe ? '巡查' : '观察',
+      rewardText: ownTribe
+        ? '这面旗帜宣告了你们部落的资源活动区'
+        : `${tribeName}已经在这里插旗，靠近时最好留意对方的资源宣告`
+    }
+  }
+
+  if (entity.type === 'tribe_beast_marker') {
+    const specialty = entity.specialty && entity.specialty !== 'young'
+      ? `，专长是${beastSpecialtyLabel(entity.specialty)}`
+      : ''
+    const workText = entity.workLabel ? `，正在${entity.workLabel}` : ''
+    return {
+      entity,
+      label: entity.label || '驯养幼兽',
+      actionText: ownTribe ? '安抚' : '观察',
+      rewardText: ownTribe
+        ? `幼兽在营地附近活动${specialty}${workText}`
+        : `${tribeName}的驯养幼兽守在附近${workText}`
+    }
+  }
+
+  return null
+}
+
+const getNearestResource = () => {
+  if (!localPlayer || !world) return null
+  const objective = activeSeasonObjective.value
+  if (objective && isInsideSeasonObjective.value) {
+    return {
+      entity: { ...objective, type: 'season_objective' },
+      label: objective.title || '季节目标',
+      actionText: '完成',
+      rewardText: objective.summary || '完成短时季节目标，为部落带回奖励',
+      hintText: celebrationDiscoveryHint.value
+    }
+  }
+  const event = activeWorldEvent.value
+  if (event) {
+    const dx = playerX.value - (event.x || 0)
+    const dz = playerZ.value - (event.z || 0)
+    if (dx * dx + dz * dz <= Math.pow((event.radius || 16) * 0.55, 2)) {
+      const reward = worldEventRewardText(event) || event.summary || '把这个动态事件记录进部落进度'
+      return {
+        entity: { ...event, type: 'world_event' },
+        label: event.title || '世界事件',
+        actionText: '处理',
+        rewardText: event.rare ? `稀有事件：${reward}` : reward
+      }
+    }
+  }
+
+  const tribeBuilding = world.findNearestEntityByTypes(localPlayer.position, tribeInteractableTypes, interactionDistance + 1)
+  if (tribeBuilding) {
+    return buildTribeInteraction(tribeBuilding)
+  }
+
+  const cave = world.findNearestEntityByTypes(localPlayer.position, ['cave_entrance'], interactionDistance + 1)
+  if (cave) {
+    return {
+      entity: cave,
+      label: cave.label || '山洞',
+      actionText: caveExpeditionReady.value ? '远征' : '进入',
+      rewardText: caveExpeditionReady.value
+        ? '部落补给已经达标，可以开始正式洞穴远征'
+        : '洞里可能有矿石、水晶和古老线索，部落目标完成后会变成正式远征'
+    }
+  }
+
+  const totem = world.findNearestEntityByTypes(localPlayer.position, ['tribe_totem'], interactionDistance + 1)
+  if (totem) {
+    const honorText = isCurrentTribeEntity(totem) ? tribeRuneHonorText() : '靠近后可观察这个部落的图腾荣誉'
+    return {
+      entity: totem,
+      label: totem.label || '部落图腾',
+      actionText: '查看',
+      rewardText: currentTribe.value ? honorText : '创建或加入部落后，可以在这里集结'
+    }
+  }
+
+  const entity = world.findNearestInteractable(localPlayer.position, interactionDistance)
+  if (!entity) return null
+
+  const reward = resourceRewards[entity.type]
+  if (!reward) return null
+
+  return {
+    entity,
+    label: reward.label,
+    actionText: '采集',
+    rewardText: `获得 ${reward.amount} ${reward.itemName} +${reward.experience} 经验`,
+    hintText: celebrationGatherBonus.value ? `宴饮余韵：本次采集额外 +${celebrationGatherBonus.value}` : ''
+  }
+}
+
+const updateInteractionTarget = () => {
+  interactionTarget.value = getNearestResource()
+}
+
+const openTotemDetail = (entity) => {
+  const isOwn = isCurrentTribeEntity(entity)
+  const summary = entity?.runeSummary || (isOwn ? currentTribe.value?.publicRuneSummary : null)
+  activeTotemDetail.value = {
+    label: entity?.label || '部落图腾',
+    summaryText: summary?.text || (isOwn ? tribeRuneHonorText() : '这个部落尚未公开铭文详情'),
+    runes: isOwn ? (currentTribe.value?.runes || []) : (summary?.runes || [])
+  }
+  showTotemOverlay.value = true
+}
+
+const closeTotemDetail = () => {
+  showTotemOverlay.value = false
+  activeTotemDetail.value = {}
+}
+
+const showToast = (text, options = {}) => {
+  const id = ++toastId
+  toastMessages.value.push({ id, text, rare: Boolean(options.rare) })
+  if (toastMessages.value.length > 3) {
+    toastMessages.value.shift()
+  }
+  window.setTimeout(() => {
+    toastMessages.value = toastMessages.value.filter((toast) => toast.id !== id)
+  }, 2600)
+}
+
+const showRareRuneUnlock = (rune = {}, message = '') => {
+  if (rareRuneUnlockTimer) window.clearTimeout(rareRuneUnlockTimer)
+  rareRuneUnlock.value = rune
+  showToast(message || `稀有铭文觉醒：${rune.title || '未知铭文'}`, { rare: true })
+  rareRuneUnlockTimer = window.setTimeout(() => {
+    rareRuneUnlock.value = null
+    rareRuneUnlockTimer = null
+  }, 3600)
+}
+
+const addExperience = (amount) => {
+  playerExperience.value += amount
+
+  while (playerExperience.value >= playerNextLevelExperience.value) {
+    playerExperience.value -= playerNextLevelExperience.value
+    playerLevel.value += 1
+    playerNextLevelExperience.value = Math.round(playerNextLevelExperience.value * 1.35)
+    showToast(`升级到 Lv.${playerLevel.value}！`)
+  }
+}
+
+const advanceQuest = (amount = 1) => {
+  const quest = activeQuest.value
+  if (quest.completed) return
+
+  quest.progress = Math.min(quest.target, quest.progress + amount)
+  if (quest.progress >= quest.target) {
+    quest.completed = true
+    quest.title = '补给准备完成'
+    quest.description = '你已经收集到第一批探索物资，继续向山脚和海岸寻找更多资源。'
+    addExperience(60)
+    showToast('任务完成：获得 60 经验')
+  }
+}
+
+const collectInteractionTarget = () => {
+  const target = interactionTarget.value || getNearestResource()
+  if (!target?.entity || !world) return
+
+  if (target.entity.type === 'season_objective') {
+    if (sendGameMessage({ type: 'tribe_complete_season_objective', objectiveId: target.entity.id })) {
+      showToast(`已完成${target.entity.title || '季节目标'}`)
+    }
+    return
+  }
+
+  if (target.entity.type === 'world_event') {
+    const eventAction = target.entity.key === 'herd' ? herdActionKey.value : ''
+    if (sendGameMessage({ type: 'tribe_resolve_world_event', eventId: target.entity.id, eventAction })) {
+      const action = target.entity.key === 'herd'
+        ? herdActionOptions.find((item) => item.key === eventAction)?.label
+        : ''
+      showToast(`已${action || '处理'}${target.entity.title || '世界事件'}`, { rare: Boolean(target.entity.rare) })
+    }
+    return
+  }
+
+  if (target.entity.type === 'cave_entrance') {
+    enterCave(target.entity)
+    return
+  }
+
+  if (target.entity.type === 'tribe_totem') {
+    showTribePanel.value = true
+    openTotemDetail(target.entity)
+    showToast(isCurrentTribeEntity(target.entity) ? tribeRuneHonorText() : '这是别的部落留下的核心图腾，后续会展示其铭文荣誉')
+    return
+  }
+
+  if (target.entity.type === 'tribe_storage') {
+    showTribePanel.value = true
+    if (isCurrentTribeEntity(target.entity)) {
+      contributeAllResources()
+    } else {
+      showToast('这座仓库属于别的部落，只能先观察')
+    }
+    return
+  }
+
+  if (target.entity.type === 'tribe_workbench') {
+    showTribePanel.value = true
+    if (currentTribe.value?.target?.completed && canManageTribeTargets.value && !currentTribe.value.target.isFinal) {
+      advanceTribeTarget()
+    } else {
+      showToast(currentTribe.value?.target?.title ? `当前建造目标：${currentTribe.value.target.title}` : '石器台暂时还没有新的建造目标')
+    }
+    return
+  }
+
+  if (target.entity.type === 'tribe_hut') {
+    showToast(isCurrentTribeEntity(target.entity) ? '棚屋是营地生活区，后面很适合接睡眠和休整玩法' : '这里能看出这个部落已经长期驻扎')
+    return
+  }
+
+  if (target.entity.type === 'tribe_spawn') {
+    showToast(isCurrentTribeEntity(target.entity) ? '这里是你们部落的固定出生点' : '这是其他部落成员的集结入口')
+    return
+  }
+
+  if (target.entity.type === 'tribe_camp') {
+    showTribePanel.value = true
+    showToast(isCurrentTribeEntity(target.entity) ? '你回到了本部落营地核心' : '你进入了别的部落营地区域')
+    return
+  }
+
+  if (target.entity.type === 'tribe_flag') {
+    showToast(isCurrentTribeEntity(target.entity) ? '你巡查了本部落的领地旗帜' : '这是其他部落的领地宣告')
+    return
+  }
+
+  if (target.entity.type === 'tribe_beast_marker') {
+    const workText = target.entity.workLabel ? `，正在${target.entity.workLabel}` : ''
+    showToast(isCurrentTribeEntity(target.entity) ? `幼兽蹭了蹭你的手${workText}` : `这是其他部落驯养的幼兽${workText}`)
+    return
+  }
+
+  const reward = resourceRewards[target.entity.type]
+  if (!reward) return
+
+  const collected = world.collectEntity(target.entity.id)
+  if (!collected) return
+
+  const celebrationBonus = currentTribe.value ? celebrationGatherBonus.value : 0
+  const bonusAmount = (currentTribe.value ? tribeGatherBonus.value : 0) + resourceTideGatherBonus.value
+  const toolBonus = stoneTool.value.durability > 0 ? stoneTool.value.bonus : 0
+  const totalAmount = reward.amount + bonusAmount + toolBonus
+  if (stoneTool.value.durability > 0) {
+    stoneTool.value.durability = Math.max(0, stoneTool.value.durability - 1)
+  }
+  inventory.value[reward.itemKey] += totalAmount
+  addExperience(reward.experience)
+  advanceQuest(1)
+  const bonusNotes = [celebrationBonus ? '庆典余韵' : '', toolBonus ? '石器加成' : ''].filter(Boolean)
+  showToast(`采集 ${reward.label}：+${totalAmount} ${reward.itemName}${bonusNotes.length ? `（${bonusNotes.join('，')}）` : ''}`)
+  updateInteractionTarget()
+  loadedObjectsCount.value = world?.getLoadedCount() ?? 0
+  totalObjectsCount.value = decorations.length
+}
+
+const sendGameMessage = (payload) => {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(payload))
+    return true
+  }
+  addSystemMessage('未连接到游戏服务器')
+  return false
+}
+
+const createTribe = () => {
+  const name = newTribeName.value.trim()
+  if (!name) {
+    showToast('先给部落起一个名字')
+    return
+  }
+  sendGameMessage({ type: 'tribe_create', name })
+}
+
+const joinTribe = (tribeId) => {
+  if (pendingTribeJoinRequests.value.has(tribeId)) {
+    showToast('加入申请已经提交，等待首领或长老审核')
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_join', tribeId, message: `${playerName.value} 想加入部落` })) {
+    pendingTribeJoinRequests.value.add(tribeId)
+    pendingTribeJoinRequests.value = new Set(pendingTribeJoinRequests.value)
+    showToast('已提交加入申请，等待审核')
+  }
+}
+
+const reviewTribeApplication = (applicationId, approved) => {
+  if (!canReviewApplications.value) {
+    showToast('只有首领或长老可以审核加入申请')
+    return
+  }
+  sendGameMessage({
+    type: 'tribe_review_application',
+    applicationId,
+    approved
+  })
+}
+
+const contributeAllResources = () => {
+  const resources = {
+    wood: inventory.value.wood,
+    stone: inventory.value.stone
+  }
+  if (!resources.wood && !resources.stone) {
+    showToast('背包里还没有可上交的资源')
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_contribute', resources })) {
+    inventory.value.wood = 0
+    inventory.value.stone = 0
+    showToast('资源已送往部落仓库')
+  }
+}
+
+const advanceTribeTarget = () => {
+  if (!canManageTribeTargets.value) {
+    showToast('只有首领或长老可以推进部落目标')
+    return
+  }
+  sendGameMessage({ type: 'tribe_advance_target' })
+}
+
+const setTribeAnnouncement = () => {
+  if (!canManageTribeTargets.value) {
+    showToast('只有首领或长老可以更新公告')
+    return
+  }
+  const announcement = tribeAnnouncementDraft.value.trim()
+  if (!announcement) {
+    showToast('公告不能为空')
+    return
+  }
+  sendGameMessage({ type: 'tribe_set_announcement', announcement })
+}
+
+const returnToTribeCamp = () => {
+  if (sendGameMessage({ type: 'tribe_return_to_camp' })) {
+    showToast('正在返回部落营地出生点')
+  }
+}
+
+const buildTribeStructure = (buildingKey) => {
+  if (!canManageTribeTargets.value) {
+    showToast('只有首领或长老可以发起部落建造')
+    return
+  }
+  sendGameMessage({ type: 'tribe_build_structure', buildingKey })
+}
+
+const unlockTribeRune = (runeKey) => {
+  if (!canManageTribeTargets.value) {
+    showToast('只有首领或长老可以刻写图腾铭文')
+    return
+  }
+  sendGameMessage({ type: 'tribe_unlock_rune', runeKey })
+}
+
+const startTribeRitual = () => {
+  sendGameMessage({ type: 'tribe_start_ritual' })
+}
+
+const startTribeFeast = () => {
+  sendGameMessage({ type: 'tribe_start_feast' })
+}
+
+const startTribeVote = (role, candidateId) => {
+  sendGameMessage({
+    type: 'tribe_start_vote',
+    role,
+    candidateId
+  })
+}
+
+const castTribeVote = (voteId, approve) => {
+  sendGameMessage({
+    type: 'tribe_vote',
+    voteId,
+    approve
+  })
+}
+
+const allocateResourcesToMember = (targetId) => {
+  if (!canManageTribeTargets.value) {
+    showToast('只有首领或长老可以预分配公共资源')
+    return
+  }
+  const resources = {
+    wood: Math.max(0, Number(allocationDraft.value.wood) || 0),
+    stone: Math.max(0, Number(allocationDraft.value.stone) || 0)
+  }
+  if (!resources.wood && !resources.stone) {
+    showToast('先填写要预分配的木材或石块数量')
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_allocate_resources', targetId, resources })) {
+    showToast('资源预分配请求已提交')
+  }
+}
+
+const createTribeTrade = () => {
+  if (!canManageTribeTargets.value) {
+    showToast('只有首领或长老可以发布贸易')
+    return
+  }
+  const offerAmount = Math.max(0, Number(tradeDraft.value.offerAmount) || 0)
+  const requestAmount = Math.max(0, Number(tradeDraft.value.requestAmount) || 0)
+  if (!tradeDraft.value.targetTribeId) {
+    showToast('先选择目标部落')
+    return
+  }
+  if (!offerAmount || !requestAmount) {
+    showToast('贸易数量必须大于 0')
+    return
+  }
+  if (sendGameMessage({
+    type: 'tribe_create_trade',
+    targetTribeId: tradeDraft.value.targetTribeId,
+    offer: {
+      resource: tradeDraft.value.offerResource,
+      amount: offerAmount
+    },
+    request: {
+      resource: tradeDraft.value.requestResource,
+      amount: requestAmount
+    }
+  })) {
+    showToast('贸易请求已发布')
+  }
+}
+
+const startTribeScout = () => {
+  if (!currentTribe.value) {
+    showToast('请先加入部落')
+    return
+  }
+  const cost = currentTribe.value.scoutConfig?.foodCost || 0
+  if ((currentTribe.value.food || 0) < cost) {
+    showToast(`侦察需要食物 ${cost}`)
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_start_scout' })) {
+    showToast('侦察队已出发')
+  }
+}
+
+const craftStoneTool = () => {
+  if (!hasTribeWorkbench.value) {
+    showToast('需要先建成石器台')
+    return
+  }
+  if (inventory.value.wood < 2 || inventory.value.stone < 4) {
+    showToast('打磨石器需要木材 2、矿石 4')
+    return
+  }
+  inventory.value.wood -= 2
+  inventory.value.stone -= 4
+  stoneTool.value.durability = stoneTool.value.max
+  showToast('石器工具已打磨，采集额外 +1')
+}
+
+const composeOralEpic = () => {
+  if (!canManageTribeTargets.value) {
+    showToast('只有首领或长老可以整理史诗')
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_compose_epic' })) {
+    showToast('口述史诗整理请求已提交')
+  }
+}
+
+const assignBeastTask = (taskKey) => {
+  if (!currentTribe.value?.tamedBeasts) {
+    showToast('部落还没有驯养幼兽')
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_beast_task', taskKey })) {
+    const label = beastTaskOptions.find((task) => task.key === taskKey)?.label || '任务'
+    showToast(`幼兽已出发：${label}`)
+  }
+}
+
+const chooseBeastSpecialty = (specialtyKey) => {
+  if (sendGameMessage({ type: 'tribe_choose_beast_specialty', specialtyKey })) {
+    showToast(`幼兽专长已选择：${beastSpecialtyLabel(specialtyKey)}`)
+  }
+}
+
+const chooseSeasonCelebration = (choiceKey) => {
+  if (!canManageTribeTargets.value) {
+    showToast('只有首领或长老可以决定庆典形式')
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_choose_celebration', choiceKey })) {
+    const label = celebrationChoiceOptions.value.find((choice) => choice.key === choiceKey)?.label || '庆典'
+    showToast(`庆典形式已选择：${label}`)
+  }
+}
+
+const claimTribeFlag = () => {
+  if (!currentTribe.value) {
+    showToast('请先加入部落')
+    return
+  }
+  if (!canManageTribeTargets.value) {
+    showToast('只有首领或长老可以插旗')
+    return
+  }
+  const config = currentTribe.value.flagConfig || {}
+  const flags = currentTribe.value.territoryFlags || []
+  if (config.max && flags.length >= config.max) {
+    showToast(`领地旗帜已达上限 ${config.max}`)
+    return
+  }
+  if (!localPlayer) return
+  if (sendGameMessage({
+    type: 'tribe_claim_flag',
+    x: localPlayer.position.x,
+    z: localPlayer.position.z
+  })) {
+    showToast('领地旗帜请求已提交')
+  }
+}
+
+const resolveTribeTrade = (tradeId, action) => {
+  if (!canManageTribeTargets.value) {
+    showToast('只有首领或长老可以处理贸易')
+    return
+  }
+  sendGameMessage({ type: 'tribe_resolve_trade', tradeId, action })
+}
+
+const punishMember = (member) => {
+  if (!canGovernMember(member)) {
+    showToast('你不能惩罚该成员')
+    return
+  }
+  const reason = `违反部落秩序：${member.name || '成员'}需要重新承担公共责任`
+  if (sendGameMessage({ type: 'tribe_punish_member', targetId: member.id, reason })) {
+    showToast('惩罚请求已提交')
+  }
+}
+
+const createCaveRoute = (cave) => {
+  const plan = selectedCavePlan.value
+  const baseDepth = caveExpeditionReady.value ? 6 + plan.depthBonus : 4
+  const caveKey = cave?.id || cave?.label || 'cave'
+  const offset = caveKey.length % caveNodeLibrary.length
+
+  return Array.from({ length: baseDepth }, (_, index) => {
+    const template = index === 0
+      ? caveNodeLibrary[0]
+      : caveNodeLibrary[(index + offset) % (caveNodeLibrary.length - 1) + 1]
+
+    return {
+      id: `${caveKey}_node_${index}`,
+      depth: index + 1,
+      type: template.type,
+      title: template.title,
+      description: template.description,
+      status: index === 0 ? 'current' : 'pending'
+    }
+  })
+}
+
+const setCaveNodeStatus = (index, status) => {
+  caveRoute.value = caveRoute.value.map((node, nodeIndex) => (
+    nodeIndex === index ? { ...node, status } : node
+  ))
+}
+
+const selectCaveExpeditionPlan = (planKey) => {
+  if (caveDepth.value > 0) return
+  if (!caveExpeditionPlans.some((plan) => plan.key === planKey)) return
+  caveExpeditionPlanKey.value = planKey
+  if (activeCave.value) {
+    caveRoute.value = createCaveRoute(activeCave.value)
+    activeCaveNodeIndex.value = 0
+    const plan = selectedCavePlan.value
+    caveFoodSupported.value = caveExpeditionReady.value && (currentTribe.value?.food || 0) >= plan.foodCost
+    const tribeSupplyBonus = caveExpeditionReady.value ? (caveFoodSupported.value ? 6 : 2) + plan.supplyBonus : 0
+    caveSupplies.value = Math.max(3, inventory.value.wood + inventory.value.stone + 2 + tribeSupplyBonus)
+    caveExplorationLog.value = `${plan.label}路线已标记：${plan.summary}。`
+  }
+}
+
+const enterCave = (cave) => {
+  activeCave.value = cave
+  showCaveOverlay.value = true
+  caveDepth.value = 0
+  caveFinds.value = 0
+  caveRoute.value = createCaveRoute(cave)
+  caveExpeditionSynced.value = false
+  activeCaveNodeIndex.value = 0
+  const plan = selectedCavePlan.value
+  caveFoodSupported.value = caveExpeditionReady.value && (currentTribe.value?.food || 0) >= plan.foodCost
+  const tribeSupplyBonus = caveExpeditionReady.value ? (caveFoodSupported.value ? 6 : 2) + plan.supplyBonus : 0
+  caveSupplies.value = Math.max(3, inventory.value.wood + inventory.value.stone + 2 + tribeSupplyBonus)
+  caveExplorationLog.value = caveExpeditionReady.value
+    ? `${currentTribe.value.name}的远征队抵达${cave.label || '山洞'}，选择${plan.label}路线。${caveFoodSupported.value ? `携带食物 ${plan.foodCost}，补给稳定。` : '食物不足，只能进行短程远征。'}`
+    : `${cave.label || '山洞'}里传来潮湿的风声。火把照出粗糙的岩壁，但这还只是一次试探。`
+  showToast(caveExpeditionReady.value ? '部落洞穴远征开始' : '进入山洞试探探索')
+}
+
+const exploreCaveStep = () => {
+  if (caveSupplies.value <= 0) {
+    caveExplorationLog.value = '补给耗尽，你需要返回地表。'
+    return
+  }
+  if (caveRouteComplete.value) {
+    caveExplorationLog.value = '这条洞穴路线已经探到尽头，最好先把收获带回地表。'
+    return
+  }
+
+  const node = activeCaveNode.value
+  if (!node) return
+
+  caveDepth.value = Math.max(caveDepth.value, node.depth)
+  const plan = selectedCavePlan.value
+  caveSupplies.value -= node.type === 'hazard' ? 2 : 1
+
+  const roll = Math.random()
+  const expeditionBonus = caveExpeditionReady.value ? (caveFoodSupported.value ? 1 : 0) : 0
+  if (node.type === 'ore' || node.type === 'deep' || roll > plan.oreRoll) {
+    const stoneGain = 1 + Math.floor(Math.random() * 2) + expeditionBonus
+    const plannedGain = caveExpeditionReady.value ? Math.floor(stoneGain * plan.findMultiplier) + plan.findBonus : stoneGain
+    const finalGain = node.type === 'deep' ? plannedGain + 1 : plannedGain
+    inventory.value.stone += finalGain
+    caveFinds.value += finalGain
+    addExperience(18 * finalGain)
+    caveExplorationLog.value = caveExpeditionReady.value
+      ? `远征队在${node.title}找到 ${finalGain} 块矿石，部落的洞穴路线正在成形。`
+      : `你在${node.title}找到 ${finalGain} 块矿石，洞穴还在向深处延伸。`
+  } else if (node.type === 'lore' || roll > plan.loreRoll) {
+    addExperience(caveExpeditionReady.value ? 18 : 12)
+    caveExplorationLog.value = caveExpeditionReady.value
+      ? `远征队记录了${node.title}里的古老刮痕，长老把它写入部落线索。`
+      : `${node.title}里有古老刮痕，像是某个部落曾在这里躲避风暴。`
+  } else {
+    caveExplorationLog.value = node.type === 'hazard'
+      ? `${node.title}落下碎石，你们额外消耗了一份补给才穿过去。`
+      : `${node.title}里没有明显收获，但路线被标记下来了。`
+  }
+
+  setCaveNodeStatus(activeCaveNodeIndex.value, 'completed')
+  const nextIndex = activeCaveNodeIndex.value + 1
+  if (nextIndex < caveRoute.value.length) {
+    activeCaveNodeIndex.value = nextIndex
+    setCaveNodeStatus(nextIndex, 'current')
+  } else {
+    caveExplorationLog.value += ' 这条洞穴路线已经到达尽头。'
+    if (caveExpeditionReady.value && !caveExpeditionSynced.value) {
+      caveExpeditionSynced.value = true
+      sendGameMessage({
+        type: 'tribe_complete_cave_expedition',
+        caveLabel: activeCave.value?.label || '未知洞穴',
+        depth: caveDepth.value,
+        finds: caveFinds.value,
+        foodSupported: caveFoodSupported.value,
+        routeKey: selectedCavePlan.value.key
+      })
+    }
+  }
+
+  if (caveSupplies.value <= 0) {
+    caveExplorationLog.value += ' 补给已经耗尽，最好马上回到地表。'
+  }
+}
+
+const leaveCave = () => {
+  showCaveOverlay.value = false
+  activeCave.value = null
+  caveExplorationLog.value = ''
+  caveRoute.value = []
+  activeCaveNodeIndex.value = 0
+  showToast('回到地表')
 }
 
 // 创建本地玩家
@@ -574,6 +2276,7 @@ const animate = () => {
 
   // 更新本地玩家移动
   updateLocalPlayer(delta)
+  updateInteractionTarget()
 
   // 定期更新装饰物（懒加载/卸载）
   if (currentTime - lastDecorationUpdate > decorationUpdateInterval) {
@@ -628,10 +2331,9 @@ const updateLocalPlayer = (delta) => {
   // 根据按键计算移动方向
   const moveDirection = new THREE.Vector3()
 
-  // 现在相机在后方看向前方(+Z)，所以forward向量指向+Z方向
-  // 直接使用forward，W键会让角色沿着相机朝向移动（+Z方向）
-  if (keys.w) moveDirection.add(forward)       // 前进 - 沿相机朝向
-  if (keys.s) moveDirection.sub(forward)       // 后退 - 反向
+  // 移动跟随相机朝向：W 永远朝屏幕前方走，S 永远后退。
+  if (keys.w) moveDirection.add(forward)       // 前进
+  if (keys.s) moveDirection.sub(forward)       // 后退
   if (keys.a) moveDirection.sub(right)         // 左移 - 相对于相机的左侧
   if (keys.d) moveDirection.add(right)         // 右移 - 相对于相机的右侧
 
@@ -725,6 +2427,73 @@ const sendPositionUpdate = () => {
   }))
 }
 
+const clearReconnectTimer = () => {
+  if (reconnectTimerId) {
+    clearTimeout(reconnectTimerId)
+    reconnectTimerId = null
+  }
+}
+
+const clearKeepAliveTimer = () => {
+  if (keepAliveTimerId) {
+    clearInterval(keepAliveTimerId)
+    keepAliveTimerId = null
+  }
+}
+
+const getGameWsUrl = (token) => {
+  const safeToken = encodeURIComponent(token)
+  return `${API_CONFIG.WS_BASE_URL}/ws/game?token=${safeToken}`
+}
+
+const ensureFreshToken = async () => {
+  const currentToken = localStorage.getItem('token')
+  if (!currentToken) {
+    throw new Error('NO_TOKEN')
+  }
+
+  if (!authRefreshInFlight) {
+    authRefreshInFlight = request.get('/auth/me')
+      .then(() => localStorage.getItem('token'))
+      .finally(() => {
+        authRefreshInFlight = null
+      })
+  }
+
+  const refreshedToken = await authRefreshInFlight
+  if (!refreshedToken) {
+    throw new Error('NO_TOKEN')
+  }
+  return refreshedToken
+}
+
+const startTokenKeepAlive = () => {
+  clearKeepAliveTimer()
+  keepAliveTimerId = setInterval(async () => {
+    if (manualClose) return
+    try {
+      await ensureFreshToken()
+    } catch (error) {
+      console.error('Token 保活失败:', error)
+    }
+  }, 4 * 60 * 1000)
+}
+
+const scheduleReconnect = () => {
+  if (manualClose || reconnectTimerId) return
+
+  reconnectAttempt += 1
+  const delay = Math.min(10000, 3000 + (reconnectAttempt - 1) * 2000)
+  connectionStatus.value = 'reconnecting'
+  addSystemMessage(`连接已断开，${Math.round(delay / 1000)} 秒后尝试恢复...`)
+
+  reconnectTimerId = setTimeout(async () => {
+    reconnectTimerId = null
+    if (manualClose) return
+    await initWebSocket({ silent: true, isReconnect: true })
+  }, delay)
+}
+
 // 键盘事件处理
 const handleKeyDown = (e) => {
   const key = e.key.toLowerCase()
@@ -739,6 +2508,12 @@ const handleKeyDown = (e) => {
   }
 
   // 特殊处理空格键
+  if (key === 'e') {
+    collectInteractionTarget()
+    e.preventDefault()
+    return
+  }
+
   if (key === ' ') {
     keys.space = true
     e.preventDefault()
@@ -785,18 +2560,30 @@ const handleResize = () => {
 }
 
 // 初始化 WebSocket
-const initWebSocket = () => {
+const initWebSocket = async ({ silent = false, isReconnect = false } = {}) => {
   try {
-    const token = localStorage.getItem('token')
-    const wsUrl = `ws://localhost:8000/ws/game?token=${token}`
+    clearReconnectTimer()
+
+    const token = await ensureFreshToken()
+    const wsUrl = getGameWsUrl(token)
+
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+      return
+    }
+
+    if (!silent) {
+      connectionStatus.value = isReconnect ? 'reconnecting' : 'connecting'
+    }
 
     ws = new WebSocket(wsUrl)
 
     ws.onopen = () => {
+      reconnectAttempt = 0
       connectionStatus.value = 'connected'
       console.log('WebSocket 连接成功')
+      startTokenKeepAlive()
 
-      addSystemMessage('已连接到游戏服务器')
+      addSystemMessage(isReconnect ? '已重新连接到游戏服务器' : '已连接到游戏服务器')
     }
 
     ws.onmessage = (event) => {
@@ -807,26 +2594,43 @@ const initWebSocket = () => {
     ws.onerror = (error) => {
       console.error('WebSocket 错误:', error)
       connectionStatus.value = 'disconnected'
-      addSystemMessage('连接错误')
     }
 
-    ws.onclose = () => {
+    ws.onclose = async (event) => {
+      ws = null
+      clearKeepAliveTimer()
       connectionStatus.value = 'disconnected'
       console.log('WebSocket 连接关闭')
-      addSystemMessage('与服务器断开连接')
-      clearRemotePlayers()
 
-      // 5秒后尝试重连
-      setTimeout(() => {
-        if (connectionStatus.value === 'disconnected') {
-          connectionStatus.value = 'reconnecting'
-          initWebSocket()
+      if (manualClose) {
+        return
+      }
+
+      const closeReason = event?.reason || ''
+      const isAuthClose = event?.code === 4001 || /token|认证/i.test(closeReason)
+
+      addSystemMessage(isAuthClose ? '登录状态已刷新，正在恢复游戏连接...' : '与服务器断开连接')
+
+      if (isAuthClose) {
+        try {
+          await ensureFreshToken()
+          await initWebSocket({ silent: true, isReconnect: true })
+          return
+        } catch (error) {
+          console.error('认证断连后的静默恢复失败:', error)
         }
-      }, 5000)
+      }
+
+      clearRemotePlayers()
+      scheduleReconnect()
     }
   } catch (error) {
     console.error('WebSocket 初始化失败:', error)
     connectionStatus.value = 'disconnected'
+    if (!manualClose) {
+      addSystemMessage('游戏连接初始化失败，正在重试...')
+      scheduleReconnect()
+    }
   }
 }
 
@@ -939,6 +2743,83 @@ const handleServerMessage = (message) => {
         applyEnvironment(message.environment)
       }
       break
+
+    case 'tribe_list':
+      tribeList.value = Array.isArray(message.tribes) ? message.tribes : []
+      break
+
+    case 'world_rumors':
+      worldRumors.value = normalizeWorldRumors(message.rumors)
+      break
+
+    case 'world_rumor':
+      mergeWorldRumor(message.rumor, message.rumors)
+      showToast(message.rumor?.title || '世界有了新的传闻')
+      addSystemMessage(message.rumor?.text || '世界有了新的传闻')
+      break
+
+    case 'tribe_state':
+      currentTribe.value = message.tribe || null
+      tribeRole.value = message.role || null
+      tribeContribution.value = message.contribution || 0
+      tribeVotes.value = Array.isArray(message.votes) ? message.votes : []
+      resetTribeHistoryPage(message.tribe)
+      if (message.tribe) pendingTribeJoinRequests.value = new Set()
+      syncTribeAnnouncementDraft()
+      syncActiveBeastVisual()
+      if (message.tribe) {
+        activeQuest.value.title = '为部落添柴加石'
+        activeQuest.value.description = '采集资源并上交到公共仓库，让营火、工具和洞穴探索逐渐成为可能。'
+        newTribeName.value = `${message.tribe.name}后备营`
+      }
+      break
+
+    case 'tribe_history_page':
+      tribeHistoryLoaded.value = mergeHistoryEvents([
+        ...tribeHistoryLoaded.value,
+        ...(Array.isArray(message.history) ? message.history : [])
+      ])
+      tribeHistoryNextCursor.value = message.nextCursor ?? null
+      tribeHistoryTotal.value = Number(message.total || tribeHistoryTotal.value || 0)
+      tribeHistoryLoading.value = false
+      break
+
+    case 'tribe_error':
+      tribeHistoryLoading.value = false
+      showToast(message.message || '部落操作失败')
+      break
+
+    case 'tribe_notice':
+      showToast(message.message || '部落有新的进展')
+      addSystemMessage(message.message || '部落有新的进展')
+      break
+
+    case 'tribe_rune_unlocked':
+      if (message.rune?.rare) {
+        showRareRuneUnlock(message.rune, message.message)
+      } else {
+        showToast(message.message || '图腾刻下了新的铭文')
+      }
+      addSystemMessage(message.message || '图腾刻下了新的铭文')
+      break
+
+    case 'season_settlement': {
+      currentTribe.value = null
+      tribeRole.value = null
+      tribeContribution.value = 0
+      tribeVotes.value = []
+      tribeList.value = []
+
+      const topTribe = Array.isArray(message.topTribes) ? message.topTribes[0] : null
+      const summary = topTribe
+        ? `${message.season || '上月'} 月度结算完成：${topTribe.name} 以 ${topTribe.totalContribution || 0} 贡献居首。新赛季已开始。`
+        : `${message.season || '上月'} 月度结算完成：新赛季已开始，所有部落数据已清空。`
+
+      if (message.rumor) mergeWorldRumor(message.rumor)
+      showToast('月度结算完成，新赛季开始')
+      addSystemMessage(summary)
+      break
+    }
 
     case 'pong':
       latency.value = Date.now() - message.timestamp
@@ -1094,8 +2975,15 @@ const startHeartbeat = () => {
 
 // 生命周期
 onMounted(() => {
+  manualClose = false
   initGame()
   startHeartbeat()
+  tribeRitualTimerId = setInterval(() => {
+    tribeRitualTick.value = Date.now()
+  }, 1000)
+  resourceTideTimerId = setInterval(() => {
+    resourceTideTick.value = Date.now()
+  }, 1000)
 
   // 监听全屏变化
   document.addEventListener('fullscreenchange', () => {
@@ -1104,6 +2992,9 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  manualClose = true
+  clearReconnectTimer()
+  clearKeepAliveTimer()
   // 清理资源
   if (renderer) {
     renderer.dispose()
@@ -1126,10 +3017,27 @@ onUnmounted(() => {
   }
   if (ws) {
     ws.close()
+    ws = null
   }
   if (heartbeatTimerId) {
     clearInterval(heartbeatTimerId)
     heartbeatTimerId = null
+  }
+  if (tribeRitualTimerId) {
+    clearInterval(tribeRitualTimerId)
+    tribeRitualTimerId = null
+  }
+  if (resourceTideTimerId) {
+    clearInterval(resourceTideTimerId)
+    resourceTideTimerId = null
+  }
+  if (beastFeedbackClearTimerId) {
+    clearTimeout(beastFeedbackClearTimerId)
+    beastFeedbackClearTimerId = null
+  }
+  if (rareRuneUnlockTimer) {
+    window.clearTimeout(rareRuneUnlockTimer)
+    rareRuneUnlockTimer = null
   }
 
   window.removeEventListener('keydown', handleKeyDown)
@@ -1138,373 +3046,4 @@ onUnmounted(() => {
 })
 </script>
 
-<style scoped>
-.game-container {
-  width: 100%;
-  height: 100vh;
-  position: relative;
-  overflow: hidden;
-  background: #000;
-}
-
-.game-canvas-wrapper {
-  width: 100%;
-  height: 100%;
-  position: relative;
-}
-
-/* 性能监视器 */
-.performance-monitor {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  background: rgba(0, 0, 0, 0.8);
-  padding: 12px 16px;
-  border-radius: 8px;
-  color: #0f0;
-  font-family: 'Courier New', monospace;
-  font-size: 12px;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(0, 255, 0, 0.3);
-  z-index: 100;
-}
-
-.monitor-item {
-  margin: 4px 0;
-}
-
-/* 游戏 UI 层 */
-.game-ui {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-
-.game-ui > * {
-  pointer-events: auto;
-}
-
-/* 顶部信息栏 */
-.top-bar {
-  position: absolute;
-  top: 20px;
-  left: 20px;
-  right: 280px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 20px;
-  flex-wrap: wrap;
-}
-
-.player-info {
-  display: flex;
-  gap: 20px;
-  background: rgba(0, 0, 0, 0.8);
-  padding: 12px 20px;
-  border-radius: 12px;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.info-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #fff;
-  font-size: 14px;
-}
-
-.info-label {
-  color: #aaa;
-}
-
-.info-value {
-  font-weight: 600;
-  color: #3498db;
-}
-
-.health-bar {
-  width: 100px;
-  height: 8px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.health-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #e74c3c 0%, #e67e22 100%);
-  transition: width 0.3s ease;
-}
-
-.game-controls {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.control-btn {
-  padding: 8px 16px;
-  background: rgba(52, 152, 219, 0.9);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  transition: all 0.2s ease;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.control-btn:hover {
-  background: rgba(52, 152, 219, 1);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(52, 152, 219, 0.5);
-}
-
-/* 聊天窗口 */
-.chat-window {
-  position: absolute;
-  bottom: 20px;
-  left: 20px;
-  width: 350px;
-  height: 400px;
-  background: rgba(0, 0, 0, 0.9);
-  border-radius: 12px;
-  display: flex;
-  flex-direction: column;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.chat-header {
-  padding: 12px 16px;
-  background: rgba(52, 152, 219, 0.4);
-  border-radius: 12px 12px 0 0;
-  color: #fff;
-  font-weight: 600;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  color: #fff;
-  font-size: 24px;
-  cursor: pointer;
-  padding: 0;
-  width: 24px;
-  height: 24px;
-  line-height: 1;
-  transition: color 0.2s ease;
-}
-
-.close-btn:hover {
-  color: #e74c3c;
-}
-
-.chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px;
-}
-
-.chat-message {
-  margin-bottom: 8px;
-  padding: 6px 10px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 6px;
-  font-size: 13px;
-}
-
-.chat-message.own-message {
-  background: rgba(52, 152, 219, 0.3);
-  margin-left: 20px;
-}
-
-.chat-message.system-message {
-  background: rgba(241, 196, 15, 0.2);
-  text-align: center;
-  font-style: italic;
-}
-
-.message-sender {
-  color: #3498db;
-  font-weight: 600;
-  margin-right: 6px;
-}
-
-.message-text {
-  color: #fff;
-}
-
-.chat-input {
-  padding: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.chat-input input {
-  width: 100%;
-  padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
-  color: #fff;
-  font-size: 13px;
-  outline: none;
-  transition: all 0.2s ease;
-}
-
-.chat-input input:focus {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: #3498db;
-}
-
-.chat-input input::placeholder {
-  color: #888;
-}
-
-.chat-toggle-btn {
-  position: absolute;
-  bottom: 20px;
-  left: 20px;
-  padding: 12px 20px;
-  background: rgba(52, 152, 219, 0.9);
-  color: white;
-  border: none;
-  border-radius: 12px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  transition: all 0.2s ease;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.chat-toggle-btn:hover {
-  background: rgba(52, 152, 219, 1);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(52, 152, 219, 0.5);
-}
-
-/* 游戏说明 */
-.game-instructions {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 450px;
-  max-height: 80vh;
-  background: rgba(0, 0, 0, 0.95);
-  border-radius: 12px;
-  padding: 0;
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  overflow: hidden;
-}
-
-.instructions-header {
-  padding: 16px 20px;
-  background: rgba(52, 152, 219, 0.4);
-  border-radius: 12px 12px 0 0;
-  color: #fff;
-  font-weight: 600;
-  font-size: 16px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.instructions-content {
-  padding: 20px;
-  color: #fff;
-  max-height: calc(80vh - 60px);
-  overflow-y: auto;
-}
-
-.instructions-content h3 {
-  margin: 16px 0 8px 0;
-  color: #3498db;
-  font-size: 14px;
-}
-
-.instructions-content h3:first-child {
-  margin-top: 0;
-}
-
-.instructions-content ul {
-  margin: 0;
-  padding-left: 20px;
-  font-size: 13px;
-  line-height: 1.8;
-}
-
-.instructions-content li {
-  color: #ccc;
-}
-
-/* 连接状态 */
-.connection-status {
-  position: absolute;
-  bottom: 20px;
-  right: 20px;
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 500;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.connection-status.connecting,
-.connection-status.reconnecting {
-  background: rgba(241, 196, 15, 0.9);
-  color: #fff;
-}
-
-.connection-status.connected {
-  background: rgba(46, 204, 113, 0.9);
-  color: #fff;
-}
-
-.connection-status.disconnected {
-  background: rgba(231, 76, 60, 0.9);
-  color: #fff;
-}
-
-/* 滚动条样式 */
-.chat-messages::-webkit-scrollbar,
-.instructions-content::-webkit-scrollbar {
-  width: 6px;
-}
-
-.chat-messages::-webkit-scrollbar-track,
-.instructions-content::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 3px;
-}
-
-.chat-messages::-webkit-scrollbar-thumb,
-.instructions-content::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 3px;
-}
-
-.chat-messages::-webkit-scrollbar-thumb:hover,
-.instructions-content::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
-}
-</style>
-<!-- 扩展（更接近大厂做法的方向）
-
-  - 新增实体类型：在 frontend/src/game/entityRegistry.js 增加 type 分支（mesh + collider），后端 backend/game_routes.py
-    的 decorations 里生成对应数据即可。
-  - 更“精致”的展示：下一步建议上 LOD/Instancing（树/草大量实例化）、glTF 资产 + PBR 材质、以及更标准的 ECS（Entity
-    Component System） 分层（渲染/物理/逻辑解耦）。现在这套模块化结构已经能平滑演进到那种架构。 -->
+<style scoped src="./GameView.css"></style>

@@ -11,6 +11,7 @@ export class WorldEntityManager {
 
     this.decorations = []
     this.environment = null
+    this.collectedIds = new Set()
 
     this.loadedDecorations = new Map()
     this.mountainsGroup = null
@@ -26,8 +27,25 @@ export class WorldEntityManager {
 
   setDecorations(decorations) {
     this.decorations = Array.isArray(decorations) ? decorations : []
+    this.collectedIds.clear()
     this.resetLoadedDecorations()
     this.rebuildColliders()
+  }
+
+  updateDecoration(decorationId, patch) {
+    if (!decorationId || !patch) return false
+    const index = this.decorations.findIndex((decoration) => decoration?.id === decorationId)
+    if (index < 0) return false
+
+    this.decorations[index] = { ...this.decorations[index], ...patch }
+    const loaded = this.loadedDecorations.get(decorationId)
+    if (loaded && this.scene) {
+      this.scene.remove(loaded)
+      disposeObject3D(loaded)
+      this.loadedDecorations.delete(decorationId)
+    }
+    this.rebuildColliders()
+    return true
   }
 
   setEnvironment(environment) {
@@ -128,7 +146,10 @@ export class WorldEntityManager {
       this.spatialHash.insert(collider, collider.x, collider.z, collider.radius)
     }
 
-    for (const decoration of this.decorations) add(decoration)
+    for (const decoration of this.decorations) {
+      if (this.collectedIds.has(decoration.id)) continue
+      add(decoration)
+    }
 
     const mountains = Array.isArray(this.environment?.mountains) ? this.environment.mountains : []
     for (const m of mountains) add({ ...m, type: 'mountain' })
@@ -138,6 +159,16 @@ export class WorldEntityManager {
     if (!this.scene || !playerPosition) return
 
     for (const decoration of this.decorations) {
+      if (this.collectedIds.has(decoration.id)) {
+        const loaded = this.loadedDecorations.get(decoration.id)
+        if (loaded) {
+          this.scene.remove(loaded)
+          disposeObject3D(loaded)
+          this.loadedDecorations.delete(decoration.id)
+        }
+        continue
+      }
+
       const dx = decoration.x - playerPosition.x
       const dz = decoration.z - playerPosition.z
       const distance = Math.sqrt(dx * dx + dz * dz)
@@ -156,6 +187,97 @@ export class WorldEntityManager {
         this.loadedDecorations.delete(decoration.id)
       }
     }
+
+    this.updateDecorationAnimations()
+  }
+
+  updateDecorationAnimations(time = performance.now() * 0.001) {
+    for (const mesh of this.loadedDecorations.values()) {
+      const animation = mesh?.userData?.animation
+      if (!animation || animation.type !== 'beast') continue
+      if (!animation.initialized) {
+        animation.baseX = mesh.position.x
+        animation.baseZ = mesh.position.z
+        animation.initialized = true
+      }
+      const t = time + animation.phase
+      const radius = animation.radius || 1
+      if (animation.behavior === 'patrol') {
+        mesh.position.x = animation.baseX + Math.cos(t * 0.65) * radius
+        mesh.position.z = animation.baseZ + Math.sin(t * 0.65) * radius
+        mesh.rotation.y = -t * 0.65
+      } else if (animation.behavior === 'carry') {
+        mesh.position.x = animation.baseX + Math.sin(t * 0.5) * radius * 0.45
+        mesh.rotation.z = Math.sin(t * 2.2) * 0.04
+      } else if (animation.behavior === 'guard') {
+        mesh.rotation.y = Math.sin(t * 0.6) * 0.45
+      } else {
+        mesh.position.y = Math.sin(t * 1.4) * 0.05
+      }
+    }
+  }
+
+  findNearestInteractable(playerPosition, radius = 4) {
+    if (!playerPosition) return null
+
+    let nearest = null
+    let nearestDist2 = radius * radius
+
+    for (const decoration of this.decorations) {
+      if (!decoration?.id || this.collectedIds.has(decoration.id)) continue
+      if (decoration.type !== 'tree' && decoration.type !== 'rock') continue
+
+      const dx = decoration.x - playerPosition.x
+      const dz = decoration.z - playerPosition.z
+      const dist2 = dx * dx + dz * dz
+      if (dist2 <= nearestDist2) {
+        nearest = decoration
+        nearestDist2 = dist2
+      }
+    }
+
+    return nearest
+  }
+
+  findNearestEntityByTypes(playerPosition, types = [], radius = 4) {
+    if (!playerPosition || !Array.isArray(types) || !types.length) return null
+
+    const allowedTypes = new Set(types)
+    let nearest = null
+    let nearestDist2 = radius * radius
+
+    for (const decoration of this.decorations) {
+      if (!decoration?.id || this.collectedIds.has(decoration.id)) continue
+      if (!allowedTypes.has(decoration.type)) continue
+
+      const dx = decoration.x - playerPosition.x
+      const dz = decoration.z - playerPosition.z
+      const dist2 = dx * dx + dz * dz
+      if (dist2 <= nearestDist2) {
+        nearest = decoration
+        nearestDist2 = dist2
+      }
+    }
+
+    return nearest
+  }
+
+  collectEntity(entityId) {
+    if (!entityId || this.collectedIds.has(entityId)) return false
+    const entity = this.decorations.find((decoration) => decoration.id === entityId)
+    if (!entity || (entity.type !== 'tree' && entity.type !== 'rock')) return false
+
+    this.collectedIds.add(entityId)
+
+    const mesh = this.loadedDecorations.get(entityId)
+    if (mesh) {
+      this.scene.remove(mesh)
+      disposeObject3D(mesh)
+      this.loadedDecorations.delete(entityId)
+    }
+
+    this.rebuildColliders()
+    return true
   }
 
   resolvePlayerXZ(currentPosition, desiredPosition, playerRadius = 0.7) {

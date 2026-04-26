@@ -41,6 +41,14 @@ const playerX = ref(0)
 const playerZ = ref(0)
 const playerId = ref(null)
 const playerName = ref('我')
+const personalConflictStatus = ref({
+  fatigue: 0,
+  fatigueMax: 6,
+  fatigueUntil: '',
+  guardUntil: '',
+  guardTargetName: '',
+  personalRenown: 0
+})
 
 const inventory = ref({
   wood: 0,
@@ -415,6 +423,7 @@ const describeLandmark = (landmark) => {
   if (landmark.type === 'tribe_camp' && landmark.isOwnTribe) return landmark.oathLabel ? `本部落营地 · ${landmark.oathLabel}` : '本部落营地'
   if (landmark.type === 'tribe_flag' && landmark.isOwnTribe) return landmark.oathLabel ? `本部落领地旗帜 · ${landmark.oathLabel}` : '本部落领地旗帜'
   if (landmark.type === 'tribe_beast_marker' && landmark.isOwnTribe) return '本部落驯养幼兽'
+  if (landmark.type === 'scouted_resource_site' && landmark.jointWatchId) return landmark.isOwnTribe ? `联合守望线索 · ${landmark.resourceLabel || landmark.label || '待确认'}` : '其他部落联合守望线索'
   if (landmark.type === 'scouted_resource_site') return landmark.isOwnTribe ? `侦察资源点 · ${landmark.resourceLabel || landmark.label || '待确认'}` : '其他部落侦察资源点'
   if (landmark.type === 'controlled_resource_site') return landmark.isOwnTribe ? `控制资源点 Lv.${landmark.level || 1} · ${landmark.resourceLabel || landmark.label || '可收取'}` : '其他部落控制资源点'
   if (landmark.type === 'tribe_totem' && landmark.oathLabel) return `${landmark.oathLabel}图腾`
@@ -685,6 +694,28 @@ const formatHistoryTime = (value) => {
   return date.toLocaleString()
 }
 
+const formatRemainingSeconds = (value) => {
+  resourceTideTick.value
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const seconds = Math.max(0, Math.ceil((date.getTime() - Date.now()) / 1000))
+  if (seconds <= 0) return ''
+  return `${seconds}s`
+}
+
+const personalConflictText = computed(() => {
+  const status = personalConflictStatus.value || {}
+  const fatigue = status.fatigue || 0
+  const fatigueMax = status.fatigueMax || 6
+  const fatigueTime = formatRemainingSeconds(status.fatigueUntil)
+  const guardTime = formatRemainingSeconds(status.guardUntil)
+  const parts = [`声望 ${status.personalRenown || 0}`, `疲劳 ${fatigue}/${fatigueMax}`]
+  if (fatigueTime) parts.push(`恢复 ${fatigueTime}`)
+  if (guardTime) parts.push(`守势 ${guardTime}`)
+  return parts.join(' · ')
+})
+
 const openTribeHistoryDetail = (event) => {
   activeHistoryDetail.value = event || {}
   showHistoryDetail.value = true
@@ -826,6 +857,10 @@ const caveRuneFindsBonus = computed(() => Number(currentTribe.value?.runeEffects
 const hasTribeWorkbench = computed(() => {
   const buildings = currentTribe.value?.camp?.buildings || []
   return buildings.some((building) => building?.type === 'tribe_workbench')
+})
+const hasTribeRoad = computed(() => {
+  const buildings = currentTribe.value?.camp?.buildings || []
+  return buildings.some((building) => building?.type === 'tribe_road')
 })
 const beastSpecialtyOptions = computed(() => optionMapToList(currentTribe.value?.beastGrowth?.specialtyOptions))
 const activeBeastTask = computed(() => {
@@ -1417,28 +1452,63 @@ const buildTribeInteraction = (entity) => {
 
   if (entity.type === 'scouted_resource_site') {
     const contestText = entity.contested ? `；正在与${entity.contestedByTribeName || '其他部落'}争夺` : ''
+    const sharedText = entity.jointWatchId ? `；与${entity.sharedWithTribeName || '邻近部落'}共享` : ''
     return {
       entity,
       label: entity.label || '侦察资源点',
       actionText: ownTribe ? '确认' : '观察',
       rewardText: ownTribe
-        ? `${entity.regionLabel || '附近区域'}的临时线索，可转化为部落仓库、食物或发现进度${contestText}`
-        : `${tribeName}的侦察队留下了资源线索${contestText}`
+        ? `${entity.regionLabel || '附近区域'}的临时线索，可转化为部落仓库、食物或发现进度${contestText}${sharedText}`
+        : `${tribeName}的侦察队留下了资源线索${contestText}${sharedText}`
     }
   }
 
   if (entity.type === 'controlled_resource_site') {
+    const patrolText = entity.lastPatrolledBy ? `；上次由${entity.lastPatrolledBy}巡守` : ''
+    const relayText = entity.lastRelayedBy ? `；上次由${entity.lastRelayedBy}运输` : (ownTribe && hasTribeRoad.value ? '；可组织道路运输' : '')
+    const tradeText = entity.contestResolvedAs === 'trade_path' ? '；交换通路会带来协作信誉' : ''
     return {
       entity,
       label: entity.label || '控制资源点',
       actionText: ownTribe ? '收取' : '观察',
       rewardText: ownTribe
-        ? `${entity.regionLabel || '附近区域'}的短时控制点，Lv.${entity.level || 1}，可周期带回资源`
+        ? `${entity.regionLabel || '附近区域'}的短时控制点，Lv.${entity.level || 1}，可周期带回资源${patrolText}${relayText}${tradeText}`
         : `${tribeName}已经控制了这处资源点`
     }
   }
 
   return null
+}
+
+const getNearestRemotePlayerTarget = () => {
+  if (!localPlayer || !remotePlayers.size) return null
+  let nearest = null
+  let nearestDistance = Infinity
+  remotePlayers.forEach((remote, id) => {
+    const dx = remote.mesh.position.x - localPlayer.position.x
+    const dz = remote.mesh.position.z - localPlayer.position.z
+    const distance = Math.sqrt(dx * dx + dz * dz)
+    if (distance < nearestDistance && distance <= 4.5) {
+      nearest = { id, remote, distance }
+      nearestDistance = distance
+    }
+  })
+  if (!nearest) return null
+  const data = nearest.remote.data || {}
+  return {
+    entity: {
+      type: 'remote_player',
+      id: nearest.id,
+      name: data.name || `玩家${nearest.id.slice(0, 6)}`,
+      conflictFatigue: data.conflict_fatigue || 0,
+      conflictFatigueUntil: data.conflict_fatigue_until || '',
+      personalRenown: data.personal_renown || 0
+    },
+    label: data.name || `玩家${nearest.id.slice(0, 6)}`,
+    actionText: '挑战',
+    rewardText: `个人冲突：威慑、挑战或守势；疲劳 ${data.conflict_fatigue || 0}，个人声望 ${data.personal_renown || 0}`,
+    hintText: '第一版只造成疲劳、击退和关系变化'
+  }
 }
 
 const getNearestResource = () => {
@@ -1467,6 +1537,9 @@ const getNearestResource = () => {
       }
     }
   }
+
+  const remotePlayerTarget = getNearestRemotePlayerTarget()
+  if (remotePlayerTarget) return remotePlayerTarget
 
   const tribeBuilding = world.findNearestEntityByTypes(localPlayer.position, tribeInteractableTypes, interactionDistance + 1)
   if (tribeBuilding) {
@@ -1580,6 +1653,11 @@ const advanceQuest = (amount = 1) => {
 const collectInteractionTarget = () => {
   const target = interactionTarget.value || getNearestResource()
   if (!target?.entity || !world) return
+
+  if (target.entity.type === 'remote_player') {
+    resolvePersonalConflict(target.entity.id, 'challenge')
+    return
+  }
 
   if (target.entity.type === 'season_objective') {
     if (sendGameMessage({ type: 'tribe_complete_season_objective', objectiveId: target.entity.id })) {
@@ -1714,6 +1792,112 @@ const sendGameMessage = (payload) => {
   }
   addSystemMessage('未连接到游戏服务器')
   return false
+}
+
+const resolvePersonalConflict = (targetId, actionKey = 'challenge') => {
+  if (!targetId) return
+  if (sendGameMessage({ type: 'personal_conflict', targetId, actionKey })) {
+    const labels = { intimidate: '威慑', challenge: '挑战', spar: '切磋', guard: '守势' }
+    showToast(`已发起${labels[actionKey] || '个人冲突'}`)
+  }
+}
+
+const startSkirmish = (outcomeId) => {
+  if (!outcomeId) return
+  if (sendGameMessage({ type: 'tribe_start_skirmish', outcomeId })) {
+    showToast('小规模集结已发起')
+  }
+}
+
+const joinSkirmish = (conflictId) => {
+  if (!conflictId) return
+  if (sendGameMessage({ type: 'tribe_join_skirmish', conflictId })) {
+    showToast('已报名参战')
+  }
+}
+
+const resolveSkirmish = (conflictId) => {
+  if (!conflictId) return
+  if (sendGameMessage({ type: 'tribe_resolve_skirmish', conflictId })) {
+    showToast('正在结算小规模冲突')
+  }
+}
+
+const declareWar = (otherTribeId) => {
+  if (!otherTribeId) return
+  if (sendGameMessage({ type: 'tribe_declare_war', otherTribeId })) {
+    showToast('已发起正式宣战')
+  }
+}
+
+const joinWar = (warId) => {
+  if (!warId) return
+  if (sendGameMessage({ type: 'tribe_join_war', warId })) {
+    showToast('已加入正式部落战争')
+  }
+}
+
+const resolveWar = (warId) => {
+  if (!warId) return
+  if (sendGameMessage({ type: 'tribe_resolve_war', warId })) {
+    showToast('正在结算正式部落战争')
+  }
+}
+
+const requestWarTruce = (warId) => {
+  if (!warId) return
+  if (sendGameMessage({ type: 'tribe_request_war_truce', warId })) {
+    showToast('已提出正式停战谈判')
+  }
+}
+
+const completeWarRepair = (repairId) => {
+  if (!repairId) return
+  if (sendGameMessage({ type: 'tribe_complete_war_repair', repairId })) {
+    showToast('正在修复战后边境')
+  }
+}
+
+const completeWarRevival = (revivalId) => {
+  if (!revivalId) return
+  if (sendGameMessage({ type: 'tribe_complete_war_revival', revivalId })) {
+    showToast('正在组织战败复兴')
+  }
+}
+
+const supportWar = (warId, sideTribeId) => {
+  if (!warId || !sideTribeId) return
+  if (sendGameMessage({ type: 'tribe_support_war', warId, sideTribeId })) {
+    showToast('已发起战争援助')
+  }
+}
+
+const mediateWar = (warId) => {
+  if (!warId) return
+  if (sendGameMessage({ type: 'tribe_mediate_war', warId })) {
+    showToast('已发起战争调停')
+  }
+}
+
+const resolveWarDiplomacy = (diplomacyId, action) => {
+  if (!diplomacyId || !action) return
+  if (sendGameMessage({ type: 'tribe_resolve_war_diplomacy', diplomacyId, action })) {
+    showToast(action === 'honor' ? '已履行停战约定' : '已记录停战追责')
+  }
+}
+
+const completeWarAftermath = (aftermathId) => {
+  if (!aftermathId) return
+  if (sendGameMessage({ type: 'tribe_complete_war_aftermath', aftermathId })) {
+    showToast('正在处理战后余波')
+  }
+}
+
+const completeWarAllyTask = (taskId, action = 'honor') => {
+  if (!taskId) return
+  if (sendGameMessage({ type: 'tribe_complete_war_ally_task', taskId, action })) {
+    showToast('正在处理战盟后续')
+  }
 }
 
 const createTribe = () => {
@@ -1989,6 +2173,24 @@ const resolveBoundaryOutcome = (outcomeId, responseKey = '') => {
   }
 }
 
+const patrolControlledSite = (siteId) => {
+  if (!siteId) return
+  if (sendGameMessage({ type: 'tribe_patrol_controlled_site', siteId })) {
+    showToast('控制资源点巡守已记录')
+  }
+}
+
+const relayControlledSite = (siteId) => {
+  if (!siteId) return
+  if (!hasTribeRoad.value) {
+    showToast('先建造营地道路，才能组织运输')
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_relay_controlled_site', siteId })) {
+    showToast('控制资源点运输已组织')
+  }
+}
+
 const claimTribeFlag = () => {
   if (!currentTribe.value) {
     showToast('请先加入部落')
@@ -2255,6 +2457,8 @@ const createRemotePlayer = (id, data) => {
 
   scene.add(player)
   remotePlayers.set(id, {
+    id,
+    data: { ...data, id },
     mesh: player,
     targetPosition: new THREE.Vector3(data.x || 0, data.y || 2, data.z || 0),
     currentPosition: new THREE.Vector3(data.x || 0, data.y || 2, data.z || 0)
@@ -2279,6 +2483,7 @@ const updateRemotePlayer = (id, data) => {
     createRemotePlayer(id, data)
     return
   }
+  player.data = { ...(player.data || {}), ...data, id }
   player.targetPosition.set(data.x, data.y, data.z)
 }
 
@@ -2668,6 +2873,12 @@ const handleServerMessage = (message) => {
       playerCount.value = message.playerCount
       // 保存玩家名称
       playerName.value = message.data?.name || '我'
+      personalConflictStatus.value = {
+        ...personalConflictStatus.value,
+        fatigue: message.data?.conflict_fatigue || 0,
+        fatigueUntil: message.data?.conflict_fatigue_until || '',
+        personalRenown: message.data?.personal_renown || 0
+      }
       addSystemMessage(`欢迎！当前在线 ${message.playerCount} 人`)
 
       // 服务端权威出生点：以 welcome 下发的坐标为准
@@ -2696,8 +2907,37 @@ const handleServerMessage = (message) => {
       addSystemMessage(`玩家离开了游戏`)
       break
 
+    case 'personal_conflict_status':
+      personalConflictStatus.value = {
+        ...personalConflictStatus.value,
+        ...(message.status || {})
+      }
+      break
+
     case 'player_move':
       updateRemotePlayer(message.playerId, message.data)
+      break
+
+    case 'personal_conflict_result': {
+      const isActor = message.actorId === playerId.value
+      const isTarget = message.targetId === playerId.value
+      if (message.actionKey === 'guard') {
+        const text = `${message.actorName || '玩家'} 对 ${message.targetName || '玩家'} 摆出守势`
+        if (message.status && isActor) personalConflictStatus.value = { ...personalConflictStatus.value, ...message.status }
+        if (isActor || isTarget) showToast(text)
+        addSystemMessage(text)
+        break
+      }
+      const winnerText = message.winnerId === message.actorId ? message.actorName : message.targetName
+      const guardText = message.guarded ? '，守势抵消了部分疲劳' : ''
+      const text = `${message.actorName || '玩家'} 对 ${message.targetName || '玩家'} 发起${message.actionLabel || '冲突'}，${winnerText || '一方'}占了上风${guardText}`
+      if (isActor || isTarget) showToast(text)
+      addSystemMessage(text)
+      break
+    }
+
+    case 'personal_conflict_error':
+      showToast(message.message || '个人冲突失败')
       break
 
     case 'position_correction': {

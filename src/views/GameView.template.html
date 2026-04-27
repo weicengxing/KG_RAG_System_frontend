@@ -326,6 +326,7 @@
               <div v-for="claim in currentTribe.mythClaims" :key="claim.id" class="tribe-trade-item myth-claim-item">
                 <strong>{{ claim.title }} · 神话争夺</strong>
                 <small>{{ claim.summary }}</small>
+                <small v-if="claim.sharedSummary" class="myth-shared-note">{{ claim.sharedSummary }}</small>
                 <small>领先：{{ claim.leaderLabel || '尚无版本' }} {{ claim.leaderInfluence || 0 }} / {{ claim.influenceTarget || 3 }} · 剩余 {{ formatRemainingSeconds(claim.activeUntil) || '即将结束' }}</small>
                 <div class="tribe-vote-actions myth-choice-actions">
                   <button v-for="interpretation in claim.interpretations" :key="interpretation.key" @click="supportMythClaim(claim.id, interpretation.key)">
@@ -333,7 +334,7 @@
                   </button>
                 </div>
                 <small v-for="interpretation in claim.interpretations" :key="`${claim.id}-${interpretation.key}`" v-show="interpretation.influence">
-                  {{ interpretation.label }}：{{ interpretation.summary }} · {{ interpretation.rewardLabel || '声望' }}
+                  {{ interpretation.label }}：{{ interpretation.summary }} · {{ interpretation.rewardLabel || '声望' }}<template v-if="claim.shared"> · 本部 {{ interpretation.ownInfluence || 0 }} / 他部 {{ interpretation.rivalInfluence || 0 }}</template>
                 </small>
               </div>
             </div>
@@ -608,6 +609,30 @@
                 </div>
               </div>
             </div>
+            <div class="tribe-trade-list" v-if="false && (currentTribe.standingRitual || standingRitualOptions.length)">
+              <div v-if="currentTribe.standingRitual" class="tribe-trade-item standing-ritual-item">
+                <strong>{{ currentTribe.standingRitual.label }} 路 多人站位仪式</strong>
+                <small>{{ currentTribe.standingRitual.summary }}</small>
+                <small>站位 {{ currentTribe.standingRitual.participantCount || 0 }} / {{ currentTribe.standingRitual.target || 3 }}，至少 {{ currentTribe.standingRitual.minParticipants || 2 }} 人可收束 路 剩余 {{ formatRemainingSeconds(currentTribe.standingRitual.activeUntil) || '即将结束' }}</small>
+                <small v-if="currentTribe.standingRitual.participants?.length">
+                  已站位：{{ currentTribe.standingRitual.participants.map((item) => `${item.name}-${item.stanceLabel}`).join('、') }}
+                </small>
+                <div class="tribe-vote-actions standing-stance-actions">
+                  <button v-for="stance in standingRitualStances" :key="stance.key" @click="joinStandingRitual(stance.key)">
+                    {{ stance.label }}
+                  </button>
+                  <button v-if="canManageTribeTargets" @click="completeStandingRitual">收束</button>
+                </div>
+              </div>
+              <div v-for="option in standingRitualOptions" :key="option.key" class="tribe-trade-item standing-ritual-item">
+                <strong>{{ option.label }} 路 可发起</strong>
+                <small>{{ option.summary }}</small>
+                <small>目标 {{ currentTribe.standingRitualConfig?.target || 3 }} 人，至少 {{ currentTribe.standingRitualConfig?.minParticipants || 2 }} 人可完成</small>
+                <div class="tribe-vote-actions" v-if="canManageTribeTargets">
+                  <button @click="startStandingRitual(option.key)">发起</button>
+                </div>
+              </div>
+            </div>
             <div class="tribe-flag-row" v-if="currentTribe.flagConfig">
               <span>领地旗帜 {{ currentTribe.territoryFlags?.length || 0 }} / {{ currentTribe.flagConfig.max }}</span>
               <button class="tribe-mini-btn" :disabled="!canManageTribeTargets" @click="claimTribeFlag">插旗</button>
@@ -634,6 +659,30 @@
               <div class="tribe-target-title">部落仪式</div>
               <div class="tribe-target-text">{{ tribeRitualText }}</div>
               <small>{{ tribeRitualCostText }}</small>
+              <div class="tribe-trade-list" v-if="currentTribe.standingRitual || standingRitualOptions.length">
+                <div v-if="currentTribe.standingRitual" class="tribe-trade-item standing-ritual-item">
+                  <strong>{{ currentTribe.standingRitual.label }} · 多人站位</strong>
+                  <small>{{ currentTribe.standingRitual.summary }}</small>
+                  <small>站位 {{ currentTribe.standingRitual.participantCount || 0 }} / {{ currentTribe.standingRitual.target || 3 }} · 至少 {{ currentTribe.standingRitual.minParticipants || 2 }} 人 · 剩余 {{ formatRemainingSeconds(currentTribe.standingRitual.activeUntil) || '即将结束' }}</small>
+                  <small v-if="currentTribe.standingRitual.participants?.length">已站位：{{ standingParticipantText(currentTribe.standingRitual.participants) }}</small>
+                  <div class="tribe-vote-actions standing-choice-actions">
+                    <button v-for="stance in standingRitualStances" :key="stance.key" @click="joinStandingRitual(stance.key)">
+                      {{ stance.label }}
+                    </button>
+                  </div>
+                  <div class="tribe-vote-actions" v-if="canManageTribeTargets">
+                    <button @click="completeStandingRitual">收束仪式</button>
+                  </div>
+                </div>
+                <div v-for="option in standingRitualOptions" :key="option.key" class="tribe-trade-item standing-ritual-item">
+                  <strong>{{ option.label }} · 可发起</strong>
+                  <small>{{ option.summary }}</small>
+                  <small>目标 {{ currentTribe.standingRitualConfig?.target || 3 }} 人 · 至少 {{ currentTribe.standingRitualConfig?.minParticipants || 2 }} 人</small>
+                  <div class="tribe-vote-actions" v-if="canManageTribeTargets">
+                    <button @click="startStandingRitual(option.key)">发起</button>
+                  </div>
+                </div>
+              </div>
               <button v-if="canManageTribeTargets" class="tribe-mini-btn" :disabled="Boolean(activeTribeRitual)" @click="startTribeRitual">点燃丰收篝火</button>
               <button v-if="canManageTribeTargets" class="tribe-mini-btn feast" :disabled="Boolean(activeTribeRitual)" @click="startTribeFeast">举办部落宴会</button>
             </div>

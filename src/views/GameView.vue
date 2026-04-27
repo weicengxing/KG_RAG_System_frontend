@@ -942,6 +942,8 @@ const celebrationChoiceOptions = computed(() => {
   return optionMapToList(currentTribe.value?.seasonChain?.celebrationChoices)
 })
 const seasonTabooOptions = computed(() => optionMapToList(currentTribe.value?.seasonTabooOptions))
+const standingRitualOptions = computed(() => optionMapToList(currentTribe.value?.standingRitualOptions))
+const standingRitualStances = computed(() => optionMapToList(currentTribe.value?.standingRitualStances))
 const selectedCavePlan = computed(() => {
   return caveExpeditionPlans.find((plan) => plan.key === caveExpeditionPlanKey.value) || caveExpeditionPlans[1]
 })
@@ -1269,6 +1271,7 @@ const clearRemotePlayers = () => {
   }
 
   remotePlayers.forEach((player) => {
+    player.mesh.userData.disposed = true
     scene.remove(player.mesh)
   })
   remotePlayers.clear()
@@ -2001,6 +2004,13 @@ const supportMythClaim = (claimId, interpretationKey) => {
   }
 }
 
+const standingParticipantText = (participants = []) => {
+  const items = Array.isArray(participants) ? participants : []
+  return items
+    .map((item) => `${item.name || '成员'}-${item.stanceLabel || '见证者'}`)
+    .join('、')
+}
+
 const startSkirmish = (outcomeId) => {
   if (!outcomeId) return
   if (sendGameMessage({ type: 'tribe_start_skirmish', outcomeId })) {
@@ -2414,6 +2424,44 @@ const completeSeasonTabooRemedy = (remedyId) => {
   }
 }
 
+const startStandingRitual = (ritualKey) => {
+  if (!canManageTribeTargets.value) {
+    showToast('只有首领或长老可以发起站位仪式')
+    return
+  }
+  const option = standingRitualOptions.value.find((item) => item.key === ritualKey)
+  if (sendGameMessage({ type: 'tribe_start_standing_ritual', ritualKey })) {
+    showToast(`站位仪式已发起：${option?.label || '站位仪式'}`)
+  }
+}
+
+const joinStandingRitual = (stanceKey) => {
+  const ritual = currentTribe.value?.standingRitual
+  if (!ritual) {
+    showToast('当前没有可以加入的站位仪式')
+    return
+  }
+  const stance = standingRitualStances.value.find((item) => item.key === stanceKey)
+  if (sendGameMessage({ type: 'tribe_join_standing_ritual', stanceKey })) {
+    showToast(`已站位：${stance?.label || '见证者'}`)
+  }
+}
+
+const completeStandingRitual = () => {
+  const ritual = currentTribe.value?.standingRitual
+  if (!ritual) {
+    showToast('当前没有可以收束的站位仪式')
+    return
+  }
+  if (!canManageTribeTargets.value) {
+    showToast('只有首领或长老可以收束站位仪式')
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_complete_standing_ritual' })) {
+    showToast(`正在收束：${ritual.label || '站位仪式'}`)
+  }
+}
+
 const chooseTribeOath = (oathKey) => {
   if (!canManageTribeTargets.value) {
     showToast('只有首领或长老可以选择部落誓约')
@@ -2721,6 +2769,20 @@ const createLocalPlayer = () => {
   scene.add(localPlayer)
 }
 
+const disposePlayerPart = (object3D) => {
+  if (!object3D) return
+  object3D.traverse((object) => {
+    if (object.geometry) object.geometry.dispose()
+    if (object.material) {
+      if (Array.isArray(object.material)) {
+        object.material.forEach((material) => material.dispose())
+      } else {
+        object.material.dispose()
+      }
+    }
+  })
+}
+
 // 创建玩家模型（3D 角色）
 const createPlayer = (color, name) => {
   const player = new THREE.Group()
@@ -2819,6 +2881,26 @@ const createPlayer = (color, name) => {
   sprite.position.y = 1.9
   player.add(sprite)
 
+  const fallbackChildren = player.children.filter((child) => child !== sprite)
+  createModelAssetInstance('player')
+    .then((model) => {
+      if (player.userData.disposed) {
+        disposePlayerPart(model)
+        return
+      }
+      fallbackChildren.forEach((child) => {
+        player.remove(child)
+        disposePlayerPart(child)
+      })
+      model.name = 'player_glb'
+      model.scale.setScalar(1)
+      player.add(model)
+      player.add(sprite)
+    })
+    .catch((error) => {
+      console.warn('Failed to load player model asset', error)
+    })
+
   return player
 }
 
@@ -2854,6 +2936,7 @@ const createRemotePlayer = (id, data) => {
 const removeRemotePlayer = (id) => {
   const player = remotePlayers.get(id)
   if (player) {
+    player.mesh.userData.disposed = true
     scene.remove(player.mesh)
     remotePlayers.delete(id)
   }

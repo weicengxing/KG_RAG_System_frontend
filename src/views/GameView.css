@@ -1487,6 +1487,20 @@
   background: rgba(251, 113, 133, 0.08);
 }
 
+.season-taboo-item {
+  border-color: rgba(255, 205, 86, 0.26);
+  background: rgba(255, 205, 86, 0.08);
+}
+
+.standing-ritual-item {
+  border-color: rgba(116, 213, 255, 0.26);
+  background: rgba(116, 213, 255, 0.08);
+}
+
+.standing-stance-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 @keyframes rare-rune-shine {
   0%, 45% { transform: translateX(-70%) rotate(8deg); }
   80%, 100% { transform: translateX(70%) rotate(8deg); }
@@ -1506,6 +1520,10 @@
   background: linear-gradient(135deg, rgba(248, 223, 123, 0.08), rgba(116, 213, 255, 0.08));
 }
 
+.myth-shared-note {
+  color: rgba(116, 213, 255, 0.94);
+}
+
 .myth-choice-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1519,6 +1537,21 @@
 .season-taboo-item {
   border-color: rgba(244, 211, 94, 0.24);
   background: linear-gradient(135deg, rgba(244, 211, 94, 0.09), rgba(155, 229, 157, 0.08));
+}
+
+.standing-ritual-item {
+  border-color: rgba(181, 156, 255, 0.26);
+  background: linear-gradient(135deg, rgba(181, 156, 255, 0.1), rgba(248, 223, 123, 0.07));
+}
+
+.standing-choice-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.standing-choice-actions button {
+  min-width: 0;
+  white-space: normal;
 }
 
 .tribe-history-filters {

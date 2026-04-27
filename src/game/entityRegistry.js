@@ -69,7 +69,9 @@ const createAssetBackedEntity = (assetKey, fallback, rng, transform = {}) => {
         disposeObject3D(model)
         return
       }
-      if (typeof transform.scale === 'number') model.scale.setScalar(transform.scale)
+      if (typeof transform.scale === 'number') {
+        model.scale.setScalar(transform.scale * (transform.assetScale || 1))
+      }
       if (Array.isArray(transform.position)) model.position.set(...transform.position)
       if (Array.isArray(transform.rotation)) model.rotation.set(...transform.rotation)
       if (typeof transform.rotationY === 'number') model.rotation.y = transform.rotationY
@@ -450,6 +452,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
     const fallback = polishModel(group, rng, { groundShadow: true, shadowRadius: 1.15 })
     const holder = createAssetBackedEntity('tribeTotem', fallback, rng, {
       scale,
+      assetScale: 14,
       rotationY: group.rotation.y,
       polish: { groundShadow: true, shadowRadius: 1.15 }
     })
@@ -588,6 +591,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
     const fallback = polishModel(group, rng, { groundShadow: true, shadowRadius: 1.8 })
     const holder = createAssetBackedEntity('tribeHut', fallback, rng, {
       scale,
+      assetScale: 4.8,
       rotationY: group.rotation.y,
       polish: { groundShadow: true, shadowRadius: 1.8 }
     })
@@ -913,6 +917,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
     const fallback = polishModel(group, rng, { groundShadow: true, shadowRadius: 2.5 })
     const holder = createAssetBackedEntity('caveEntrance', fallback, rng, {
       scale,
+      assetScale: 2.7,
       rotationY: group.rotation.y,
       polish: { groundShadow: true, shadowRadius: 2.5 }
     })

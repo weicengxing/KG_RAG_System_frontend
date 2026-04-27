@@ -145,7 +145,9 @@
           </div>
         </div>
 
-        <div ref="canvasHost" class="canvas-host"></div>
+        <div ref="canvasHost" class="canvas-host">
+          <canvas ref="fallbackCanvas" class="fighter-fallback-canvas" width="960" height="540"></canvas>
+        </div>
 
         <div class="controls-panel">
           <div class="keys">
@@ -171,11 +173,11 @@
 
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import * as PIXI from 'pixi.js'
 import { ElMessage } from 'element-plus'
 import { Close, Connection, Plus, Refresh, Select, SwitchButton } from '@element-plus/icons-vue'
 import request from '../utils/request'
 import { API_CONFIG } from '../config.js'
+import { FighterModelRenderer } from '../fighter/fighterModelRenderer.js'
 
 const rooms = ref([])
 const roomCode = ref('')
@@ -187,6 +189,7 @@ const lobbyStatus = ref('未连接')
 const connectionStatus = ref('未连接')
 const mySlot = ref('')
 const canvasHost = ref(null)
+const fallbackCanvas = ref(null)
 const selectedDifficulty = ref('normal')
 
 const currentUserId = ref(localStorage.getItem('username') || `guest-${Date.now()}`)
@@ -194,8 +197,8 @@ const inputState = ref({ left: false, right: false, up: false, down: false, bloc
 let lobbyWs = null
 let roomWs = null
 let inputTimer = null
-let pixiApp = null
-let arenaLayer = null
+let modelRenderer = null
+let canvasCtx = null
 
 const characterList = computed(() => Object.values(catalog.value.characters || {}))
 const mapList = computed(() => Object.values(catalog.value.maps || {}))
@@ -497,22 +500,31 @@ const handleKeyUp = (event) => {
 }
 
 const ensureRenderer = async () => {
-  if (pixiApp || !canvasHost.value) return
+  if (modelRenderer || canvasCtx) return
   await nextTick()
-  pixiApp = new PIXI.Application()
-  await pixiApp.init({
-    width: 960,
-    height: 540,
-    background: 0x111827,
-    backgroundColor: 0x111827,
-    antialias: true,
-    autoDensity: true,
-    resolution: 1,
-  })
-  canvasHost.value.innerHTML = ''
-  canvasHost.value.appendChild(pixiApp.canvas)
-  arenaLayer = new PIXI.Graphics()
-  pixiApp.stage.addChild(arenaLayer)
+  if (!canvasHost.value) return
+  try {
+    modelRenderer = new FighterModelRenderer(canvasHost.value)
+  } catch (error) {
+    console.warn('[DualFighter] Three.js renderer failed, using canvas fallback.', error)
+    initCanvasFallback()
+  }
+}
+
+const initCanvasFallback = () => {
+  if (!canvasHost.value) return
+  let canvas = fallbackCanvas.value
+  if (!canvas || !canvas.isConnected) {
+    canvas = document.createElement('canvas')
+    canvas.width = 960
+    canvas.height = 540
+    canvas.className = 'fighter-fallback-canvas'
+    canvasHost.value.innerHTML = ''
+    canvasHost.value.appendChild(canvas)
+    fallbackCanvas.value = canvas
+  }
+  canvas.style.display = 'block'
+  canvasCtx = canvas.getContext('2d')
 }
 
 const colorNumber = (value, fallback = 0xffffff) => {
@@ -520,40 +532,110 @@ const colorNumber = (value, fallback = 0xffffff) => {
   return Number.parseInt(value.replace('#', ''), 16)
 }
 
+const withAlpha = (ctx, alpha, draw) => {
+  const previousAlpha = ctx.globalAlpha
+  ctx.globalAlpha = alpha
+  draw()
+  ctx.globalAlpha = previousAlpha
+}
+
+const fillRect = (ctx, x, y, width, height, color, alpha = 1) => {
+  withAlpha(ctx, alpha, () => {
+    ctx.fillStyle = color
+    ctx.fillRect(x, y, width, height)
+  })
+}
+
+const fillCircle = (ctx, x, y, radius, color, alpha = 1) => {
+  withAlpha(ctx, alpha, () => {
+    ctx.fillStyle = color
+    ctx.beginPath()
+    ctx.arc(x, y, radius, 0, Math.PI * 2)
+    ctx.fill()
+  })
+}
+
+const strokeRect = (ctx, x, y, width, height, color, alpha = 1) => {
+  withAlpha(ctx, alpha, () => {
+    ctx.strokeStyle = color
+    ctx.lineWidth = 3
+    ctx.strokeRect(x, y, width, height)
+  })
+}
+
 const renderArena = () => {
-  if (!arenaLayer) return
+  if (modelRenderer) {
+    try {
+      modelRenderer.render(gameState.value, catalog.value)
+      return
+    } catch (error) {
+      console.warn('[DualFighter] Three.js render failed, using canvas fallback.', error)
+      modelRenderer.destroy()
+      modelRenderer = null
+      initCanvasFallback()
+    }
+  }
+  if (!canvasCtx) return
   const state = gameState.value
   const map = state?.map || catalog.value.maps?.stone
-  arenaLayer.clear()
-  arenaLayer.rect(0, 0, 960, 540).fill(colorNumber(map?.sky, 0x172033))
+  const ctx = canvasCtx
+  ctx.clearRect(0, 0, 960, 540)
+  fillRect(ctx, 0, 0, 960, 540, map?.sky || '#172033')
 
   if (map?.id === 'bamboo') {
     for (let x = 40; x < 940; x += 72) {
-      arenaLayer.rect(x, 80, 10, 350).fill({ color: 0x214d3f, alpha: 0.72 })
-      arenaLayer.circle(x + 8, 110, 28).fill({ color: 0x2f6f55, alpha: 0.45 })
+      fillRect(ctx, x, 80, 10, 350, '#214d3f', 0.72)
+      fillCircle(ctx, x + 8, 110, 28, '#2f6f55', 0.45)
     }
   } else if (map?.id === 'lava') {
     for (let x = 0; x < 960; x += 96) {
-      arenaLayer.rect(x, 442, 58, 18).fill({ color: 0xf97316, alpha: 0.55 })
+      fillRect(ctx, x, 442, 58, 18, '#f97316', 0.55)
     }
   } else {
     for (let x = 0; x < 960; x += 120) {
-      arenaLayer.rect(x + 20, 110, 52, 170).fill({ color: 0x263244, alpha: 0.55 })
+      fillRect(ctx, x + 20, 110, 52, 170, '#263244', 0.55)
     }
   }
 
-  arenaLayer.rect(0, map.groundY, 960, 540 - map.groundY).fill(colorNumber(map?.floor, 0x6b7280))
-  arenaLayer.moveTo(map.leftWall, map.groundY).lineTo(map.rightWall, map.groundY).stroke({ width: 4, color: 0xf8fafc, alpha: 0.42 })
-  arenaLayer.rect(map.leftWall - 8, map.groundY - 34, 8, 34).fill({ color: 0xf8fafc, alpha: 0.28 })
-  arenaLayer.rect(map.rightWall, map.groundY - 34, 8, 34).fill({ color: 0xf8fafc, alpha: 0.28 })
+  fillRect(ctx, 0, map.groundY, 960, 540 - map.groundY, map?.floor || '#6b7280')
+  ;(map.hazards || []).forEach((hazard) => {
+    const hazardColor = map.id === 'lava' ? '#fb923c' : '#38bdf8'
+    fillRect(ctx, hazard.x, hazard.y, hazard.width, hazard.height, hazardColor, 0.5)
+    strokeRect(ctx, hazard.x, hazard.y, hazard.width, hazard.height, '#fef3c7', 0.28)
+  })
+  ;(map.platforms || []).forEach((platform) => {
+    fillRect(ctx, platform.x, platform.y, platform.width, platform.height, '#d1d5db', 0.82)
+    fillRect(ctx, platform.x, platform.y + platform.height, platform.width, 8, '#111827', 0.35)
+    strokeRect(ctx, platform.x, platform.y, platform.width, platform.height, '#f8fafc', 0.35)
+  })
+  withAlpha(ctx, 0.42, () => {
+    ctx.strokeStyle = '#f8fafc'
+    ctx.lineWidth = 4
+    ctx.beginPath()
+    ctx.moveTo(map.leftWall, map.groundY)
+    ctx.lineTo(map.rightWall, map.groundY)
+    ctx.stroke()
+  })
+  fillRect(ctx, map.leftWall - 8, map.groundY - 34, 8, 34, '#f8fafc', 0.28)
+  fillRect(ctx, map.rightWall, map.groundY - 34, 8, 34, '#f8fafc', 0.28)
 
+  ;(state?.projectiles || []).forEach(drawProjectile)
   Object.values(state?.players || {}).forEach(drawFighter)
+}
+
+const drawProjectile = (projectile) => {
+  if (!canvasCtx) return
+  const ctx = canvasCtx
+  fillRect(ctx, projectile.x, projectile.y, projectile.width, projectile.height, projectile.color || '#38bdf8', 0.85)
+  fillCircle(ctx, projectile.x + projectile.width, projectile.y + projectile.height / 2, projectile.height * 0.8, '#f8fafc', 0.28)
 }
 
 const drawFighter = (player) => {
   const character = catalog.value.characters?.[player.characterId]
   if (!character) return
-  const color = colorNumber(character.color)
+  if (!canvasCtx) return
+  const ctx = canvasCtx
+  const color = character.color || '#38bdf8'
   const x = player.x
   const y = player.y
   const w = character.width
@@ -564,28 +646,40 @@ const drawFighter = (player) => {
   if (player.attack) {
     const range = character.attacks?.[player.attack]?.range || 80
     const attackX = direction > 0 ? x + w : x - range
-    arenaLayer.rect(attackX, y + h * 0.34, range, 20).fill({ color, alpha: 0.28 })
+    const attackHeight = player.attack === 'heavy' ? 34 : 20
+    const attackY = y + h * (player.attack === 'special' ? 0.28 : 0.34)
+    fillRect(ctx, attackX, attackY, range, attackHeight, color, player.attack === 'special' ? 0.42 : 0.28)
+    if (player.attack === 'heavy') {
+      fillCircle(ctx, attackX + (direction > 0 ? range : 0), attackY + attackHeight / 2, 22, '#fef3c7', 0.25)
+    }
+    if (player.attack === 'special') {
+      strokeRect(ctx, x - 18, y - 18, w + 36, h + 28, color, 0.58)
+    }
   }
 
-  arenaLayer.rect(x + w * 0.18, y + h * 0.22, w * 0.64, h * 0.64).fill({ color, alpha })
-  arenaLayer.circle(x + w / 2, y + h * 0.13, w * 0.28).fill({ color: 0xf8fafc, alpha })
-  arenaLayer.rect(x + w * 0.24, y + h * 0.86, w * 0.17, h * 0.14).fill({ color: 0x111827, alpha })
-  arenaLayer.rect(x + w * 0.59, y + h * 0.86, w * 0.17, h * 0.14).fill({ color: 0x111827, alpha })
-  arenaLayer.rect(x + w * 0.48, y + h * 0.44, direction * (w * 0.74), 6).fill({ color: 0xf8fafc, alpha: 0.82 })
+  fillRect(ctx, x + w * 0.18, y + h * 0.22, w * 0.64, h * 0.64, color, alpha)
+  fillCircle(ctx, x + w / 2, y + h * 0.13, w * 0.28, '#f8fafc', alpha)
+  fillRect(ctx, x + w * 0.24, y + h * 0.86, w * 0.17, h * 0.14, '#111827', alpha)
+  fillRect(ctx, x + w * 0.59, y + h * 0.86, w * 0.17, h * 0.14, '#111827', alpha)
+  const armX = direction > 0 ? x + w * 0.48 : x + w * 0.48 - w * 0.74
+  fillRect(ctx, armX, y + h * 0.44, w * 0.74, 6, '#f8fafc', 0.82)
 
   if (player.blocking) {
     const shieldX = direction > 0 ? x + w + 5 : x - 17
-    arenaLayer.rect(shieldX, y + h * 0.25, 12, h * 0.5).fill({ color: 0x93c5fd, alpha: 0.6 })
+    fillRect(ctx, shieldX, y + h * 0.25, 12, h * 0.5, '#93c5fd', 0.6)
   }
 }
 
-watch(gameState, () => {
+watch(gameState, async () => {
+  await ensureRenderer()
   renderArena()
 })
 
 onMounted(async () => {
   await loadCatalog()
   await refreshAll()
+  await ensureRenderer()
+  renderArena()
   window.addEventListener('keydown', handleKeyDown)
   window.addEventListener('keyup', handleKeyUp)
   inputTimer = window.setInterval(sendInput, 50)
@@ -597,10 +691,11 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown)
   window.removeEventListener('keyup', handleKeyUp)
   if (inputTimer) window.clearInterval(inputTimer)
-  if (pixiApp) {
-    pixiApp.destroy(true)
-    pixiApp = null
+  if (modelRenderer) {
+    modelRenderer.destroy()
+    modelRenderer = null
   }
+  canvasCtx = null
 })
 </script>
 
@@ -919,6 +1014,8 @@ h1 {
 
 .canvas-host {
   width: 100%;
+  min-height: 320px;
+  aspect-ratio: 16 / 9;
   overflow: auto;
   background: #020617;
   border: 1px solid rgba(148, 163, 184, 0.24);
@@ -929,9 +1026,14 @@ h1 {
 .canvas-host :deep(canvas) {
   width: 100%;
   max-width: 960px;
+  height: auto;
   aspect-ratio: 16 / 9;
   display: block;
   margin: 0 auto;
+}
+
+.fighter-fallback-canvas {
+  background: #172033;
 }
 
 .controls-panel {

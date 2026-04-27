@@ -1,5 +1,5 @@
 export function createGameViewActions(ctx) {
-  const { activeBoundaryFlag, activeMigrationPlan, activeTribeCelestialWindow, addSystemMessage, allianceSignalActions, allocationDraft, ancestorQuestionAnswers, ancestorQuestionOptions, apprenticeDraft, apprenticeExchangeActionOptions, ashCountActionOptions, beastSpecialtyLabel, beastTaskOptions, borderTheaterActionOptions, boundaryActionOptions, boundaryTemperatureActionOptions, campCouncilActionOptions, campDebtActionOptions, campShiftDraft, campShiftOptions, campTrialOptions, canGovernMember, canManageTribeTargets, canReviewApplications, caravanActionOptions, caveReturnActionOptions, celebrationChoiceOptions, celestialBranchOptions, collectionActionOptions, commonJudgeActions, communalCookIngredients, communalCookOptions, consensusFireActionOptions, craftLegacyStyleOptions, currentTribe, diplomacyCouncilActionOptions, disasterCoopActionOptions, disputeWitnessActionOptions, dreamOmenActions, dreamOmenSources, drumRhythmBeats, drumRhythmOptions, echoItemExperienceOptions, echoItemTypeOptions, emergencyChoiceActionOptions, farReplyActionOptions, fogTrailActionOptions, forbiddenEdgeActionOptions, forbiddenEdgeRouteProofActionOptions, groupEmoteOptions, guestStayActionOptions, guestStayDraft, hasTribeRoad, hasTribeWorkbench, inventory, isCurrentTribeEntity, lostItemActions, mapTileTraceActions, lostTechOptions, lostTechSourceOptions, mentorshipFocusOptions, migrationPlanOptions, mutualAidActionOptions, namedLandmarkDraft, namedLandmarkOptions, neutralSanctuaryActions, newTribeName, nightOutingOptions, nomadVisitorActionOptions, nomadVisitorAftereffectActionOptions, oathOptions, oldCampEchoActionOptions, oldGrudgeAnchorOptions, oldGrudgeSealActionOptions, oralChainDraft, oralChainReady, oralMapActionOptions, pendingTribeJoinRequests, personalDarkOathDraft, personalDarkOathOptions, personalIdentity, personalIdentityCooldownText, personalIdentityOptions, personalTokenDraft, personalTokenOptions, playerName, publicSecretActions, renownPledgeDraft, renownPledgeOptions, rumorTruthActions, sacredFireDestinationOptions, sacredFireStepOptions, seasonTabooOptions, shadowTaskActionOptions, sharedPuzzleOptions, showToast, sortedTribeMembers, stanceAnimationForKey, standingRitualLandmarkBonuses, standingRitualOptions, standingRitualStances, stoneTool, tradeDraft, trailMarkerActions, trailMarkerTypes, travelerSongActionOptions, travelerTuneLineageActionOptions, trialGroundActions, tribeAnnouncementDraft, tribeCustomOptions, tribeLawOptions, triggerPlayerActionAnimation, weatherForecastSignOptions, wonderActionOptions, worldRiddlePredictionOptions, getWebSocket, getLocalPlayer } = ctx
+  const { activeBoundaryFlag, activeMigrationPlan, activeTribeCelestialWindow, addSystemMessage, allianceSignalActions, allocationDraft, ancestorQuestionAnswers, ancestorQuestionOptions, apprenticeDraft, apprenticeExchangeActionOptions, ashCountActionOptions, beastSpecialtyLabel, beastTaskOptions, borderTheaterActionOptions, boundaryActionOptions, boundaryTemperatureActionOptions, campCouncilActionOptions, campDebtActionOptions, campShiftDraft, campShiftOptions, campTrialOptions, canGovernMember, canManageTribeTargets, canReviewApplications, caravanActionOptions, caveReturnActionOptions, celebrationChoiceOptions, celestialBranchOptions, collectionActionOptions, commonJudgeActions, communalCookIngredients, communalCookOptions, consensusFireActionOptions, craftLegacyStyleOptions, currentTribe, diplomacyCouncilActionOptions, disasterCoopActionOptions, disputeWitnessActionOptions, dreamOmenActions, dreamOmenSources, drumRhythmBeats, drumRhythmOptions, echoItemExperienceOptions, echoItemTypeOptions, emergencyChoiceActionOptions, farReplyActionOptions, fogTrailActionOptions, forbiddenEdgeActionOptions, forbiddenEdgeRouteProofActionOptions, groupEmoteOptions, maskPerformanceTypes, guestStayActionOptions, guestStayDraft, hasTribeRoad, hasTribeWorkbench, inventory, isCurrentTribeEntity, lostItemActions, mapTileTraceActions, lostTechOptions, lostTechSourceOptions, mentorshipFocusOptions, migrationEncounterActionOptions, migrationPlanOptions, mutualAidActionOptions, namedLandmarkDraft, namedLandmarkOptions, neutralSanctuaryActions, newTribeName, newcomerFateActions, nightOutingOptions, nomadVisitorActionOptions, nomadVisitorAftereffectActionOptions, oathOptions, oldCampEchoActionOptions, oldGrudgeAnchorOptions, oldGrudgeSealActionOptions, oralChainDraft, oralChainReady, oralMapActionOptions, pendingTribeJoinRequests, personalDarkOathDraft, personalDarkOathOptions, personalIdentity, personalIdentityCooldownText, personalIdentityOptions, personalTokenDraft, personalTokenOptions, playerName, publicSecretActions, renownPledgeDraft, renownPledgeOptions, rumorTruthActions, sacredFireDestinationOptions, sacredFireStepOptions, seasonTabooOptions, shadowTaskActionOptions, sharedPuzzleOptions, showToast, sortedTribeMembers, stanceAnimationForKey, standingRitualLandmarkBonuses, standingRitualOptions, standingRitualStances, stoneTool, tradeDraft, trailMarkerActions, trailMarkerTypes, travelerSongActionOptions, travelerTuneLineageActionOptions, trialGroundActions, tribeAnnouncementDraft, tribeCustomOptions, tribeLawOptions, triggerPlayerActionAnimation, weatherForecastSignOptions, wonderActionOptions, worldRiddlePredictionOptions, getWebSocket, getLocalPlayer } = ctx
 
   const sendGameMessage = (payload) => {
     const ws = getWebSocket()
@@ -124,6 +124,15 @@ export function createGameViewActions(ctx) {
     if (sendGameMessage({ type: 'tribe_claim_cave_race', raceId })) {
       triggerPlayerActionAnimation('guard')
       showToast('正在抢探短时稀有洞穴')
+    }
+  }
+
+  const resolveCaveRaceRoute = (raceId, actionKey = 'leave_marker') => {
+    if (!raceId || !actionKey) return
+    const action = currentTribe.value?.caveRaceActions?.[actionKey]
+    if (sendGameMessage({ type: 'tribe_resolve_cave_race_route', raceId, actionKey })) {
+      triggerPlayerActionAnimation(action?.animation || (actionKey === 'cooperate' ? 'ritual' : 'gather'))
+      showToast(`正在${action?.label || '处理洞穴竞速路线'}`)
     }
   }
 
@@ -679,6 +688,13 @@ export function createGameViewActions(ctx) {
     }
   }
 
+  const submitWarNarrative = (taskId, actionKey) => {
+    if (!taskId || !actionKey) return
+    if (sendGameMessage({ type: 'tribe_submit_war_narrative', taskId, actionKey })) {
+      showToast('战争叙事已提交')
+    }
+  }
+
   const createTribe = () => {
     const name = newTribeName.value.trim()
     if (!name) {
@@ -824,6 +840,27 @@ export function createGameViewActions(ctx) {
     if (sendGameMessage({ type: 'tribe_group_emote', emoteKey })) {
       triggerPlayerActionAnimation(emote?.animation || 'cheer')
       showToast(`已发起：${emote?.label || '群体动作'}`)
+    }
+  }
+
+  const startMaskPerformance = (identityKey = '') => {
+    const key = identityKey || personalIdentity.value?.key
+    const option = maskPerformanceTypes.value.find((item) => item.key === key)
+    if (!key) {
+      showToast('先选择一个身份')
+      return
+    }
+    if (sendGameMessage({ type: 'tribe_start_mask_performance', identityKey: key })) {
+      triggerPlayerActionAnimation(option?.animation || 'ritual')
+      showToast(`已发起：${option?.label || '面具身份表演'}`)
+    }
+  }
+
+  const respondMaskPerformance = (performanceId) => {
+    if (!performanceId) return
+    if (sendGameMessage({ type: 'tribe_respond_mask_performance', performanceId })) {
+      triggerPlayerActionAnimation('cheer')
+      showToast('已响应面具身份表演')
     }
   }
 
@@ -1329,6 +1366,13 @@ export function createGameViewActions(ctx) {
     }
   }
 
+  const respondMigrationEncounter = (encounterId, actionKey) => {
+    const action = migrationEncounterActionOptions.value.find((item) => item.key === actionKey)
+    if (sendGameMessage({ type: 'tribe_respond_migration_encounter', encounterId, actionKey })) {
+      showToast(`已回应迁徙车队：${action?.label || '车队回应'}`)
+    }
+  }
+
   const chooseCelestialBranch = (branchKey) => {
     const window = activeTribeCelestialWindow.value
     if (!window) {
@@ -1459,6 +1503,15 @@ export function createGameViewActions(ctx) {
     if (sendGameMessage({ type: 'tribe_resolve_public_secret', secretId, actionKey })) {
       triggerPlayerActionAnimation(actionKey === 'judge' ? 'guard' : (actionKey === 'reveal' ? 'cheer' : 'ritual'))
       showToast(`公共秘密已提交：${action?.label || '处理'}`)
+    }
+  }
+
+  const resolveNewcomerFate = (momentId, actionKey) => {
+    if (!momentId || !actionKey) return
+    const action = newcomerFateActions.value.find((item) => item.key === actionKey)
+    if (sendGameMessage({ type: 'tribe_resolve_newcomer_fate', momentId, actionKey })) {
+      triggerPlayerActionAnimation(actionKey === 'protect' ? 'guard' : (actionKey === 'believe' ? 'cheer' : 'ritual'))
+      showToast(`新人命运已提交：${action?.label || '处理'}`)
     }
   }
 
@@ -1755,5 +1808,5 @@ export function createGameViewActions(ctx) {
     }
   }
 
-  return { sendGameMessage, resolvePersonalConflict, choosePersonalIdentity, performPersonalIdentityAction, revisitMapMemory, revisitOldCampEcho, performBorderTheater, exploreFogTrail, exploreForbiddenEdge, markForbiddenEdgeRouteProof, claimCaveRace, advanceCaveRescue, organizeCaveReturnMark, createTrailMarker, updateTrailMarker, proposeNamedLandmark, supportNamedLandmark, visitNeutralSanctuary, curateCollectionWall, resolveLostItem, createEchoItem, addEchoItemMemory, transferEchoItem, supportMythClaim, supportHistoryFact, standingParticipantText, standingRitualRewardText, standingRitualLandmarkHint, standingRitualLandmarkBonusText, startSkirmish, joinSkirmish, resolveSkirmish, declareWar, joinWar, resolveWar, requestWarTruce, completeWarRepair, completeWarRevival, supportWar, mediateWar, resolveWarDiplomacy, resolveCaravanRoute, resolveNomadVisitor, resolveNomadVisitorAftereffect, startApprenticeExchange, startGuestStay, resolveCampDebt, resolveAshCount, endorseAshLedger, escortCovenantMessenger, sendMutualAidAlert, answerMutualAidAlert, resolveDisasterCoop, respondFarReply, resolveTravelerSong, promoteTravelerSongTune, referenceTravelerTune, createPersonalToken, redeemPersonalToken, callPersonalDebt, settlePersonalDebt, startRenownPledge, fulfillRenownPledge, startPersonalDarkOath, revealPersonalDarkOath, completeDarkOathRemedy, completeWarAftermath, completeWarAllyTask, createTribe, joinTribe, reviewTribeApplication, contributeAllResources, advanceTribeTarget, setTribeAnnouncement, returnToTribeCamp, buildTribeStructure, unlockTribeRune, startTribeRitual, startTribeFeast, startCommunalCook, contributeCommunalCook, startDrumRhythm, joinDrumRhythm, completeDrumRhythm, performGroupEmote, recordLostTechFragment, restoreLostTech, establishCraftLegacy, startSacredFireRelay, carrySacredFire, completeSacredFireRelay, joinCelebrationEcho, startMentorship, joinMentorship, completeMentorship, startCampTrial, joinCampTrial, completeCampTrial, startNightOuting, startDreamOmen, resolveDreamOmen, startAncestorQuestion, answerAncestorQuestion, startCampShift, joinCampShift, advanceCampCouncil, contributeWonder, resolveConsensusFire, startTribeVote, castTribeVote, allocateResourcesToMember, createTribeTrade, startTribeScout, craftStoneTool, addOralChainLine, completeOralChain, composeOralEpic, assignBeastTask, chooseBeastSpecialty, chooseSeasonCelebration, chooseSeasonTaboo, observeSeasonTaboo, breakSeasonTaboo, completeSeasonTabooRemedy, startStandingRitual, joinStandingRitual, completeStandingRitual, startMigrationPlan, advanceMigrationPlan, chooseCelestialBranch, observeWeatherSign, enactTribeLaw, upholdTribeLaw, breakTribeLaw, completeLawRemedy, commitTribeCustomPractice, recordSharedPuzzleFragment, completeSharedPuzzle, completeReverseVictory, resolveRumorTruth, resolvePublicSecret, solveWorldRiddle, composeOralMap, completeTrialGround, chooseTribeOath, completeOathTask, resolveBoundaryOutcome, completeBoundaryFollowup, resolveEmergencyChoice, completeEmergencyFollowup, patrolControlledSite, relayControlledSite, claimTribeFlag, patrolTribeFlag, resolveBoundaryAction, tuneBoundaryTemperature, sendAllianceSignal, submitCommonJudge, tendDisputeWitness, sealOldGrudge, tendOldGrudge, settleOldGrudgeWake, advanceShadowTask, resolveTribeTrade, completeTradeCreditRepair, supportLivingLegend, respondLivingLegend, punishMember }
+  return { sendGameMessage, resolvePersonalConflict, choosePersonalIdentity, performPersonalIdentityAction, revisitMapMemory, revisitOldCampEcho, performBorderTheater, exploreFogTrail, exploreForbiddenEdge, markForbiddenEdgeRouteProof, claimCaveRace, resolveCaveRaceRoute, advanceCaveRescue, organizeCaveReturnMark, createTrailMarker, updateTrailMarker, proposeNamedLandmark, supportNamedLandmark, visitNeutralSanctuary, curateCollectionWall, resolveLostItem, createEchoItem, addEchoItemMemory, transferEchoItem, supportMythClaim, supportHistoryFact, standingParticipantText, standingRitualRewardText, standingRitualLandmarkHint, standingRitualLandmarkBonusText, startSkirmish, joinSkirmish, resolveSkirmish, declareWar, joinWar, resolveWar, requestWarTruce, completeWarRepair, completeWarRevival, supportWar, mediateWar, resolveWarDiplomacy, resolveCaravanRoute, resolveNomadVisitor, resolveNomadVisitorAftereffect, startApprenticeExchange, startGuestStay, resolveCampDebt, resolveAshCount, endorseAshLedger, escortCovenantMessenger, sendMutualAidAlert, answerMutualAidAlert, resolveDisasterCoop, respondFarReply, resolveTravelerSong, promoteTravelerSongTune, referenceTravelerTune, createPersonalToken, redeemPersonalToken, callPersonalDebt, settlePersonalDebt, startRenownPledge, fulfillRenownPledge, startPersonalDarkOath, revealPersonalDarkOath, completeDarkOathRemedy, completeWarAftermath, completeWarAllyTask, submitWarNarrative, createTribe, joinTribe, reviewTribeApplication, contributeAllResources, advanceTribeTarget, setTribeAnnouncement, returnToTribeCamp, buildTribeStructure, unlockTribeRune, startTribeRitual, startTribeFeast, startCommunalCook, contributeCommunalCook, startDrumRhythm, joinDrumRhythm, completeDrumRhythm, performGroupEmote, startMaskPerformance, respondMaskPerformance, recordLostTechFragment, restoreLostTech, establishCraftLegacy, startSacredFireRelay, carrySacredFire, completeSacredFireRelay, joinCelebrationEcho, startMentorship, joinMentorship, completeMentorship, startCampTrial, joinCampTrial, completeCampTrial, startNightOuting, startDreamOmen, resolveDreamOmen, startAncestorQuestion, answerAncestorQuestion, startCampShift, joinCampShift, advanceCampCouncil, contributeWonder, resolveConsensusFire, startTribeVote, castTribeVote, allocateResourcesToMember, createTribeTrade, startTribeScout, craftStoneTool, addOralChainLine, completeOralChain, composeOralEpic, assignBeastTask, chooseBeastSpecialty, chooseSeasonCelebration, chooseSeasonTaboo, observeSeasonTaboo, breakSeasonTaboo, completeSeasonTabooRemedy, startStandingRitual, joinStandingRitual, completeStandingRitual, startMigrationPlan, advanceMigrationPlan, respondMigrationEncounter, chooseCelestialBranch, observeWeatherSign, enactTribeLaw, upholdTribeLaw, breakTribeLaw, completeLawRemedy, commitTribeCustomPractice, recordSharedPuzzleFragment, completeSharedPuzzle, completeReverseVictory, resolveRumorTruth, resolvePublicSecret, resolveNewcomerFate, solveWorldRiddle, composeOralMap, completeTrialGround, chooseTribeOath, completeOathTask, resolveBoundaryOutcome, completeBoundaryFollowup, resolveEmergencyChoice, completeEmergencyFollowup, patrolControlledSite, relayControlledSite, claimTribeFlag, patrolTribeFlag, resolveBoundaryAction, tuneBoundaryTemperature, sendAllianceSignal, submitCommonJudge, tendDisputeWitness, sealOldGrudge, tendOldGrudge, settleOldGrudgeWake, advanceShadowTask, resolveTribeTrade, completeTradeCreditRepair, supportLivingLegend, respondLivingLegend, punishMember }
 }

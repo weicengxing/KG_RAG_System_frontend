@@ -47,7 +47,13 @@ const personalConflictStatus = ref({
   fatigueUntil: '',
   guardUntil: '',
   guardTargetName: '',
-  personalRenown: 0
+  guardRadius: 6,
+  personalRenown: 0,
+  renownTitle: null,
+  inspirationUntil: '',
+  inspirationSourceName: '',
+  inspirationContribution: 0,
+  inspireMinRenown: 5
 })
 
 const inventory = ref({
@@ -115,7 +121,7 @@ const caveExpeditionSynced = ref(false)
 const caveFoodCost = 6
 const caveFoodSupported = ref(false)
 const caveExpeditionPlanKey = ref('deep')
-const herdActionKey = ref('hunt')
+const worldEventActionKey = ref('')
 const stoneTool = ref({
   durability: 0,
   max: 12,
@@ -208,10 +214,10 @@ const tradeResourceLabels = {
   food: '食物'
 }
 const tradeResourceOptions = Object.entries(tradeResourceLabels).map(([key, label]) => ({ key, label }))
-const tribeLandmarkDecorationTypes = new Set(['tribe_spawn', 'tribe_camp', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'controlled_resource_site'])
-const tribeInteractableTypes = ['tribe_storage', 'tribe_workbench', 'tribe_hut', 'tribe_fence', 'tribe_road', 'tribe_spawn', 'tribe_camp', 'tribe_totem', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'controlled_resource_site']
+const tribeLandmarkDecorationTypes = new Set(['tribe_spawn', 'tribe_camp', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'controlled_resource_site', 'trade_route_site', 'world_event_remnant', 'diplomacy_council_site'])
+const tribeInteractableTypes = ['tribe_storage', 'tribe_workbench', 'tribe_hut', 'tribe_fence', 'tribe_road', 'tribe_spawn', 'tribe_camp', 'tribe_totem', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'controlled_resource_site', 'trade_route_site', 'world_event_remnant', 'diplomacy_council_site']
 const regionLandmarkTypes = ['region_forest', 'region_mountain', 'region_coast', 'region_ruin']
-const landmarkFallbackTypes = ['campfire', 'ruin', 'crystal', 'tribe_totem', 'tribe_storage', 'tribe_workbench', 'tribe_fence', 'tribe_road', 'tribe_spawn', 'tribe_camp', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'controlled_resource_site', 'cave_entrance', ...regionLandmarkTypes]
+const landmarkFallbackTypes = ['campfire', 'ruin', 'crystal', 'tribe_totem', 'tribe_storage', 'tribe_workbench', 'tribe_fence', 'tribe_road', 'tribe_spawn', 'tribe_camp', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'controlled_resource_site', 'trade_route_site', 'world_event_remnant', 'diplomacy_council_site', 'cave_entrance', ...regionLandmarkTypes]
 const tribeBuildingTypeLabels = {
   tribe_totem: '图腾',
   tribe_storage: '仓库',
@@ -258,11 +264,6 @@ const caveExpeditionPlans = [
   { key: 'deep', label: '深入', summary: '均衡推进，收获稳定', foodCost: 7, depthBonus: 0, supplyBonus: 1, findBonus: 1, findMultiplier: 1.12, oreRoll: 0.66, loreRoll: 0.36 },
   { key: 'risky', label: '冒险', summary: '高消耗，高稀有机会', foodCost: 9, depthBonus: 1, supplyBonus: -1, findBonus: 2, findMultiplier: 1.3, oreRoll: 0.58, loreRoll: 0.42 }
 ]
-const herdActionOptions = [
-  { key: 'drive', label: '驱赶', summary: '声望更高，食物较少' },
-  { key: 'hunt', label: '追猎', summary: '带回更多食物' },
-  { key: 'tame', label: '驯养', summary: '获得幼兽记录' }
-]
 const beastTaskOptions = [
   { key: 'guard', label: '守营' },
   { key: 'hunt', label: '助猎' },
@@ -270,6 +271,7 @@ const beastTaskOptions = [
 ]
 
 const optionMapToList = (options = {}) => Object.entries(options || {}).map(([key, value]) => ({
+  ...(value && typeof value === 'object' ? value : {}),
   key,
   label: value?.label || key,
   summary: value?.summary || ''
@@ -352,6 +354,22 @@ const activeWorldEvent = computed(() => {
   const remainingSeconds = Math.max(0, Math.ceil((new Date(event.activeUntil).getTime() - Date.now()) / 1000))
   return { ...event, remainingSeconds }
 })
+const activeWorldEventActionOptions = computed(() => {
+  const event = activeWorldEvent.value
+  if (!event || !currentTribe.value?.worldEventActions) return []
+  const options = currentTribe.value.worldEventActions[event.key] || []
+  return options.filter((option) => {
+    const regionTypes = Array.isArray(option.regionTypes) ? option.regionTypes : []
+    return !regionTypes.length || regionTypes.includes(event.regionType)
+  })
+})
+const selectedWorldEventActionKey = computed(() => {
+  const options = activeWorldEventActionOptions.value
+  if (!options.length) return ''
+  return options.some((option) => option.key === worldEventActionKey.value)
+    ? worldEventActionKey.value
+    : options[0].key
+})
 
 const activeSeasonObjective = computed(() => {
   resourceTideTick.value
@@ -426,6 +444,8 @@ const describeLandmark = (landmark) => {
   if (landmark.type === 'scouted_resource_site' && landmark.jointWatchId) return landmark.isOwnTribe ? `联合守望线索 · ${landmark.resourceLabel || landmark.label || '待确认'}` : '其他部落联合守望线索'
   if (landmark.type === 'scouted_resource_site') return landmark.isOwnTribe ? `侦察资源点 · ${landmark.resourceLabel || landmark.label || '待确认'}` : '其他部落侦察资源点'
   if (landmark.type === 'controlled_resource_site') return landmark.isOwnTribe ? `控制资源点 Lv.${landmark.level || 1} · ${landmark.resourceLabel || landmark.label || '可收取'}` : '其他部落控制资源点'
+  if (landmark.type === 'trade_route_site') return landmark.isOwnTribe ? `交换通路 · ${landmark.partnerTribeName || '邻近部落'}` : '其他部落交换通路'
+  if (landmark.type === 'world_event_remnant') return landmark.isOwnTribe ? `${landmark.label || '事件余迹'} · ${landmark.rewardLabel || '可整理'}` : '其他部落事件余迹'
   if (landmark.type === 'tribe_totem' && landmark.oathLabel) return `${landmark.oathLabel}图腾`
   if (landmark.type === 'tribe_totem' && landmark.hasRuneHonor) return landmark.honorText
   return landmark.label || '未知地标'
@@ -710,9 +730,21 @@ const personalConflictText = computed(() => {
   const fatigueMax = status.fatigueMax || 6
   const fatigueTime = formatRemainingSeconds(status.fatigueUntil)
   const guardTime = formatRemainingSeconds(status.guardUntil)
-  const parts = [`声望 ${status.personalRenown || 0}`, `疲劳 ${fatigue}/${fatigueMax}`]
+  const inspirationTime = formatRemainingSeconds(status.inspirationUntil)
+  const title = status.renownTitle?.title || '无名成员'
+  const parts = [`${title} ${status.personalRenown || 0}`, `疲劳 ${fatigue}/${fatigueMax}`]
   if (fatigueTime) parts.push(`恢复 ${fatigueTime}`)
-  if (guardTime) parts.push(`守势 ${guardTime}`)
+  if (guardTime) {
+    const target = status.guardTargetName ? `对${status.guardTargetName}` : ''
+    parts.push(`守势${target} ${guardTime} · ${status.guardRadius || 6}步`)
+  }
+  if (status.fatigueRecoveryBonusSeconds) parts.push(`恢复-${status.fatigueRecoveryBonusSeconds}s`)
+  if (status.sparTrainingBonus) parts.push(`切磋+${status.sparTrainingBonus}`)
+  if (status.skirmishContributionBonus) parts.push(`集结+${status.skirmishContributionBonus}`)
+  if (inspirationTime) {
+    const source = status.inspirationSourceName ? `${status.inspirationSourceName} ` : ''
+    parts.push(`${source}鼓舞 +${status.inspirationContribution || 1} ${inspirationTime}`)
+  }
   return parts.join(' · ')
 })
 
@@ -826,6 +858,7 @@ const flagPatrolChainText = computed(() => {
 const tribeGatherBonus = computed(() => (activeTribeRitual.value?.gatherBonus || 0) + celebrationGatherBonus.value + oathGatherBonus.value)
 const boundaryClass = (relation) => relation?.state ? `boundary-${relation.state}` : ''
 const boundaryActionOptions = computed(() => optionMapToList(currentTribe.value?.boundaryActions))
+const diplomacyCouncilActionOptions = computed(() => optionMapToList(currentTribe.value?.diplomacyCouncilActions))
 const activeBoundaryFlag = computed(() => {
   const entity = interactionTarget.value?.entity
   if (!entity || entity.type !== 'tribe_flag' || !isCurrentTribeEntity(entity) || !entity.boundaryRelation) return null
@@ -1477,6 +1510,43 @@ const buildTribeInteraction = (entity) => {
     }
   }
 
+  if (entity.type === 'trade_route_site') {
+    const collectedText = entity.lastCollectedBy ? `；上次由${entity.lastCollectedBy}整理` : ''
+    const marketText = entity.isBorderMarket ? `；边市开放中：${entity.marketRewardLabel || '互市加成'}` : `；整理${entity.collectCount || 0}/${entity.marketCollectTarget || 3}可升成边市`
+    return {
+      entity,
+      label: entity.label || '交换通路贸易点',
+      actionText: ownTribe ? '收取' : '观察',
+      rewardText: ownTribe
+        ? `与${entity.partnerTribeName || '邻近部落'}共享的短时贸易点，可周期带回信誉和小额资源${marketText}${collectedText}`
+        : `${tribeName}正在维护这条交换通路`
+    }
+  }
+
+  if (entity.type === 'world_event_remnant') {
+    const sourceText = entity.sourceActionLabel ? `；来自${entity.sourceActionLabel}` : ''
+    return {
+      entity,
+      label: entity.label || '事件余迹',
+      actionText: ownTribe ? '整理' : '观察',
+      rewardText: ownTribe
+        ? `${entity.regionLabel || '附近区域'}留下的短时痕迹，可收取${entity.rewardLabel || '小收益'}${sourceText}`
+        : `${tribeName}处理世界事件后留下的短时痕迹`
+    }
+  }
+
+  if (entity.type === 'diplomacy_council_site') {
+    const names = Array.isArray(entity.participantTribeNames) ? entity.participantTribeNames.join('、') : ''
+    return {
+      entity,
+      label: entity.label || '大议会与边市节',
+      actionText: ownTribe ? '主持' : '观察',
+      rewardText: ownTribe
+        ? `${entity.summary || '多条互市与停争信号聚到中立火圈'}${names ? `；相关部落：${names}` : ''}`
+        : `${tribeName}正在筹备公开外交会场`
+    }
+  }
+
   return null
 }
 
@@ -1667,11 +1737,9 @@ const collectInteractionTarget = () => {
   }
 
   if (target.entity.type === 'world_event') {
-    const eventAction = target.entity.key === 'herd' ? herdActionKey.value : ''
+    const eventAction = selectedWorldEventActionKey.value
     if (sendGameMessage({ type: 'tribe_resolve_world_event', eventId: target.entity.id, eventAction })) {
-      const action = target.entity.key === 'herd'
-        ? herdActionOptions.find((item) => item.key === eventAction)?.label
-        : ''
+      const action = activeWorldEventActionOptions.value.find((item) => item.key === eventAction)?.label || ''
       showToast(`已${action || '处理'}${target.entity.title || '世界事件'}`, { rare: Boolean(target.entity.rare) })
     }
     return
@@ -1762,6 +1830,34 @@ const collectInteractionTarget = () => {
     return
   }
 
+  if (target.entity.type === 'trade_route_site') {
+    if (!isCurrentTribeEntity(target.entity)) {
+      showToast('这是其他部落维护的交换通路')
+      return
+    }
+    if (sendGameMessage({ type: 'tribe_collect_trade_route_site', siteId: target.entity.id })) {
+      showToast(`已整理${target.entity.label || '交换通路贸易点'}`)
+    }
+    return
+  }
+
+  if (target.entity.type === 'world_event_remnant') {
+    if (!isCurrentTribeEntity(target.entity)) {
+      showToast('这是其他部落处理事件留下的余迹')
+      return
+    }
+    if (sendGameMessage({ type: 'tribe_collect_world_event_remnant', remnantId: target.entity.id })) {
+      showToast(`已整理${target.entity.label || '事件余迹'}`)
+    }
+    return
+  }
+
+  if (target.entity.type === 'diplomacy_council_site') {
+    showTribePanel.value = true
+    showToast(isCurrentTribeEntity(target.entity) ? '大议会会场已展开，可在部落面板选择议题' : '这是其他部落正在筹备的公开外交会场')
+    return
+  }
+
   const reward = resourceRewards[target.entity.type]
   if (!reward) return
 
@@ -1797,7 +1893,7 @@ const sendGameMessage = (payload) => {
 const resolvePersonalConflict = (targetId, actionKey = 'challenge') => {
   if (!targetId) return
   if (sendGameMessage({ type: 'personal_conflict', targetId, actionKey })) {
-    const labels = { intimidate: '威慑', challenge: '挑战', spar: '切磋', guard: '守势' }
+    const labels = { intimidate: '威慑', challenge: '挑战', spar: '切磋', guard: '守势', inspire: '鼓舞' }
     showToast(`已发起${labels[actionKey] || '个人冲突'}`)
   }
 }
@@ -1883,6 +1979,14 @@ const resolveWarDiplomacy = (diplomacyId, action) => {
   if (!diplomacyId || !action) return
   if (sendGameMessage({ type: 'tribe_resolve_war_diplomacy', diplomacyId, action })) {
     showToast(action === 'honor' ? '已履行停战约定' : '已记录停战追责')
+  }
+}
+
+const resolveDiplomacyCouncil = (councilId, actionKey) => {
+  if (!councilId || !actionKey) return
+  const action = diplomacyCouncilActionOptions.value.find((item) => item.key === actionKey)
+  if (sendGameMessage({ type: 'tribe_resolve_diplomacy_council', councilId, actionKey })) {
+    showToast(`大议会议题已提交：${action?.label || '公开议题'}`)
   }
 }
 
@@ -2170,6 +2274,18 @@ const resolveBoundaryOutcome = (outcomeId, responseKey = '') => {
     const response = (outcome.responseOptions || []).find((item) => item.key === responseKey)
     const suffix = response?.label ? `：${response.label}` : ''
     showToast(`开始处理：${outcome.title || '边界结果'}${suffix}`)
+  }
+}
+
+const completeBoundaryFollowup = (taskId) => {
+  const tasks = currentTribe.value?.boundaryFollowupTasks || []
+  const task = tasks.find((item) => item.id === taskId)
+  if (!task) {
+    showToast('这条边界后续已经处理过了')
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_complete_boundary_followup', taskId })) {
+    showToast(`开始处理：${task.title || '边界后续'}`)
   }
 }
 
@@ -2922,15 +3038,28 @@ const handleServerMessage = (message) => {
       const isActor = message.actorId === playerId.value
       const isTarget = message.targetId === playerId.value
       if (message.actionKey === 'guard') {
-        const text = `${message.actorName || '玩家'} 对 ${message.targetName || '玩家'} 摆出守势`
+        const radiusText = message.guardRadius ? `，护卫范围 ${message.guardRadius}步` : ''
+        const text = `${message.actorName || '玩家'} 对 ${message.targetName || '玩家'} 摆出守势${radiusText}`
         if (message.status && isActor) personalConflictStatus.value = { ...personalConflictStatus.value, ...message.status }
         if (isActor || isTarget) showToast(text)
         addSystemMessage(text)
         break
       }
+      if (message.actionKey === 'inspire') {
+        const title = message.renownTitle?.title ? `「${message.renownTitle.title}」` : ''
+        const text = `${title}${message.actorName || '玩家'} 鼓舞了 ${message.targetName || '玩家'}，下次集结贡献 +${message.inspirationContribution || 1}`
+        if (message.status && isActor) personalConflictStatus.value = { ...personalConflictStatus.value, ...message.status }
+        if (message.targetStatus && isTarget) personalConflictStatus.value = { ...personalConflictStatus.value, ...message.targetStatus }
+        if (isActor || isTarget) showToast(text)
+        addSystemMessage(text)
+        break
+      }
       const winnerText = message.winnerId === message.actorId ? message.actorName : message.targetName
-      const guardText = message.guarded ? '，守势抵消了部分疲劳' : ''
-      const text = `${message.actorName || '玩家'} 对 ${message.targetName || '玩家'} 发起${message.actionLabel || '冲突'}，${winnerText || '一方'}占了上风${guardText}`
+      const guardText = message.guarded
+        ? `，${message.guardianName || message.targetName || '守势'}抵消了部分疲劳`
+        : ''
+      const trainingText = message.trainingReward ? `，切磋训练 +${message.trainingReward}${message.trainingBonus ? `（称号+${message.trainingBonus}）` : ''}` : ''
+      const text = `${message.actorName || '玩家'} 对 ${message.targetName || '玩家'} 发起${message.actionLabel || '冲突'}，${winnerText || '一方'}占了上风${guardText}${trainingText}`
       if (isActor || isTarget) showToast(text)
       addSystemMessage(text)
       break

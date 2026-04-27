@@ -428,6 +428,15 @@
   box-shadow: 0 0 20px rgba(248, 223, 123, 0.72);
 }
 
+.map-marker.diplomacy_council_site {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 247, 223, 0.9);
+  background: #ffd675;
+  box-shadow: 0 0 0 4px rgba(255, 214, 117, 0.2), 0 0 22px rgba(255, 214, 117, 0.78);
+}
+
 .map-marker.region_forest,
 .map-marker.region_mountain,
 .map-marker.region_coast,
@@ -483,6 +492,15 @@
   background: radial-gradient(circle, #fff7c2, #f8df7b 42%, #b59cff);
   box-shadow: 0 0 28px rgba(248, 223, 123, 0.95), 0 0 16px rgba(181, 156, 255, 0.9);
   animation: rare-event-pulse 1.6s ease-in-out infinite;
+}
+
+.map-marker.world_event_remnant {
+  width: 15px;
+  height: 15px;
+  border: 2px solid rgba(255, 247, 223, 0.86);
+  border-radius: 5px;
+  background: rgba(255, 190, 104, 0.9);
+  box-shadow: 0 0 14px rgba(255, 190, 104, 0.58);
 }
 
 .map-marker.season_objective {

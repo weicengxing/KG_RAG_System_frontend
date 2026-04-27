@@ -199,7 +199,7 @@
               <select v-model="tradeDraft.targetTribeId">
                 <option value="">选择目标部落</option>
                 <option v-for="tribe in currentTribe.tradeTargets" :key="tribe.id" :value="tribe.id">
-                  {{ tribe.name }} · {{ tribe.tradeReputation?.title || '尚未建信' }}
+                  {{ tribe.name }} · {{ tribe.tradeReputation?.title || '尚未建信' }}{{ tribe.marketPact ? ' · 互市约定' : '' }}
                 </option>
               </select>
               <select v-model="tradeDraft.offerResource">
@@ -216,6 +216,9 @@
               <div v-for="trade in currentTribe.tradeRequests" :key="trade.id" class="tribe-trade-item">
                 <strong>{{ tradeText(trade) }}</strong>
                 <small>{{ tradeDirectionText(trade) }} · {{ formatHistoryTime(trade.createdAt) }}</small>
+                <small v-if="trade.marketPact">
+                  互市约定：请求少要 {{ trade.marketPactDiscount || 0 }}，完成后双方贸易信誉 +{{ trade.marketPactReputationBonus || 0 }}
+                </small>
                 <div class="tribe-vote-actions" v-if="canManageTribeTargets">
                   <button v-if="trade.toTribeId === currentTribe.id" @click="resolveTribeTrade(trade.id, 'accept')">接受</button>
                   <button v-if="trade.toTribeId === currentTribe.id" @click="resolveTribeTrade(trade.id, 'reject')">拒绝</button>
@@ -236,12 +239,45 @@
               <div v-for="site in currentTribe.scoutedResourceSites" :key="site.id" class="tribe-trade-item scout-site-item" :class="{ contested: site.contested }">
                 <strong>{{ site.label }} · {{ site.regionLabel }}<span v-if="site.contested"> · 争夺中</span></strong>
                 <small>{{ site.contested ? `与 ${site.contestedByTribeName || '其他部落'} 的线索重叠；处理资源点争执或前往确认。` : '前往小地图标记处确认；附近有旗帜或营地道路会提高收益。' }}</small>
+                <small v-if="site.regionBonusLabel">区域设施：{{ site.regionBonusLabel }}可提供额外收益</small>
               </div>
             </div>
             <div class="tribe-trade-list" v-if="currentTribe.controlledResourceSites?.length">
               <div v-for="site in currentTribe.controlledResourceSites" :key="site.id" class="tribe-trade-item controlled-site-item">
                 <strong>{{ site.label }} · Lv.{{ site.level || 1 }} · 已控制</strong>
                 <small>回到地图标记处可周期收取；多次收取会升级，有道路时可额外组织运输。</small>
+                <small v-if="site.regionBonusLabel">区域设施：{{ site.regionBonusLabel }}持续加成</small>
+              </div>
+            </div>
+            <div class="tribe-trade-list" v-if="currentTribe.tradeRouteSites?.length">
+              <div v-for="site in currentTribe.tradeRouteSites" :key="site.id" class="tribe-trade-item controlled-site-item">
+                <strong>{{ site.label }} · {{ site.partnerTribeName || '邻近部落' }}</strong>
+                <small v-if="site.isBorderMarket">边市开放中：{{ site.marketRewardLabel || '互市加成' }}；靠近地图标记可收取额外边市收益。</small>
+                <small v-else>交换通路留下的短时贸易点；整理 {{ site.collectCount || 0 }} / {{ site.marketCollectTarget || 3 }} 次后可升级为短时边市。</small>
+                <small v-if="site.lastCollectedBy">上次整理：{{ site.lastCollectedBy }}</small>
+              </div>
+            </div>
+            <div class="tribe-trade-list" v-if="currentTribe.marketPacts?.length">
+              <div v-for="pact in currentTribe.marketPacts" :key="pact.id" class="tribe-trade-item controlled-site-item">
+                <strong>{{ pact.title }} · {{ pact.otherTribeName || '邻近部落' }}</strong>
+                <small>{{ pact.summary }}</small>
+                <small>贸易少要 {{ pact.tradeDiscount || 0 }} / 联合守望信任 +{{ pact.jointWatchTradeTrust || 0 }} / 争执缓冲 {{ pact.contestRelief || 0 }}</small>
+              </div>
+            </div>
+            <div class="tribe-trade-list" v-if="currentTribe.diplomacyCouncilSites?.length">
+              <div v-for="site in currentTribe.diplomacyCouncilSites" :key="site.id" class="tribe-trade-item controlled-site-item">
+                <strong>{{ site.title || site.label }} · 信号 {{ site.signalCount || 0 }}</strong>
+                <small>{{ site.summary }}</small>
+                <small v-if="site.participantTribeNames?.length">相关部落：{{ site.participantTribeNames.join('、') }}</small>
+                <div class="tribe-vote-actions">
+                  <button
+                    v-for="action in diplomacyCouncilActionOptions"
+                    :key="action.key"
+                    @click="resolveDiplomacyCouncil(site.id, action.key)"
+                  >
+                    {{ action.label }}
+                  </button>
+                </div>
               </div>
             </div>
             <div class="tribe-flag-row" v-if="hasTribeWorkbench">
@@ -263,6 +299,19 @@
               <button v-for="task in beastTaskOptions" :key="task.key" class="tribe-mini-btn" @click="assignBeastTask(task.key)">{{ task.label }}</button>
             </div>
             <div class="tribe-target-text" v-if="currentTribe.tradeReputation">贸易信誉：{{ currentTribe.tradeReputation.title }} · 已完成 {{ currentTribe.tradeReputation.completed }} 次</div>
+            <div class="tribe-trade-list" v-if="currentTribe.regionEventBonuses?.length">
+              <div v-for="bonus in currentTribe.regionEventBonuses" :key="bonus.label" class="tribe-trade-item controlled-site-item">
+                <strong>{{ bonus.label }} · 区域事件加成</strong>
+                <small>{{ bonus.summary }}</small>
+              </div>
+            </div>
+            <div class="tribe-trade-list" v-if="currentTribe.worldEventRemnants?.length">
+              <div v-for="remnant in currentTribe.worldEventRemnants" :key="remnant.id" class="tribe-trade-item controlled-site-item">
+                <strong>{{ remnant.label }} · {{ remnant.regionLabel || '附近区域' }}</strong>
+                <small>{{ remnant.summary }}</small>
+                <small>可整理：{{ remnant.rewardLabel || '小收益' }}</small>
+              </div>
+            </div>
             <div class="tribe-target-text" v-if="currentTribe.oath || oathOptions.length">部落誓约：{{ oathText }}</div>
             <div class="beast-task-row" v-if="oathOptions.length">
               <button v-for="oath in oathOptions" :key="oath.key" class="tribe-mini-btn" :disabled="!canManageTribeTargets" @click="chooseTribeOath(oath.key)">
@@ -285,10 +334,28 @@
                 <small>{{ truce.summary }}</small>
               </div>
             </div>
+            <div class="tribe-trade-list" v-if="currentTribe.boundaryFollowupTasks?.length">
+              <div v-for="task in currentTribe.boundaryFollowupTasks" :key="task.id" class="tribe-trade-item boundary-pressure-item">
+                <strong>{{ task.title }} · {{ task.otherTribeName }}</strong>
+                <small>{{ task.summary }}</small>
+                <small>
+                  木材 {{ task.woodCost ? `-${task.woodCost}` : 0 }} / 食物 +{{ task.foodReward || 0 }} / 声望 +{{ task.renownReward || 0 }} / 贸易 +{{ task.tradeReward || 0 }}
+                </small>
+                <small v-if="task.relationDelta || task.tradeTrustDelta || task.pressureRelief">
+                  关系 {{ task.relationDelta ? `${task.relationDelta > 0 ? '+' : ''}${task.relationDelta}` : 0 }} / 信任 +{{ task.tradeTrustDelta || 0 }} / 战争压力 -{{ task.pressureRelief || 0 }}
+                </small>
+                <small v-if="task.kind === 'border_market'">互市约定概率：{{ Math.round((task.pactChance || 0) * 100) }}%，若成功持续 {{ task.pactMinutes || 0 }} 分钟</small>
+                <small v-if="task.regionEventBonuses?.length">设施响应：{{ task.regionEventBonuses.map((bonus) => bonus.label).join('、') }}</small>
+                <div class="tribe-vote-actions">
+                  <button @click="completeBoundaryFollowup(task.id)">处理</button>
+                </div>
+              </div>
+            </div>
             <div class="tribe-trade-list" v-if="currentTribe.boundaryOutcomes?.length">
               <div v-for="outcome in currentTribe.boundaryOutcomes" :key="outcome.id" class="tribe-trade-item">
                 <strong>{{ outcome.title }} · {{ outcome.otherTribeName }}</strong>
                 <small>{{ outcome.summary }}</small>
+                <small v-if="outcome.marketPact">互市约定生效：关系损伤降低，交换通路和让渡会获得额外信任。</small>
                 <small v-if="outcome.reward">奖励：木材 {{ outcome.reward.wood || 0 }} / 石块 {{ outcome.reward.stone || 0 }} / 食物 {{ outcome.reward.food || 0 }} / 声望 {{ outcome.reward.renown || 0 }}</small>
                 <div class="tribe-vote-actions" v-if="outcome.status === 'pending' && outcome.responseOptions?.length">
                   <button v-for="option in outcome.responseOptions" :key="option.key" @click="resolveBoundaryOutcome(outcome.id, option.key)">{{ option.label }}</button>
@@ -304,6 +371,7 @@
               <div v-for="conflict in currentTribe.smallConflicts" :key="conflict.id" class="tribe-trade-item">
                 <strong>{{ conflict.title }} · {{ conflict.siteLabel }}</strong>
                 <small>我方 {{ conflict.ownScore }} / {{ conflict.scoreTarget }}，对方 {{ conflict.otherScore }} · {{ conflict.otherTribeName }}</small>
+                <small v-if="conflict.echoLabel">战争余震：{{ conflict.echoLabel }} · 参战贡献 +{{ conflict.echoContributionBonus || 0 }}</small>
                 <div class="tribe-vote-actions">
                   <button @click="joinSkirmish(conflict.id)">参战</button>
                   <button @click="resolveSkirmish(conflict.id)">结算</button>
@@ -366,6 +434,7 @@
                 <strong>{{ task.title }} 路 {{ task.otherTribeName }}</strong>
                 <small>{{ task.summary }}</small>
                 <small>消耗 木材{{ task.woodCost }} / 石块{{ task.stoneCost }}，声望 +{{ task.renownReward }}</small>
+                <small v-if="task.goalEffectLabel">战争目标余波：{{ task.goalEffectLabel }}</small>
                 <div class="tribe-vote-actions">
                   <button @click="completeWarRepair(task.id)">修复</button>
                 </div>
@@ -376,6 +445,7 @@
                 <strong>{{ task.title }} 路 {{ task.otherTribeName }}</strong>
                 <small>{{ task.modeLabel }}：{{ task.summary }}</small>
                 <small>履约 食物{{ task.foodCost }} / 声望 +{{ task.renownReward }}，追责声望 +{{ task.grievanceRenown }}</small>
+                <small v-if="task.goalEffectLabel">战争目标余波：{{ task.goalEffectLabel }}</small>
                 <div class="tribe-vote-actions">
                   <button @click="resolveWarDiplomacy(task.id, 'honor')">履约</button>
                   <button @click="resolveWarDiplomacy(task.id, 'grievance')">追责</button>
@@ -388,6 +458,8 @@
                 <small>{{ task.summary }}</small>
                 <small v-if="task.kind === 'market'">消耗 食物{{ task.foodCost }}，食物 +{{ task.foodReward }} / 贸易 +{{ task.tradeReward }} / 声望 +{{ task.renownReward }}</small>
                 <small v-else>声望 +{{ task.renownReward }} / 战争压力 -{{ task.pressureRelief }}</small>
+                <small v-if="task.discoveryReward">发现 +{{ task.discoveryReward }}</small>
+                <small v-if="task.goalEffectLabel">战争目标余波：{{ task.goalEffectLabel }}</small>
                 <div class="tribe-vote-actions">
                   <button @click="completeWarAftermath(task.id)">处理</button>
                 </div>
@@ -402,6 +474,8 @@
                   分支收益：食物 +{{ task.foodReward || 0 }} / 贸易 +{{ task.tradeReward || 0 }} / 反击意志 +{{ task.warPressure || 0 }}
                 </small>
                 <small v-if="task.buildingBonusLabel">建筑加成：{{ task.buildingBonusLabel }}</small>
+                <small v-if="task.discoveryReward">发现 +{{ task.discoveryReward }}</small>
+                <small v-if="task.goalEffectLabel">战争目标余波：{{ task.goalEffectLabel }}</small>
                 <div class="tribe-vote-actions">
                   <button @click="completeWarRevival(task.id)">复兴</button>
                 </div>
@@ -410,9 +484,10 @@
             <div class="tribe-trade-list" v-if="currentTribe.personalConflicts?.length">
               <div v-for="conflict in currentTribe.personalConflicts" :key="`${conflict.createdAt}-${conflict.actorName}`" class="tribe-trade-item">
                 <strong>{{ conflict.actorName }} 对 {{ conflict.targetName }} 发起{{ conflict.actionLabel }}</strong>
-                <small>{{ conflict.winnerName }}占上风<span v-if="conflict.guarded"> · 守势生效</span> · {{ formatHistoryTime(conflict.createdAt) }}</small>
+                <small>{{ conflict.winnerName }}占上风<span v-if="conflict.guarded"> · {{ conflict.guardianName || '守势' }}生效</span> · {{ formatHistoryTime(conflict.createdAt) }}</small>
                 <small v-if="conflict.actorRoll || conflict.targetRoll">掷点 {{ conflict.actorRoll || 0 }} / {{ conflict.targetRoll || 0 }} · 疲劳 +{{ conflict.fatigueGain || 0 }} · 目标疲劳 {{ conflict.targetFatigue || 0 }}</small>
-                <small v-if="conflict.fatigueUntil">疲劳恢复：{{ formatRemainingSeconds(conflict.fatigueUntil) || '已恢复' }}<span v-if="conflict.renownGain"> · 声望 +{{ conflict.renownGain }}</span></small>
+                <small v-if="conflict.fatigueUntil">疲劳恢复：{{ formatRemainingSeconds(conflict.fatigueUntil) || '已恢复' }}<span v-if="conflict.targetRecoverySeconds"> · {{ conflict.targetRecoverySeconds }}s</span><span v-if="conflict.renownGain"> · 声望 +{{ conflict.renownGain }}</span><span v-if="conflict.trainingReward"> · 训练 +{{ conflict.trainingReward }}<template v-if="conflict.trainingBonus">（称号+{{ conflict.trainingBonus }}）</template></span></small>
+                <small v-if="conflict.inspirationContribution">{{ conflict.renownTitle || '个人声望' }}鼓舞：下次集结贡献 +{{ conflict.inspirationContribution }}</small>
               </div>
             </div>
             <div class="tribe-target-text" v-if="currentTribe.celebrationBuff">庆典余韵：{{ celebrationBuffText }}</div>
@@ -442,6 +517,7 @@
               >
                 <span>{{ option.built ? '已建成' : '建造' }}{{ option.label }}</span>
                 <small>木 {{ option.wood }} / 石 {{ option.stone }}</small>
+                <small v-if="option.summary">{{ option.summary }}</small>
               </button>
             </div>
             <div class="tribe-ritual-card" :class="{ active: activeTribeRitual }">
@@ -514,6 +590,9 @@
               <div>
                 <span>{{ member.name }}</span>
                 <small>{{ roleLabel(member.role) }} · 贡献 {{ member.contribution }}</small>
+                <small v-if="member.newcomerMoments?.length">
+                  新人关键：{{ member.newcomerMoments[member.newcomerMoments.length - 1].label }}
+                </small>
               </div>
               <div class="tribe-vote-actions" v-if="member.id !== playerId">
                 <button v-if="canStartVote" class="tribe-mini-btn" :disabled="!canVoteForRole(member, 'elder')" @click="startTribeVote('elder', member.id)">选长老</button>
@@ -549,6 +628,7 @@
       </div>
       <div class="boundary-action-row" v-if="interactionTarget.entity?.type === 'remote_player'">
         <button @click="resolvePersonalConflict(interactionTarget.entity.id, 'guard')">守势</button>
+        <button @click="resolvePersonalConflict(interactionTarget.entity.id, 'inspire')">鼓舞</button>
         <button @click="resolvePersonalConflict(interactionTarget.entity.id, 'intimidate')">威慑</button>
         <button @click="resolvePersonalConflict(interactionTarget.entity.id, 'spar')">切磋</button>
         <button @click="resolvePersonalConflict(interactionTarget.entity.id, 'challenge')">挑战</button>
@@ -634,10 +714,10 @@
       </div>
     </div>
 
-    <div class="herd-action-panel" v-if="activeWorldEvent?.key === 'herd'">
-      <div class="panel-eyebrow">兽群处理</div>
+    <div class="herd-action-panel" v-if="activeWorldEventActionOptions.length">
+      <div class="panel-eyebrow">事件处理</div>
       <div class="herd-action-options">
-        <button v-for="action in herdActionOptions" :key="action.key" :class="{ active: herdActionKey === action.key }" @click="herdActionKey = action.key">
+        <button v-for="action in activeWorldEventActionOptions" :key="action.key" :class="{ active: selectedWorldEventActionKey === action.key }" @click="worldEventActionKey = action.key">
           <strong>{{ action.label }}</strong>
           <span>{{ action.summary }}</span>
         </button>

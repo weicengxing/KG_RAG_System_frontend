@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { createModelAssetInstance } from './modelAssets.js'
 import { rngForKey } from './random.js'
 
 const clamp01 = (v) => Math.max(0, Math.min(1, v))
@@ -26,6 +27,64 @@ const oathColor = (key, fallback) => ({
   trade: 0xd8c16b,
   beast: 0x9be59d
 }[key] || fallback)
+
+const addGroundShadow = (group, rng, radius = 1.4, opacity = 0.18) => {
+  const material = new THREE.MeshBasicMaterial({
+    color: 0x102018,
+    transparent: true,
+    opacity,
+    depthWrite: false
+  })
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(radius, 24), material)
+  shadow.rotation.x = -Math.PI / 2
+  shadow.position.set((rng() - 0.5) * 0.08, 0.018, (rng() - 0.5) * 0.08)
+  shadow.scale.set(1.2 + rng() * 0.4, 0.75 + rng() * 0.25, 1)
+  group.add(shadow)
+}
+
+const polishModel = (object, rng, { groundShadow = false, shadowRadius = 1.4, castShadow = true, receiveShadow = true } = {}) => {
+  if (!object) return object
+  object.traverse((child) => {
+    if (!child.isMesh) return
+    const material = Array.isArray(child.material) ? child.material[0] : child.material
+    const transparent = material?.transparent && material?.opacity < 0.75
+    child.castShadow = castShadow && !transparent
+    child.receiveShadow = receiveShadow && !transparent
+    if (material && 'envMapIntensity' in material) material.envMapIntensity = 0.28
+  })
+  if (groundShadow && object.isGroup) addGroundShadow(object, rng, shadowRadius)
+  return object
+}
+
+const createAssetBackedEntity = (assetKey, fallback, rng, transform = {}) => {
+  const holder = new THREE.Group()
+  const fallbackSlot = new THREE.Group()
+  fallbackSlot.name = `${assetKey}_fallback`
+  fallbackSlot.add(fallback)
+  holder.add(fallbackSlot)
+
+  createModelAssetInstance(assetKey)
+    .then((model) => {
+      if (holder.userData.disposed) {
+        disposeObject3D(model)
+        return
+      }
+      if (typeof transform.scale === 'number') model.scale.setScalar(transform.scale)
+      if (Array.isArray(transform.position)) model.position.set(...transform.position)
+      if (Array.isArray(transform.rotation)) model.rotation.set(...transform.rotation)
+      if (typeof transform.rotationY === 'number') model.rotation.y = transform.rotationY
+      model.name = `${assetKey}_glb`
+      holder.remove(fallbackSlot)
+      disposeObject3D(fallbackSlot)
+      holder.add(model)
+      polishModel(model, rng, { ...(transform.polish || {}), groundShadow: false })
+    })
+    .catch((error) => {
+      console.warn(`Failed to load model asset "${assetKey}"`, error)
+    })
+
+  return holder
+}
 
 export function getEntityCollider(entity, globalSeed = 0) {
   if (!entity) return null
@@ -144,7 +203,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
     const trunkMaterial = new THREE.MeshStandardMaterial({ color: colorJitter(trunkBaseColor, rng, 0.08) })
     const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial)
     trunk.position.y = trunkHeight / 2
-    trunk.castShadow = false
+    trunk.castShadow = true
     trunk.receiveShadow = true
     tree.add(trunk)
 
@@ -160,12 +219,25 @@ export function createEntityMesh(entity, globalSeed = 0) {
     const foliageMaterial = new THREE.MeshStandardMaterial({ color: colorJitter(foliageColor, rng, 0.1) })
     const foliage = new THREE.Mesh(foliageGeometry, foliageMaterial)
     foliage.position.y = trunkHeight + foliageHeight * 0.45
-    foliage.castShadow = false
+    foliage.castShadow = true
     foliage.receiveShadow = true
     tree.add(foliage)
 
+    const crown = new THREE.Mesh(new THREE.SphereGeometry(foliageRadius * 0.72, 9, 8), foliageMaterial)
+    crown.position.set((rng() - 0.5) * foliageRadius * 0.5, trunkHeight + foliageHeight * 0.76, (rng() - 0.5) * foliageRadius * 0.5)
+    crown.scale.set(1.1, 0.72, 1)
+    tree.add(crown)
+
+    for (let i = 0; i < 3; i++) {
+      const root = new THREE.Mesh(new THREE.CylinderGeometry(0.06 * scale, 0.09 * scale, 0.9 * scale, 5), trunkMaterial)
+      root.position.y = 0.12 * scale
+      root.rotation.z = Math.PI / 2.7
+      root.rotation.y = (i / 3) * Math.PI * 2 + rng() * 0.35
+      tree.add(root)
+    }
+
     tree.rotation.y = rng() * Math.PI * 2
-    return tree
+    return polishModel(tree, rng, { groundShadow: true, shadowRadius: foliageRadius * 0.82 })
   }
 
   if (type === 'rock') {
@@ -177,11 +249,11 @@ export function createEntityMesh(entity, globalSeed = 0) {
       metalness: 0.05
     })
     const rock = new THREE.Mesh(geometry, material)
-    rock.castShadow = false
+    rock.castShadow = true
     rock.receiveShadow = true
     rock.rotation.set(rng() * Math.PI, rng() * Math.PI, rng() * Math.PI)
     rock.scale.set(0.85 + rng() * 0.6, 0.75 + rng() * 0.8, 0.85 + rng() * 0.6)
-    return rock
+    return polishModel(rock, rng)
   }
 
   if (type === 'grass') {
@@ -203,7 +275,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
     }
 
     group.rotation.y = rng() * Math.PI * 2
-    return group
+    return polishModel(group, rng, { castShadow: false })
   }
 
   if (type === 'flower') {
@@ -224,7 +296,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
     group.add(bloom)
 
     group.rotation.y = rng() * Math.PI * 2
-    return group
+    return polishModel(group, rng, { castShadow: false })
   }
 
   if (type === 'campfire') {
@@ -262,7 +334,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
     group.add(glow)
 
     group.rotation.y = rng() * Math.PI * 2
-    return group
+    return polishModel(group, rng, { groundShadow: true, shadowRadius: 1.2 })
   }
 
   if (type === 'ruin') {
@@ -291,7 +363,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
     group.add(slab)
 
     group.rotation.y = rng() * Math.PI * 2
-    return group
+    return polishModel(group, rng, { groundShadow: true, shadowRadius: 2.2 })
   }
 
   if (type === 'crystal') {
@@ -316,7 +388,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
     group.add(glow)
 
     group.rotation.y = rng() * Math.PI * 2
-    return group
+    return polishModel(group, rng, { groundShadow: true, shadowRadius: 1.25 })
   }
 
   if (type === 'mountain') {
@@ -332,7 +404,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
     mesh.castShadow = false
     mesh.receiveShadow = true
     mesh.rotation.y = rng() * Math.PI * 2
-    return mesh
+    return polishModel(mesh, rng)
   }
 
   if (type === 'tribe_totem') {
@@ -375,7 +447,13 @@ export function createEntityMesh(entity, globalSeed = 0) {
     group.add(glow)
 
     group.rotation.y = rng() * Math.PI * 2
-    return group
+    const fallback = polishModel(group, rng, { groundShadow: true, shadowRadius: 1.15 })
+    const holder = createAssetBackedEntity('tribeTotem', fallback, rng, {
+      scale,
+      rotationY: group.rotation.y,
+      polish: { groundShadow: true, shadowRadius: 1.15 }
+    })
+    return holder
   }
 
   if (type === 'tribe_storage') {
@@ -418,7 +496,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
     }
 
     group.rotation.y = rng() * Math.PI * 2
-    return group
+    return polishModel(group, rng, { groundShadow: true, shadowRadius: 1.45 })
   }
 
   if (type === 'tribe_workbench') {
@@ -470,7 +548,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
     group.add(ember)
 
     group.rotation.y = rng() * Math.PI * 2
-    return group
+    return polishModel(group, rng, { groundShadow: true, shadowRadius: 1.5 })
   }
 
   if (type === 'tribe_hut') {
@@ -507,7 +585,13 @@ export function createEntityMesh(entity, globalSeed = 0) {
     group.add(doorway)
 
     group.rotation.y = rng() * Math.PI * 2
-    return group
+    const fallback = polishModel(group, rng, { groundShadow: true, shadowRadius: 1.8 })
+    const holder = createAssetBackedEntity('tribeHut', fallback, rng, {
+      scale,
+      rotationY: group.rotation.y,
+      polish: { groundShadow: true, shadowRadius: 1.8 }
+    })
+    return holder
   }
 
   if (type === 'tribe_fence') {
@@ -531,7 +615,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
       group.add(rail)
     }
     group.rotation.y = rng() * Math.PI * 2
-    return group
+    return polishModel(group, rng, { groundShadow: true, shadowRadius: 2.4 })
   }
 
   if (type === 'tribe_road') {
@@ -555,7 +639,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
       group.add(stone)
     }
     group.rotation.y = rng() * Math.PI * 2
-    return group
+    return polishModel(group, rng, { groundShadow: true, shadowRadius: 2.2 })
   }
 
   if (type === 'tribe_spawn') {
@@ -586,7 +670,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
     light.position.y = 1.3 * scale
     group.add(light)
 
-    return group
+    return polishModel(group, rng, { groundShadow: true, shadowRadius: 1.2 })
   }
 
   if (type === 'tribe_camp') {
@@ -609,7 +693,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
     ember.position.y = 0.55 * scale
     group.add(ember)
 
-    return group
+    return polishModel(group, rng, { groundShadow: true, shadowRadius: 1.65 })
   }
 
   if (type === 'tribe_flag') {
@@ -668,7 +752,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
     group.add(light)
 
     group.rotation.y = rng() * Math.PI * 2
-    return group
+    return polishModel(group, rng, { groundShadow: true, shadowRadius: 1.65 })
   }
 
   if (type === 'tribe_beast_marker') {
@@ -739,7 +823,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
       baseZ: 0,
       radius: typeof entity.patrolRadius === 'number' ? entity.patrolRadius : 1
     }
-    return group
+    return polishModel(group, rng, { groundShadow: true, shadowRadius: 1.85 })
   }
 
   if (type === 'scouted_resource_site' || type === 'controlled_resource_site' || type === 'trade_route_site' || type === 'world_event_remnant' || type === 'diplomacy_council_site') {
@@ -788,7 +872,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
     group.add(light)
 
     group.rotation.y = rng() * Math.PI * 2
-    return group
+    return polishModel(group, rng, { groundShadow: true, shadowRadius: 2.4 })
   }
 
   if (type === 'cave_entrance') {
@@ -826,7 +910,13 @@ export function createEntityMesh(entity, globalSeed = 0) {
     group.add(torch)
 
     group.rotation.y = rng() * 0.35 - 0.15
-    return group
+    const fallback = polishModel(group, rng, { groundShadow: true, shadowRadius: 2.5 })
+    const holder = createAssetBackedEntity('caveEntrance', fallback, rng, {
+      scale,
+      rotationY: group.rotation.y,
+      polish: { groundShadow: true, shadowRadius: 2.5 }
+    })
+    return holder
   }
 
   return null
@@ -834,6 +924,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
 
 export function disposeObject3D(object3D) {
   if (!object3D) return
+  object3D.userData.disposed = true
   const materials = new Set()
   object3D.traverse((child) => {
     if (child.geometry) child.geometry.dispose()

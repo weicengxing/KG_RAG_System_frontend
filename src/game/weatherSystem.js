@@ -74,27 +74,27 @@ export function createWeatherSystem(scene) {
     current = next
 
     if (current === 'rain') {
-      setSky(0x4a5a6a, 0x4a5a6a, 60, 260)
+      setSky(0x566878, 0x566878, 48, 230)
       startRain()
       stopSnow()
       return
     }
 
     if (current === 'snow') {
-      setSky(0xb8c6d1, 0xc9d6df, 40, 220)
+      setSky(0xc6d7e0, 0xd8e3e8, 36, 230)
       startSnow()
       stopRain()
       return
     }
 
     if (current === 'fog') {
-      setSky(0x8d9aa6, 0x8d9aa6, undefined, undefined, 0.02)
+      setSky(0xaab4ad, 0xaab4ad, undefined, undefined, 0.017)
       stopRain()
       stopSnow()
       return
     }
 
-    setSky(0x87ceeb, 0x87ceeb, 100, 500)
+    setSky(0xaed8f2, 0xb9dded, 80, 360)
     stopRain()
     stopSnow()
   }

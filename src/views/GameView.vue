@@ -7,6 +7,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { WorldEntityManager } from '../game/worldEntityManager.js'
 import { createWeatherSystem } from '../game/weatherSystem.js'
 import { buildTribeHistoryReplay } from '../game/tribeHistoryReplay.js'
+import { createModelAssetInstance } from '../game/modelAssets.js'
 import request from '../utils/request.js'
 import { API_CONFIG } from '../config.js'
 
@@ -53,7 +54,8 @@ const personalConflictStatus = ref({
   inspirationUntil: '',
   inspirationSourceName: '',
   inspirationContribution: 0,
-  inspireMinRenown: 5
+  inspireMinRenown: 5,
+  identity: null
 })
 
 const inventory = ref({
@@ -97,6 +99,7 @@ const tribeHistoryLoaded = ref([])
 const tribeHistoryNextCursor = ref(null)
 const tribeHistoryTotal = ref(0)
 const tribeHistoryLoading = ref(false)
+const oralChainDraft = ref('')
 const showHistoryDetail = ref(false)
 const activeHistoryDetail = ref({})
 const showTotemOverlay = ref(false)
@@ -142,6 +145,7 @@ const connectionStatus = ref('connecting')
 // Three.js 相关
 let scene, camera, renderer, controls
 let ambientLight = null
+let hemisphereLight = null
 let directionalLight = null
 let localPlayer = null
 let remotePlayers = new Map()
@@ -446,6 +450,7 @@ const describeLandmark = (landmark) => {
   if (landmark.type === 'controlled_resource_site') return landmark.isOwnTribe ? `控制资源点 Lv.${landmark.level || 1} · ${landmark.resourceLabel || landmark.label || '可收取'}` : '其他部落控制资源点'
   if (landmark.type === 'trade_route_site') return landmark.isOwnTribe ? `交换通路 · ${landmark.partnerTribeName || '邻近部落'}` : '其他部落交换通路'
   if (landmark.type === 'world_event_remnant') return landmark.isOwnTribe ? `${landmark.label || '事件余迹'} · ${landmark.rewardLabel || '可整理'}` : '其他部落事件余迹'
+  if (landmark.type === 'map_memory_trace') return landmark.isOwnTribe ? `${landmark.label || '活地图记忆'} · ${landmark.rewardLabel || '可重访'}` : '其他部落地图记忆'
   if (landmark.type === 'tribe_totem' && landmark.oathLabel) return `${landmark.oathLabel}图腾`
   if (landmark.type === 'tribe_totem' && landmark.hasRuneHonor) return landmark.honorText
   return landmark.label || '未知地标'
@@ -562,6 +567,18 @@ const roleLabel = (role) => {
 
 const tribeRoleLabel = computed(() => roleLabel(tribeRole.value))
 const canManageTribeTargets = computed(() => ['leader', 'elder'].includes(tribeRole.value))
+const oralChainLines = computed(() => currentTribe.value?.oralChain?.lines || [])
+const oralChainReady = computed(() => Boolean(currentTribe.value?.oralChain?.ready))
+const oralChainProgressText = computed(() => {
+  const chain = currentTribe.value?.oralChain
+  if (!chain) return '0 / 0'
+  return `${chain.lines?.length || 0} / ${chain.target || 0}`
+})
+const oralChainThemeText = computed(() => {
+  const chain = currentTribe.value?.oralChain
+  if (!chain?.themeLabel) return ''
+  return `主题：${chain.themeLabel}`
+})
 
 const syncTribeAnnouncementDraft = () => {
   tribeAnnouncementDraft.value = currentTribe.value?.announcement || ''
@@ -748,6 +765,16 @@ const personalConflictText = computed(() => {
   return parts.join(' · ')
 })
 
+const personalIdentity = computed(() => personalConflictStatus.value?.identity || {})
+const personalIdentityOptions = computed(() => personalIdentity.value?.options || [])
+const personalIdentityCooldownText = computed(() => formatRemainingSeconds(personalIdentity.value?.cooldownUntil))
+const personalIdentityActionText = computed(() => {
+  const identity = personalIdentity.value
+  if (!identity?.key) return ''
+  const cooldown = personalIdentityCooldownText.value
+  return cooldown ? `${identity.actionLabel || identity.label} ${cooldown}` : `${identity.actionLabel || identity.label}可用`
+})
+
 const openTribeHistoryDetail = (event) => {
   activeHistoryDetail.value = event || {}
   showHistoryDetail.value = true
@@ -859,6 +886,7 @@ const tribeGatherBonus = computed(() => (activeTribeRitual.value?.gatherBonus ||
 const boundaryClass = (relation) => relation?.state ? `boundary-${relation.state}` : ''
 const boundaryActionOptions = computed(() => optionMapToList(currentTribe.value?.boundaryActions))
 const diplomacyCouncilActionOptions = computed(() => optionMapToList(currentTribe.value?.diplomacyCouncilActions))
+const emergencyChoiceActionOptions = computed(() => optionMapToList(currentTribe.value?.emergencyChoiceActions))
 const activeBoundaryFlag = computed(() => {
   const entity = interactionTarget.value?.entity
   if (!entity || entity.type !== 'tribe_flag' || !isCurrentTribeEntity(entity) || !entity.boundaryRelation) return null
@@ -913,6 +941,7 @@ const celebrationChoiceOptions = computed(() => {
   if (!currentTribe.value?.seasonChain?.pendingCelebration) return []
   return optionMapToList(currentTribe.value?.seasonChain?.celebrationChoices)
 })
+const seasonTabooOptions = computed(() => optionMapToList(currentTribe.value?.seasonTabooOptions))
 const selectedCavePlan = computed(() => {
   return caveExpeditionPlans.find((plan) => plan.key === caveExpeditionPlanKey.value) || caveExpeditionPlans[1]
 })
@@ -1095,8 +1124,8 @@ const initGame = async () => {
   try {
     // 创建场景
     scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x87CEEB) // 天空蓝
-    scene.fog = new THREE.Fog(0x87CEEB, 100, 500)
+    scene.background = new THREE.Color(0xaed8f2) // 天空蓝
+    scene.fog = new THREE.Fog(0xaed8f2, 80, 360)
     world = new WorldEntityManager({ scene, loadDistance, unloadDistance })
     weatherSystem = createWeatherSystem(scene)
 
@@ -1113,7 +1142,10 @@ const initGame = async () => {
     // 创建渲染器
     renderer = new THREE.WebGLRenderer({ antialias: true })
     renderer.setSize(canvasWrapper.value.clientWidth, canvasWrapper.value.clientHeight)
-    renderer.setPixelRatio(window.devicePixelRatio)
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.outputColorSpace = THREE.SRGBColorSpace
+    renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.08
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
     canvasWrapper.value.appendChild(renderer.domElement)
@@ -1142,18 +1174,24 @@ const initGame = async () => {
     const tempCameraPosition = new THREE.Vector3()
     const tempTargetPosition = new THREE.Vector3()
     // 添加光源
-    ambientLight = new THREE.AmbientLight(0xffffff, 0.6)
+    ambientLight = new THREE.AmbientLight(0xfff7e8, 0.38)
     scene.add(ambientLight)
 
-    directionalLight = new THREE.DirectionalLight(0xffffff, 0.8)
-    directionalLight.position.set(50, 100, 50)
+    hemisphereLight = new THREE.HemisphereLight(0xbfe7ff, 0x4c3b2d, 0.62)
+    scene.add(hemisphereLight)
+
+    directionalLight = new THREE.DirectionalLight(0xfff1c9, 1.08)
+    directionalLight.position.set(56, 92, 34)
     directionalLight.castShadow = true
-    directionalLight.shadow.camera.left = -50
-    directionalLight.shadow.camera.right = 50
-    directionalLight.shadow.camera.top = 50
-    directionalLight.shadow.camera.bottom = -50
-    directionalLight.shadow.mapSize.width = 1024  // 降低阴影贴图分辨率以提升性能
-    directionalLight.shadow.mapSize.height = 1024
+    directionalLight.shadow.camera.left = -72
+    directionalLight.shadow.camera.right = 72
+    directionalLight.shadow.camera.top = 72
+    directionalLight.shadow.camera.bottom = -72
+    directionalLight.shadow.camera.near = 8
+    directionalLight.shadow.camera.far = 190
+    directionalLight.shadow.bias = -0.00018
+    directionalLight.shadow.mapSize.width = 2048
+    directionalLight.shadow.mapSize.height = 2048
     scene.add(directionalLight)
 
     // 创建地形
@@ -1192,29 +1230,34 @@ const applyWeatherLighting = (weather) => {
 
   const presets = {
     sunny: {
-      ambient: 0.68,
-      directional: 0.9,
-      lightColor: 0xffffff
+      ambient: 0.4,
+      hemisphere: 0.68,
+      directional: 1.08,
+      lightColor: 0xfff1c9
     },
     rain: {
-      ambient: 0.48,
-      directional: 0.42,
+      ambient: 0.34,
+      hemisphere: 0.42,
+      directional: 0.55,
       lightColor: 0xb6c6d5
     },
     snow: {
-      ambient: 0.78,
-      directional: 0.52,
+      ambient: 0.52,
+      hemisphere: 0.74,
+      directional: 0.7,
       lightColor: 0xe8f4ff
     },
     fog: {
-      ambient: 0.56,
-      directional: 0.28,
+      ambient: 0.44,
+      hemisphere: 0.5,
+      directional: 0.34,
       lightColor: 0xc9d0cf
     }
   }
 
   const preset = presets[weather] || presets.sunny
   ambientLight.intensity = preset.ambient
+  if (hemisphereLight) hemisphereLight.intensity = preset.hemisphere
   directionalLight.intensity = preset.directional
   directionalLight.color.set(preset.lightColor)
 }
@@ -1317,25 +1360,41 @@ function applyEnvironment(environment) {
 // 创建地形
 const createTerrain = () => {
   // 创建地面网格 - 降低分段数以提升性能
-  const gridSize = 200
-  const segments = 30  // 从 50 降低到 30
+  const gridSize = 220
+  const segments = 72
   const geometry = new THREE.PlaneGeometry(gridSize, gridSize, segments, segments)
 
   // 添加随机高度（简单的地形）
   const vertices = geometry.attributes.position.array
+  const colors = []
+  const lowColor = new THREE.Color(0x5f8f52)
+  const grassColor = new THREE.Color(0x2f7f3f)
+  const highColor = new THREE.Color(0x9aa071)
   for (let i = 0; i < vertices.length; i += 3) {
     const x = vertices[i]
     const z = vertices[i + 1]
     // 使用简单的噪声函数生成高度
-    vertices[i + 2] = Math.sin(x / 10) * Math.cos(z / 10) * 2
+    const broad = Math.sin(x / 18) * Math.cos(z / 16) * 1.9
+    const small = Math.sin((x + z) / 8) * 0.45 + Math.cos((x - z) / 13) * 0.35
+    const height = broad + small
+    vertices[i + 2] = height
+
+    const color = grassColor.clone()
+    if (height < -0.9) color.lerp(lowColor, Math.min(1, Math.abs(height) / 2.2))
+    if (height > 1.2) color.lerp(highColor, Math.min(1, (height - 1.2) / 2.8))
+    const shade = 0.94 + Math.sin(x / 7) * 0.03 + Math.cos(z / 9) * 0.03
+    color.multiplyScalar(shade)
+    colors.push(color.r, color.g, color.b)
   }
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
   geometry.computeVertexNormals()
 
   // 创建材质
   const material = new THREE.MeshStandardMaterial({
-    color: 0x2e7d32,
-    roughness: 0.8,
-    metalness: 0.2,
+    color: 0xffffff,
+    vertexColors: true,
+    roughness: 0.92,
+    metalness: 0.02,
     wireframe: false
   })
 
@@ -1345,8 +1404,10 @@ const createTerrain = () => {
   scene.add(terrain)
 
   // 添加网格辅助线 - 降低分段数
-  const gridHelper = new THREE.GridHelper(gridSize, segments, 0x888888, 0x444444)
-  gridHelper.position.y = 0.01
+  const gridHelper = new THREE.GridHelper(gridSize, 22, 0x315a42, 0x315a42)
+  gridHelper.material.transparent = true
+  gridHelper.material.opacity = 0.08
+  gridHelper.position.y = 0.035
   scene.add(gridHelper)
 }
 
@@ -1898,6 +1959,48 @@ const resolvePersonalConflict = (targetId, actionKey = 'challenge') => {
   }
 }
 
+const choosePersonalIdentity = (identityKey) => {
+  const option = personalIdentityOptions.value.find((item) => item.key === identityKey)
+  if (option && !option.available) {
+    showToast(`个人声望至少需要 ${option.minRenown || 0}`)
+    return
+  }
+  if (sendGameMessage({ type: 'personal_identity_choose', identityKey })) {
+    showToast(`正在选择身份：${option?.label || '身份'}`)
+  }
+}
+
+const performPersonalIdentityAction = () => {
+  const identity = personalIdentity.value
+  if (!identity?.key) {
+    showToast('先选择一个身份')
+    return
+  }
+  if (personalIdentityCooldownText.value) {
+    showToast('身份动作还在冷却')
+    return
+  }
+  if (sendGameMessage({ type: 'personal_identity_action' })) {
+    showToast(`正在执行${identity.actionLabel || identity.label || '身份动作'}`)
+  }
+}
+
+const revisitMapMemory = (memoryId) => {
+  if (!memoryId) return
+  if (sendGameMessage({ type: 'tribe_revisit_map_memory', memoryId })) {
+    showToast('正在重访活地图记忆')
+  }
+}
+
+const supportMythClaim = (claimId, interpretationKey) => {
+  if (!claimId || !interpretationKey) return
+  const claim = currentTribe.value?.mythClaims?.find((item) => item.id === claimId)
+  const interpretation = claim?.interpretations?.find((item) => item.key === interpretationKey)
+  if (sendGameMessage({ type: 'tribe_support_myth_claim', claimId, interpretationKey })) {
+    showToast(`已支持神话解释：${interpretation?.label || '新的说法'}`)
+  }
+}
+
 const startSkirmish = (outcomeId) => {
   if (!outcomeId) return
   if (sendGameMessage({ type: 'tribe_start_skirmish', outcomeId })) {
@@ -2199,6 +2302,36 @@ const craftStoneTool = () => {
   showToast('石器工具已打磨，采集额外 +1')
 }
 
+const addOralChainLine = () => {
+  if (!currentTribe.value) {
+    showToast('请先加入部落')
+    return
+  }
+  const text = oralChainDraft.value.trim()
+  if (text.length < 4) {
+    showToast('接龙句子至少 4 个字')
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_add_oral_chain_line', text })) {
+    oralChainDraft.value = ''
+    showToast('接龙已传到营火旁')
+  }
+}
+
+const completeOralChain = () => {
+  if (!canManageTribeTargets.value) {
+    showToast('只有首领或长老可以整理接龙史诗')
+    return
+  }
+  if (!oralChainReady.value) {
+    showToast('接龙句数还不够')
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_complete_oral_chain' })) {
+    showToast('接龙史诗整理请求已提交')
+  }
+}
+
 const composeOralEpic = () => {
   if (!canManageTribeTargets.value) {
     showToast('只有首领或长老可以整理史诗')
@@ -2234,6 +2367,50 @@ const chooseSeasonCelebration = (choiceKey) => {
   if (sendGameMessage({ type: 'tribe_choose_celebration', choiceKey })) {
     const label = celebrationChoiceOptions.value.find((choice) => choice.key === choiceKey)?.label || '庆典'
     showToast(`庆典形式已选择：${label}`)
+  }
+}
+
+const chooseSeasonTaboo = (tabooKey) => {
+  if (!canManageTribeTargets.value) {
+    showToast('只有首领或长老可以宣布季节禁忌')
+    return
+  }
+  const option = seasonTabooOptions.value.find((item) => item.key === tabooKey)
+  if (sendGameMessage({ type: 'tribe_choose_season_taboo', tabooKey })) {
+    showToast(`季节禁忌已宣布：${option?.label || '祭典目标'}`)
+  }
+}
+
+const observeSeasonTaboo = () => {
+  const taboo = currentTribe.value?.seasonTaboo
+  if (!taboo) {
+    showToast('当前没有季节禁忌')
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_observe_season_taboo' })) {
+    showToast(`已提交：${taboo.observeLabel || '践行禁忌'}`)
+  }
+}
+
+const breakSeasonTaboo = () => {
+  const taboo = currentTribe.value?.seasonTaboo
+  if (!taboo) {
+    showToast('当前没有可破戒的季节禁忌')
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_break_season_taboo' })) {
+    showToast(`已公开破戒：${taboo.breakLabel || '破戒'}`)
+  }
+}
+
+const completeSeasonTabooRemedy = (remedyId) => {
+  const remedy = currentTribe.value?.seasonTabooRemedies?.find((item) => item.id === remedyId)
+  if (!remedy) {
+    showToast('这条季节补救已经结束')
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_complete_season_taboo_remedy', remedyId })) {
+    showToast(`开始补救：${remedy.title || '季节补救'}`)
   }
 }
 
@@ -2286,6 +2463,34 @@ const completeBoundaryFollowup = (taskId) => {
   }
   if (sendGameMessage({ type: 'tribe_complete_boundary_followup', taskId })) {
     showToast(`开始处理：${task.title || '边界后续'}`)
+  }
+}
+
+const resolveEmergencyChoice = (choiceId, actionKey) => {
+  if (!canManageTribeTargets.value) {
+    showToast('只有首领或长老可以决定紧急优先级')
+    return
+  }
+  const choice = currentTribe.value?.emergencyChoice
+  if (!choice || choice.id !== choiceId) {
+    showToast('这次紧急选择已经结束')
+    return
+  }
+  const action = emergencyChoiceActionOptions.value.find((item) => item.key === actionKey)
+  if (sendGameMessage({ type: 'tribe_resolve_emergency_choice', choiceId, actionKey })) {
+    showToast(`紧急选择已提交：${action?.label || '优先处理'}`)
+  }
+}
+
+const completeEmergencyFollowup = (taskId) => {
+  const tasks = currentTribe.value?.emergencyFollowupTasks || []
+  const task = tasks.find((item) => item.id === taskId)
+  if (!task) {
+    showToast('这条紧急补救已经处理过了')
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_complete_emergency_followup', taskId })) {
+    showToast(`开始补救：${task.title || '紧急补救'}`)
   }
 }
 
@@ -2522,34 +2727,96 @@ const createPlayer = (color, name) => {
 
   // 身体
   const bodyGeometry = new THREE.CapsuleGeometry(0.5, 1.5, 4, 8)
-  const bodyMaterial = new THREE.MeshStandardMaterial({ color })
+  const bodyMaterial = new THREE.MeshStandardMaterial({ color, roughness: 0.72, metalness: 0.02 })
   const body = new THREE.Mesh(bodyGeometry, bodyMaterial)
+  body.position.y = -0.62
   body.castShadow = true
+  body.receiveShadow = true
   player.add(body)
+
+  const cloakMaterial = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(color).offsetHSL(0, -0.08, -0.16),
+    roughness: 0.88,
+    metalness: 0
+  })
+  const cloak = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.05, 0.16), cloakMaterial)
+  cloak.position.set(0, -0.38, -0.44)
+  cloak.rotation.x = -0.12
+  cloak.castShadow = true
+  cloak.receiveShadow = true
+  player.add(cloak)
 
   // 头部
   const headGeometry = new THREE.SphereGeometry(0.4, 16, 16)
-  const headMaterial = new THREE.MeshStandardMaterial({ color: 0xFFDBAC })
+  const headMaterial = new THREE.MeshStandardMaterial({ color: 0xFFDBAC, roughness: 0.6 })
   const head = new THREE.Mesh(headGeometry, headMaterial)
-  head.position.y = 1.5
+  head.position.y = 0.92
   head.castShadow = true
+  head.receiveShadow = true
   player.add(head)
+
+  const hairMaterial = new THREE.MeshStandardMaterial({ color: 0x2d2017, roughness: 0.82 })
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.52), hairMaterial)
+  hair.position.y = 1.05
+  hair.scale.set(1.02, 0.75, 1.02)
+  hair.castShadow = true
+  player.add(hair)
+
+  const armMaterial = new THREE.MeshStandardMaterial({ color: 0xffc993, roughness: 0.68 })
+  for (const side of [-1, 1]) {
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.88, 8), armMaterial)
+    arm.position.set(side * 0.56, -0.42, 0.03)
+    arm.rotation.z = side * 0.24
+    arm.castShadow = true
+    player.add(arm)
+
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.72, 8), cloakMaterial)
+    leg.position.set(side * 0.2, -1.48, 0)
+    leg.castShadow = true
+    player.add(leg)
+  }
+
+  const pendantMaterial = new THREE.MeshStandardMaterial({
+    color: 0xf8df7b,
+    emissive: new THREE.Color(0xf8df7b).multiplyScalar(0.18),
+    roughness: 0.4
+  })
+  const pendant = new THREE.Mesh(new THREE.OctahedronGeometry(0.1, 0), pendantMaterial)
+  pendant.position.set(0, 0.08, 0.5)
+  player.add(pendant)
+
+  const shadowMaterial = new THREE.MeshBasicMaterial({
+    color: 0x102018,
+    transparent: true,
+    opacity: 0.2,
+    depthWrite: false
+  })
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.68, 24), shadowMaterial)
+  shadow.rotation.x = -Math.PI / 2
+  shadow.position.y = -1.92
+  shadow.scale.set(1.25, 0.78, 1)
+  player.add(shadow)
 
   // 玩家名称标签
   const canvas = document.createElement('canvas')
   const context = canvas.getContext('2d')
   canvas.width = 256
   canvas.height = 64
+  context.fillStyle = 'rgba(13, 24, 28, 0.55)'
+  context.fillRect(20, 8, 216, 48)
+  context.strokeStyle = 'rgba(255, 255, 255, 0.35)'
+  context.strokeRect(20.5, 8.5, 215, 47)
   context.font = 'Bold 40px Arial'
   context.fillStyle = 'white'
   context.textAlign = 'center'
   context.fillText(name, 128, 45)
 
   const texture = new THREE.CanvasTexture(canvas)
-  const spriteMaterial = new THREE.SpriteMaterial({ map: texture })
+  texture.colorSpace = THREE.SRGBColorSpace
+  const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true })
   const sprite = new THREE.Sprite(spriteMaterial)
   sprite.scale.set(2, 0.5, 1)
-  sprite.position.y = 2.5
+  sprite.position.y = 1.9
   player.add(sprite)
 
   return player
@@ -2633,8 +2900,14 @@ const animate = () => {
 
   // 更新远程玩家（插值）
   remotePlayers.forEach((player) => {
+    const before = player.currentPosition.clone()
     player.currentPosition.lerp(player.targetPosition, 0.2)
     player.mesh.position.copy(player.currentPosition)
+    const dx = player.currentPosition.x - before.x
+    const dz = player.currentPosition.z - before.z
+    if (Math.abs(dx) + Math.abs(dz) > 0.002) {
+      player.mesh.rotation.y = Math.atan2(dx, dz)
+    }
   })
 
   weatherSystem?.update(delta, camera?.position)
@@ -2689,6 +2962,7 @@ const updateLocalPlayer = (delta) => {
     moveDirection.normalize()
     velocity.x = moveDirection.x * moveSpeed
     velocity.z = moveDirection.z * moveSpeed
+    localPlayer.rotation.y = Math.atan2(moveDirection.x, moveDirection.z)
   } else {
     velocity.x *= 0.9
     velocity.z *= 0.9
@@ -3028,6 +3302,21 @@ const handleServerMessage = (message) => {
         ...personalConflictStatus.value,
         ...(message.status || {})
       }
+      break
+
+    case 'personal_identity_result':
+      if (message.status) {
+        personalConflictStatus.value = {
+          ...personalConflictStatus.value,
+          ...message.status
+        }
+      }
+      showToast(message.message || '身份已更新')
+      addSystemMessage(message.message || '身份已更新')
+      break
+
+    case 'personal_identity_error':
+      showToast(message.message || '身份动作失败')
       break
 
     case 'player_move':

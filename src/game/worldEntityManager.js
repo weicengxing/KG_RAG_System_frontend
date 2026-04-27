@@ -81,32 +81,37 @@ export class WorldEntityManager {
     if (!this.scene) return
     const seaLevel = typeof environment?.seaLevel === 'number' ? environment.seaLevel : -0.8
     if (!this.water) {
-      const geometry = new THREE.PlaneGeometry(2000, 2000, 1, 1)
-      const material = new THREE.MeshPhongMaterial({
-        color: 0x1e90ff,
+      const geometry = new THREE.PlaneGeometry(2000, 2000, 24, 24)
+      const material = new THREE.MeshStandardMaterial({
+        color: 0x2f9bd6,
+        roughness: 0.28,
+        metalness: 0.08,
         transparent: true,
-        opacity: 0.55
+        opacity: 0.48,
+        side: THREE.DoubleSide
       })
       this.water = new THREE.Mesh(geometry, material)
       this.water.rotation.x = -Math.PI / 2
       this.water.receiveShadow = false
+      this.water.userData.baseY = seaLevel
       this.scene.add(this.water)
     }
+    this.water.userData.baseY = seaLevel
     this.water.position.y = seaLevel
 
     const weather = environment?.weather || 'sunny'
     if (weather === 'fog') {
       this.water.material.opacity = 0.35
-      this.water.material.color.set(0x6f8799)
+      this.water.material.color.set(0x7993a4)
     } else if (weather === 'snow') {
-      this.water.material.opacity = 0.45
-      this.water.material.color.set(0x7fb2d6)
+      this.water.material.opacity = 0.42
+      this.water.material.color.set(0x92c2dc)
     } else if (weather === 'rain') {
-      this.water.material.opacity = 0.55
-      this.water.material.color.set(0x1b6aa8)
+      this.water.material.opacity = 0.5
+      this.water.material.color.set(0x2f6f9f)
     } else {
-      this.water.material.opacity = 0.55
-      this.water.material.color.set(0x1e90ff)
+      this.water.material.opacity = 0.48
+      this.water.material.color.set(0x2f9bd6)
     }
     this.water.material.needsUpdate = true
   }
@@ -192,6 +197,11 @@ export class WorldEntityManager {
   }
 
   updateDecorationAnimations(time = performance.now() * 0.001) {
+    if (this.water) {
+      this.water.position.y = (this.water.userData.baseY ?? this.water.position.y) + Math.sin(time * 0.55) * 0.025
+      this.water.material.opacity = Math.max(0.28, Math.min(0.56, this.water.material.opacity + Math.sin(time * 0.8) * 0.0004))
+    }
+
     for (const mesh of this.loadedDecorations.values()) {
       const animation = mesh?.userData?.animation
       if (!animation || animation.type !== 'beast') continue

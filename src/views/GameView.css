@@ -512,6 +512,53 @@
   box-shadow: 0 0 0 3px rgba(116, 213, 255, 0.18), 0 0 20px rgba(116, 213, 255, 0.82);
 }
 
+.map-marker.world_riddle_site {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 247, 223, 0.9);
+  border-radius: 50% 4px 50% 50%;
+  transform: translate(-50%, -50%) rotate(-45deg);
+  background: radial-gradient(circle, #fff7c2 0%, #b59cff 46%, #45d4bf 100%);
+  box-shadow: 0 0 0 3px rgba(181, 156, 255, 0.18), 0 0 22px rgba(69, 212, 191, 0.78);
+}
+
+.map-marker.trial_ground {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 247, 223, 0.9);
+  border-radius: 4px 50% 4px 50%;
+  background: linear-gradient(135deg, #facc15, #38bdf8 52%, #86efac);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.18), 0 0 20px rgba(250, 204, 21, 0.7);
+}
+
+.map-marker.old_camp_echo {
+  width: 17px;
+  height: 17px;
+  border: 2px solid rgba(255, 247, 223, 0.82);
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffbe68 0%, #7c5a3a 48%, #2e251e 100%);
+  box-shadow: 0 0 0 3px rgba(255, 190, 104, 0.16), 0 0 18px rgba(255, 190, 104, 0.62);
+}
+
+.map-marker.cave_return_mark {
+  width: 17px;
+  height: 17px;
+  border: 2px solid rgba(255, 247, 223, 0.88);
+  border-radius: 50% 6px 50% 50%;
+  transform: translate(-50%, -50%) rotate(45deg);
+  background: linear-gradient(135deg, #fbbf24, #7dd3fc);
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.16), 0 0 18px rgba(125, 211, 252, 0.72);
+}
+
+.map-marker.traveler_song {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 247, 223, 0.9);
+  border-radius: 50% 50% 5px 5px;
+  background: radial-gradient(circle, #fff7c2 0%, #b59cff 48%, #7fe7ff 100%);
+  box-shadow: 0 0 0 3px rgba(181, 156, 255, 0.16), 0 0 20px rgba(127, 231, 255, 0.72);
+}
+
 .map-marker.rare_cave_race,
 .map-marker.cave_rescue_clue {
   width: 18px;
@@ -544,6 +591,36 @@
   border-radius: 50% 50% 50% 4px;
   background: radial-gradient(circle, #fff7c2 0%, #86efac 45%, #38bdf8 100%);
   box-shadow: 0 0 0 3px rgba(134, 239, 172, 0.18), 0 0 22px rgba(56, 189, 248, 0.78);
+}
+
+.map-marker.sacred_fire_relay,
+.map-marker.sacred_fire_site {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 247, 223, 0.9);
+  border-radius: 50% 50% 50% 4px;
+  background: radial-gradient(circle, #fff7c2 0%, #ff9f1c 48%, #fb7185 100%);
+  box-shadow: 0 0 0 3px rgba(255, 159, 28, 0.18), 0 0 24px rgba(255, 159, 28, 0.86);
+}
+
+.map-marker.collection_wall {
+  width: 18px;
+  height: 14px;
+  border: 2px solid rgba(255, 247, 223, 0.88);
+  border-radius: 3px;
+  background: linear-gradient(135deg, #d8c16b, #b59cff);
+  box-shadow: 0 0 16px rgba(181, 156, 255, 0.72);
+}
+
+.map-marker.shared_puzzle,
+.map-marker.shared_puzzle_site,
+.map-marker.named_landmark {
+  width: 17px;
+  height: 17px;
+  border: 2px solid rgba(255, 247, 223, 0.88);
+  border-radius: 4px;
+  background: linear-gradient(135deg, #7fe7ff, #b59cff);
+  box-shadow: 0 0 18px rgba(127, 231, 255, 0.76);
 }
 
 .map-marker.nomad_visitor {
@@ -1619,6 +1696,26 @@
   background: linear-gradient(135deg, rgba(216, 193, 107, 0.1), rgba(155, 229, 157, 0.08));
 }
 
+.world-riddle-item {
+  border-color: rgba(181, 156, 255, 0.32);
+  background: linear-gradient(135deg, rgba(181, 156, 255, 0.11), rgba(69, 212, 191, 0.08));
+}
+
+.trial-ground-item {
+  border-color: rgba(56, 189, 248, 0.32);
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.1), rgba(56, 189, 248, 0.08));
+}
+
+.old-camp-echo-item {
+  border-color: rgba(251, 191, 36, 0.3);
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.1), rgba(148, 163, 184, 0.08));
+}
+
+.border-theater-item {
+  border-color: rgba(244, 114, 182, 0.3);
+  background: linear-gradient(135deg, rgba(244, 114, 182, 0.1), rgba(45, 212, 191, 0.08));
+}
+
 .neutral-sanctuary-item {
   border-color: rgba(56, 189, 248, 0.26);
   background: linear-gradient(135deg, rgba(134, 239, 172, 0.1), rgba(56, 189, 248, 0.08));
@@ -1632,6 +1729,11 @@
 .rumor-truth-item {
   border-color: rgba(251, 191, 36, 0.26);
   background: linear-gradient(135deg, rgba(251, 191, 36, 0.1), rgba(56, 189, 248, 0.07));
+}
+
+.camp-trial-item {
+  border-color: rgba(16, 185, 129, 0.34);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(56, 189, 248, 0.07));
 }
 
 .standing-ritual-item {

@@ -278,6 +278,298 @@ const createStandingRitual = () => {
   return group
 }
 
+const createSacredFire = () => {
+  const group = new THREE.Group()
+  group.name = 'game_sacred_fire'
+  const stone = mat('sacred_fire_dark_stone', 0x5f5a52, { roughness: 0.96 })
+  const gold = mat('sacred_fire_blessed_rim', 0xffd675, { roughness: 0.54, emissive: 0xb8861b, emissiveIntensity: 0.24 })
+  const ember = mat('sacred_fire_ember_core', 0xff8a1f, { roughness: 0.38, emissive: 0xff6a18, emissiveIntensity: 0.95 })
+  const flameOuter = new THREE.MeshBasicMaterial({ name: 'sacred_fire_flame_outer', color: 0xff9f1c, transparent: true, opacity: 0.74, side: THREE.DoubleSide })
+  const flameInner = new THREE.MeshBasicMaterial({ name: 'sacred_fire_flame_inner', color: 0xfff1a8, transparent: true, opacity: 0.86, side: THREE.DoubleSide })
+
+  group.add(mesh('sacred_fire_basin', new THREE.CylinderGeometry(0.72, 0.92, 0.32, 12), stone, [0, 0.36, 0]))
+  group.add(mesh('sacred_fire_rim', new THREE.TorusGeometry(0.74, 0.055, 8, 28), gold, [0, 0.54, 0], [Math.PI / 2, 0, 0]))
+  group.add(mesh('sacred_fire_ember_bed', new THREE.OctahedronGeometry(0.34, 0), ember, [0, 0.6, 0], [0.2, 0.4, 0], [1.1, 0.46, 1]))
+  group.add(mesh('sacred_fire_flame_outer', new THREE.ConeGeometry(0.34, 0.92, 9), flameOuter, [0, 1.08, 0], [0.08, 0.22, -0.05]))
+  group.add(mesh('sacred_fire_flame_inner', new THREE.ConeGeometry(0.2, 0.62, 8), flameInner, [0.02, 1.0, 0.02], [-0.05, -0.18, 0.04]))
+  for (let i = 0; i < 3; i++) {
+    const angle = (i / 3) * Math.PI * 2
+    group.add(mesh(`sacred_fire_tripod_${i}`, new THREE.CylinderGeometry(0.035, 0.055, 1.42, 6), gold, [Math.cos(angle) * 0.62, 0.88, Math.sin(angle) * 0.62], [0.24 * Math.sin(angle), angle, 0.24 * Math.cos(angle)]))
+  }
+  const light = new THREE.PointLight(0xff9f1c, 0.95, 8)
+  light.name = 'sacred_fire_warm_light'
+  light.position.set(0, 1.05, 0)
+  group.add(light)
+  addGroundShadow(group, 1.15)
+  return group
+}
+
+const createNeutralSanctuary = () => {
+  const group = new THREE.Group()
+  group.name = 'game_neutral_sanctuary'
+  const stone = mat('sanctuary_pale_stone', 0xb8bec7, { roughness: 0.94 })
+  const moss = mat('sanctuary_soft_moss', 0x79b66a, { roughness: 0.9 })
+  const water = mat('sanctuary_quiet_water', 0x7fe7ff, { roughness: 0.42, emissive: 0x3ab7d8, emissiveIntensity: 0.32 })
+  const cloth = mat('sanctuary_neutral_cloth', 0xfff0c2, { roughness: 0.72, side: THREE.DoubleSide })
+
+  group.add(mesh('sanctuary_round_plinth', new THREE.CylinderGeometry(1.16, 1.34, 0.24, 12), stone, [0, 0.12, 0]))
+  group.add(mesh('sanctuary_water_bowl', new THREE.CylinderGeometry(0.46, 0.58, 0.18, 12), water, [0, 0.38, 0]))
+  group.add(mesh('sanctuary_back_stone_left', new THREE.BoxGeometry(0.32, 1.58, 0.32), stone, [-0.58, 0.95, -0.38], [0.04, 0.16, -0.08]))
+  group.add(mesh('sanctuary_back_stone_right', new THREE.BoxGeometry(0.32, 1.58, 0.32), stone, [0.58, 0.95, -0.38], [-0.03, -0.18, 0.08]))
+  group.add(mesh('sanctuary_capstone', new THREE.BoxGeometry(1.52, 0.26, 0.36), stone, [0, 1.76, -0.38], [0, 0.06, 0.04]))
+  group.add(mesh('sanctuary_moss_patch', new THREE.TorusGeometry(0.92, 0.04, 8, 28), moss, [0, 0.27, 0], [Math.PI / 2, 0, 0]))
+  group.add(mesh('sanctuary_prayer_cloth', new THREE.PlaneGeometry(0.46, 0.38), cloth, [0, 1.2, -0.18], [0, 0, 0]))
+  const light = new THREE.PointLight(0x7fe7ff, 0.42, 7)
+  light.name = 'sanctuary_calm_light'
+  light.position.set(0, 0.85, 0)
+  group.add(light)
+  addGroundShadow(group, 1.45)
+  return group
+}
+
+const createCollectionWall = () => {
+  const group = new THREE.Group()
+  group.name = 'game_collection_wall'
+  const clay = mat('collection_wall_clay', 0x9b7653, { roughness: 0.96 })
+  const wood = mat('collection_wall_wood_frame', 0x5b371b, { roughness: 0.92 })
+  const hide = mat('collection_wall_memory_hide', 0xd8c16b, { roughness: 0.78, side: THREE.DoubleSide })
+  const bone = mat('collection_wall_bone_tokens', 0xfff0c2, { roughness: 0.72 })
+  const pigment = mat('collection_wall_pigment_mark', 0xb59cff, { roughness: 0.66, emissive: 0x6f52ff, emissiveIntensity: 0.18 })
+
+  group.add(mesh('collection_wall_slab', new THREE.BoxGeometry(2.28, 1.36, 0.28), clay, [0, 0.88, 0]))
+  group.add(mesh('collection_wall_top_beam', new THREE.CylinderGeometry(0.06, 0.08, 2.55, 7), wood, [0, 1.62, 0.12], [0, 0, Math.PI / 2]))
+  group.add(mesh('collection_wall_bottom_beam', new THREE.CylinderGeometry(0.05, 0.07, 2.38, 7), wood, [0, 0.22, 0.12], [0, 0, Math.PI / 2]))
+  group.add(mesh('collection_wall_hide_strip', new THREE.PlaneGeometry(0.44, 0.62), hide, [-0.62, 1.02, 0.16], [0, 0, 0.04]))
+  group.add(mesh('collection_wall_mask', new THREE.DodecahedronGeometry(0.28, 0), bone, [0.12, 1.08, 0.18], [0.18, 0.2, 0], [0.82, 1.12, 0.34]))
+  group.add(mesh('collection_wall_token_ring', new THREE.TorusGeometry(0.2, 0.025, 8, 18), pigment, [0.72, 0.92, 0.17], [0, 0.2, 0]))
+  group.add(mesh('collection_wall_carved_line', new THREE.BoxGeometry(1.72, 0.045, 0.035), pigment, [0, 0.55, 0.17], [0, 0, -0.04]))
+  addGroundShadow(group, 1.45)
+  return group
+}
+
+const createSharedPuzzle = () => {
+  const group = new THREE.Group()
+  group.name = 'game_shared_puzzle'
+  const stone = mat('puzzle_stone_table', 0x827a68, { roughness: 0.94 })
+  const tile = mat('puzzle_bone_tiles', 0xfff0c2, { roughness: 0.74 })
+  const glow = mat('puzzle_joined_glyphs', 0x7fe7ff, { roughness: 0.5, emissive: 0x35bde5, emissiveIntensity: 0.42 })
+  const dark = mat('puzzle_shadow_gaps', 0x2d2924, { roughness: 0.98 })
+
+  group.add(mesh('puzzle_round_table', new THREE.CylinderGeometry(1.08, 1.24, 0.24, 12), stone, [0, 0.36, 0]))
+  for (let i = 0; i < 4; i++) {
+    const x = i % 2 === 0 ? -0.28 : 0.28
+    const z = i < 2 ? -0.28 : 0.28
+    group.add(mesh(`puzzle_tile_${i}`, new THREE.BoxGeometry(0.5, 0.08, 0.5), tile, [x, 0.54, z], [0, (i - 1.5) * 0.08, 0]))
+  }
+  group.add(mesh('puzzle_cross_gap_x', new THREE.BoxGeometry(1.18, 0.045, 0.04), dark, [0, 0.6, 0]))
+  group.add(mesh('puzzle_cross_gap_z', new THREE.BoxGeometry(0.04, 0.045, 1.18), dark, [0, 0.6, 0]))
+  group.add(mesh('puzzle_glow_ring', new THREE.TorusGeometry(0.72, 0.028, 8, 30), glow, [0, 0.63, 0], [Math.PI / 2, 0, 0]))
+  group.add(mesh('puzzle_glyph_line', new THREE.BoxGeometry(0.82, 0.04, 0.035), glow, [0, 0.68, 0], [0, 0.42, 0]))
+  const light = new THREE.PointLight(0x7fe7ff, 0.35, 6)
+  light.name = 'puzzle_soft_light'
+  light.position.set(0, 0.82, 0)
+  group.add(light)
+  addGroundShadow(group, 1.35)
+  return group
+}
+
+const createTrailMarker = () => {
+  const group = new THREE.Group()
+  group.name = 'game_trail_marker'
+  const wood = mat('trail_marker_weathered_wood', 0x76502a, { roughness: 0.94 })
+  const stone = mat('trail_marker_cairn_stone', 0x8c867d, { roughness: 0.96 })
+  const cloth = mat('trail_marker_signal_cloth', 0x74d5ff, { roughness: 0.74, side: THREE.DoubleSide })
+  const chalk = mat('trail_marker_chalk_cut', 0xfff0c2, { roughness: 0.72 })
+
+  for (let i = 0; i < 4; i++) {
+    group.add(mesh(`trail_marker_cairn_${i}`, new THREE.DodecahedronGeometry(0.28 - i * 0.035, 0), stone, [-0.34, 0.17 + i * 0.18, 0], [0.2 * i, 0.35 * i, -0.1], [1.08, 0.58, 0.88]))
+  }
+  group.add(mesh('trail_marker_post', new THREE.CylinderGeometry(0.055, 0.08, 1.55, 7), wood, [0.32, 0.78, 0], [0.03, 0, -0.07]))
+  group.add(mesh('trail_marker_arrow_board', new THREE.BoxGeometry(0.92, 0.22, 0.08), wood, [0.62, 1.28, 0], [0, 0.18, 0.03]))
+  group.add(mesh('trail_marker_notch', new THREE.BoxGeometry(0.34, 0.045, 0.09), chalk, [0.68, 1.3, 0.055], [0, 0.18, 0.03]))
+  group.add(mesh('trail_marker_cloth_strip', new THREE.PlaneGeometry(0.28, 0.38), cloth, [0.2, 0.96, 0.08], [0, -0.12, 0]))
+  addGroundShadow(group, 1.1)
+  return group
+}
+
+const createNamedLandmark = () => {
+  const group = new THREE.Group()
+  group.name = 'game_named_landmark'
+  const stone = mat('named_landmark_carved_stone', 0x8a8f82, { roughness: 0.96 })
+  const inlay = mat('named_landmark_name_inlay', 0x7fe7ff, { roughness: 0.64, emissive: 0x35bde5, emissiveIntensity: 0.22 })
+  const cloth = mat('named_landmark_tribe_wrap', 0xffd675, { roughness: 0.72, side: THREE.DoubleSide })
+
+  group.add(mesh('named_landmark_base', new THREE.CylinderGeometry(0.72, 0.9, 0.22, 8), stone, [0, 0.11, 0]))
+  group.add(mesh('named_landmark_upright', new THREE.BoxGeometry(0.58, 1.42, 0.28), stone, [0, 0.92, 0], [0.04, 0.18, -0.03]))
+  group.add(mesh('named_landmark_cap', new THREE.ConeGeometry(0.42, 0.42, 5), stone, [0, 1.82, 0], [0, Math.PI / 5, 0]))
+  group.add(mesh('named_landmark_name_plate', new THREE.BoxGeometry(0.48, 0.08, 0.04), inlay, [0, 1.08, 0.16], [0, 0.18, 0]))
+  group.add(mesh('named_landmark_second_line', new THREE.BoxGeometry(0.36, 0.055, 0.04), inlay, [0, 0.86, 0.16], [0, 0.18, 0]))
+  group.add(mesh('named_landmark_wrap', new THREE.TorusGeometry(0.34, 0.024, 8, 18), cloth, [0, 0.58, 0], [Math.PI / 2, 0, 0]))
+  addGroundShadow(group, 1.2)
+  return group
+}
+
+const createWorldRiddleSite = () => {
+  const group = new THREE.Group()
+  group.name = 'game_world_riddle_site'
+  const stone = mat('riddle_weathered_stone', 0x6f756c, { roughness: 0.96 })
+  const glyph = mat('riddle_luminous_glyph', 0xb59cff, { roughness: 0.54, emissive: 0x6f52ff, emissiveIntensity: 0.48 })
+  const chalk = mat('riddle_chalk_ring', 0xfff0c2, { roughness: 0.72, emissive: 0x8a6a24, emissiveIntensity: 0.12 })
+
+  group.add(mesh('riddle_outer_ring', new THREE.TorusGeometry(1.12, 0.032, 8, 36), chalk, [0, 0.06, 0], [Math.PI / 2, 0, 0]))
+  for (let i = 0; i < 5; i++) {
+    const angle = (i / 5) * Math.PI * 2
+    group.add(mesh(`riddle_standing_stone_${i}`, new THREE.BoxGeometry(0.22, 0.82 + (i % 2) * 0.24, 0.18), stone, [Math.cos(angle) * 0.88, 0.46, Math.sin(angle) * 0.88], [0.06 * i, -angle, -0.04 * i]))
+  }
+  group.add(mesh('riddle_center_glyph', new THREE.OctahedronGeometry(0.26, 0), glyph, [0, 0.46, 0], [0.2, 0.45, 0], [1, 0.32, 1]))
+  group.add(mesh('riddle_glyph_bar', new THREE.BoxGeometry(0.74, 0.04, 0.04), glyph, [0, 0.72, 0], [0, 0.6, 0]))
+  const light = new THREE.PointLight(0xb59cff, 0.42, 7)
+  light.name = 'riddle_soft_light'
+  light.position.set(0, 0.8, 0)
+  group.add(light)
+  addGroundShadow(group, 1.35)
+  return group
+}
+
+const createOldCampEcho = () => {
+  const group = new THREE.Group()
+  group.name = 'game_old_camp_echo'
+  const ash = mat('old_camp_cold_ash', 0x3f3a34, { roughness: 0.98 })
+  const stone = mat('old_camp_weathered_stone', 0x77746b, { roughness: 0.96 })
+  const wood = mat('old_camp_charred_wood', 0x2b211b, { roughness: 0.96 })
+  const glow = mat('old_camp_memory_ember', 0xffbe68, { roughness: 0.5, emissive: 0xff7a18, emissiveIntensity: 0.45 })
+  const cloth = mat('old_camp_faded_cloth', 0xd8c16b, { roughness: 0.82, side: THREE.DoubleSide })
+
+  group.add(mesh('old_camp_ash_patch', new THREE.CylinderGeometry(0.82, 1.05, 0.08, 12), ash, [0, 0.04, 0]))
+  for (let i = 0; i < 7; i++) {
+    const angle = (i / 7) * Math.PI * 2
+    group.add(mesh(`old_camp_ring_stone_${i}`, new THREE.DodecahedronGeometry(0.14 + (i % 2) * 0.035, 0), stone, [Math.cos(angle) * 0.82, 0.12, Math.sin(angle) * 0.82], [0.1 * i, angle, 0], [1.1, 0.52, 0.86]))
+  }
+  for (let i = 0; i < 3; i++) {
+    group.add(mesh(`old_camp_collapsed_log_${i}`, new THREE.CylinderGeometry(0.06, 0.09, 1.05, 7), wood, [0.04 * i, 0.18, 0.04 * (i - 1)], [Math.PI / 2.35, (i / 3) * Math.PI, 0.12]))
+  }
+  group.add(mesh('old_camp_memory_coal', new THREE.OctahedronGeometry(0.18, 0), glow, [0, 0.28, 0], [0.2, 0.4, 0], [1, 0.42, 1]))
+  group.add(mesh('old_camp_torn_marker', new THREE.PlaneGeometry(0.34, 0.42), cloth, [0.58, 0.66, -0.08], [0, -0.32, 0.08]))
+  const light = new THREE.PointLight(0xff9f1c, 0.28, 5)
+  light.name = 'old_camp_low_light'
+  light.position.set(0, 0.42, 0)
+  group.add(light)
+  addGroundShadow(group, 1.25)
+  return group
+}
+
+const createCaveReturnMark = () => {
+  const group = new THREE.Group()
+  group.name = 'game_cave_return_mark'
+  const rock = mat('return_mark_cave_rock', 0x555a54, { roughness: 0.98 })
+  const chalk = mat('return_mark_chalk_cut', 0xfff0c2, { roughness: 0.72, emissive: 0x8a6a24, emissiveIntensity: 0.14 })
+  const ember = mat('return_mark_torch_ember', 0xff9f1c, { roughness: 0.44, emissive: 0xff7a18, emissiveIntensity: 0.58 })
+  const rope = mat('return_mark_rope', 0xc8a66a, { roughness: 0.86 })
+
+  group.add(mesh('return_mark_flat_rock', new THREE.DodecahedronGeometry(0.74, 0), rock, [0, 0.32, 0], [0.2, 0.4, -0.08], [1.22, 0.38, 0.86]))
+  group.add(mesh('return_mark_upright_slab', new THREE.BoxGeometry(0.5, 0.92, 0.18), rock, [-0.16, 0.86, -0.08], [-0.08, 0.16, 0.04]))
+  group.add(mesh('return_mark_chalk_arrow', new THREE.BoxGeometry(0.48, 0.055, 0.04), chalk, [-0.12, 0.98, 0.03], [0, 0.14, -0.24]))
+  group.add(mesh('return_mark_chalk_notch', new THREE.BoxGeometry(0.24, 0.045, 0.04), chalk, [0.1, 1.1, 0.03], [0, 0.14, 0.34]))
+  group.add(mesh('return_mark_torch_stub', new THREE.CylinderGeometry(0.035, 0.055, 0.72, 7), rope, [0.54, 0.42, 0.1], [0.24, 0.14, -0.22]))
+  group.add(mesh('return_mark_torch_tip', new THREE.OctahedronGeometry(0.11, 0), ember, [0.62, 0.76, 0.12]))
+  const light = new THREE.PointLight(0xff9f1c, 0.24, 4)
+  light.name = 'return_mark_small_light'
+  light.position.set(0.62, 0.78, 0.12)
+  group.add(light)
+  addGroundShadow(group, 1.1)
+  return group
+}
+
+const createTravelerSong = () => {
+  const group = new THREE.Group()
+  group.name = 'game_traveler_song'
+  const wood = mat('song_lyre_wood', 0x76502a, { roughness: 0.88 })
+  const string = mat('song_bone_strings', 0xfff0c2, { roughness: 0.66 })
+  const cloth = mat('song_traveler_cloth', 0xb59cff, { roughness: 0.74, side: THREE.DoubleSide })
+  const glow = mat('song_echo_note', 0x7fe7ff, { roughness: 0.5, emissive: 0x35bde5, emissiveIntensity: 0.34 })
+
+  group.add(mesh('song_ground_mat', new THREE.CylinderGeometry(0.78, 0.94, 0.06, 10), cloth, [0, 0.04, 0], [0, 0.22, 0], [1.2, 1, 0.72]))
+  group.add(mesh('song_lyre_left_arm', new THREE.CylinderGeometry(0.045, 0.065, 1.18, 7), wood, [-0.34, 0.68, 0], [0, 0, -0.18]))
+  group.add(mesh('song_lyre_right_arm', new THREE.CylinderGeometry(0.045, 0.065, 1.18, 7), wood, [0.34, 0.68, 0], [0, 0, 0.18]))
+  group.add(mesh('song_lyre_crossbar', new THREE.CylinderGeometry(0.04, 0.055, 0.82, 7), wood, [0, 1.18, 0], [0, 0, Math.PI / 2]))
+  for (let i = 0; i < 4; i++) {
+    group.add(mesh(`song_string_${i}`, new THREE.CylinderGeometry(0.008, 0.01, 0.78, 5), string, [-0.18 + i * 0.12, 0.78, 0.03], [0, 0, 0.03 * (i - 1.5)]))
+  }
+  group.add(mesh('song_echo_ring', new THREE.TorusGeometry(0.5, 0.025, 8, 24, Math.PI * 1.35), glow, [0, 1.08, 0.08], [0, 0, -0.45]))
+  group.add(mesh('song_small_note', new THREE.OctahedronGeometry(0.12, 0), glow, [0.56, 1.12, 0.02], [0.2, 0.4, 0]))
+  const light = new THREE.PointLight(0x7fe7ff, 0.28, 5)
+  light.name = 'song_soft_light'
+  light.position.set(0, 1.05, 0.1)
+  group.add(light)
+  addGroundShadow(group, 1.05)
+  return group
+}
+
+const createMutualAidAlert = () => {
+  const group = new THREE.Group()
+  group.name = 'game_mutual_aid_alert'
+  const wood = mat('aid_alert_signal_wood', 0x5b371b, { roughness: 0.92 })
+  const smoke = new THREE.MeshBasicMaterial({ name: 'aid_alert_smoke_plume', color: 0xb8bec7, transparent: true, opacity: 0.38, side: THREE.DoubleSide })
+  const ember = mat('aid_alert_signal_fire', 0xff8a1f, { roughness: 0.42, emissive: 0xff7a18, emissiveIntensity: 0.78 })
+  const cloth = mat('aid_alert_help_cloth', 0x7fe7ff, { roughness: 0.74, side: THREE.DoubleSide })
+
+  group.add(mesh('aid_alert_tripod_left', new THREE.CylinderGeometry(0.045, 0.07, 1.7, 7), wood, [-0.34, 0.84, 0], [0.24, 0, -0.28]))
+  group.add(mesh('aid_alert_tripod_right', new THREE.CylinderGeometry(0.045, 0.07, 1.7, 7), wood, [0.34, 0.84, 0], [-0.24, 0, 0.28]))
+  group.add(mesh('aid_alert_crossbar', new THREE.CylinderGeometry(0.04, 0.06, 1.04, 7), wood, [0, 1.42, 0], [0, 0, Math.PI / 2]))
+  group.add(mesh('aid_alert_fire_bowl', new THREE.CylinderGeometry(0.34, 0.46, 0.16, 10), ember, [0, 0.36, 0]))
+  group.add(mesh('aid_alert_smoke_low', new THREE.SphereGeometry(0.28, 10, 8), smoke, [0.05, 0.92, 0], [0, 0, 0], [1.1, 1.35, 0.82]))
+  group.add(mesh('aid_alert_smoke_high', new THREE.SphereGeometry(0.22, 10, 8), smoke, [-0.06, 1.36, 0.03], [0, 0, 0], [0.9, 1.55, 0.75]))
+  group.add(mesh('aid_alert_hanging_cloth', new THREE.PlaneGeometry(0.38, 0.42), cloth, [0.42, 1.08, 0.04], [0, -0.2, 0]))
+  const light = new THREE.PointLight(0xff9f1c, 0.36, 5)
+  light.name = 'aid_alert_fire_light'
+  light.position.set(0, 0.52, 0)
+  group.add(light)
+  addGroundShadow(group, 1.15)
+  return group
+}
+
+const createNomadVisitor = () => {
+  const group = new THREE.Group()
+  group.name = 'game_nomad_visitor'
+  const cloth = mat('visitor_cloak_cloth', 0xe6c77a, { roughness: 0.76, side: THREE.DoubleSide })
+  const dark = mat('visitor_shadow_body', 0x3b2a1b, { roughness: 0.88 })
+  const pack = mat('visitor_pack_goods', 0x9a6936, { roughness: 0.86 })
+  const shell = mat('visitor_shell_charm', 0xfff0c2, { roughness: 0.62, emissive: 0x8a6a24, emissiveIntensity: 0.08 })
+
+  group.add(mesh('visitor_cloak_body', new THREE.ConeGeometry(0.42, 1.12, 8), cloth, [0, 0.72, 0]))
+  group.add(mesh('visitor_head', new THREE.SphereGeometry(0.2, 10, 8), dark, [0, 1.38, 0]))
+  group.add(mesh('visitor_staff', new THREE.CylinderGeometry(0.025, 0.04, 1.68, 7), dark, [0.52, 0.86, 0.02], [0.08, 0, -0.16]))
+  group.add(mesh('visitor_pack', new THREE.BoxGeometry(0.36, 0.42, 0.3), pack, [-0.32, 0.72, -0.08], [0, 0.18, 0.05]))
+  group.add(mesh('visitor_shell_charm', new THREE.TorusGeometry(0.12, 0.018, 8, 16), shell, [0.2, 1.02, 0.32], [Math.PI / 2, 0.1, 0]))
+  group.add(mesh('visitor_ground_bundle', new THREE.CylinderGeometry(0.2, 0.24, 0.54, 8), pack, [-0.56, 0.2, 0.24], [Math.PI / 2, 0.2, Math.PI / 2]))
+  addGroundShadow(group, 1.0)
+  return group
+}
+
+const createTrialGround = () => {
+  const group = new THREE.Group()
+  group.name = 'game_trial_ground'
+  const dirt = mat('trial_ground_packed_dirt', 0x8a6a43, { roughness: 0.98 })
+  const stone = mat('trial_ground_score_stone', 0x8c867d, { roughness: 0.96 })
+  const wood = mat('trial_ground_marker_wood', 0x76502a, { roughness: 0.9 })
+  const green = mat('trial_ground_success_mark', 0x9be59d, { roughness: 0.7, emissive: 0x2f8f4b, emissiveIntensity: 0.16 })
+
+  group.add(mesh('trial_ground_ring', new THREE.TorusGeometry(1.18, 0.035, 8, 36), green, [0, 0.07, 0], [Math.PI / 2, 0, 0]))
+  group.add(mesh('trial_ground_dirt_pad', new THREE.CylinderGeometry(0.96, 1.08, 0.08, 12), dirt, [0, 0.04, 0]))
+  for (let i = 0; i < 4; i++) {
+    const angle = (i / 4) * Math.PI * 2 + Math.PI / 4
+    group.add(mesh(`trial_ground_post_${i}`, new THREE.CylinderGeometry(0.045, 0.07, 0.96, 7), wood, [Math.cos(angle) * 0.86, 0.5, Math.sin(angle) * 0.86], [0.08 * Math.sin(angle), angle, 0.08 * Math.cos(angle)]))
+  }
+  group.add(mesh('trial_ground_center_stone', new THREE.DodecahedronGeometry(0.28, 0), stone, [0, 0.26, 0], [0.2, 0.4, 0], [1.08, 0.48, 0.9]))
+  group.add(mesh('trial_ground_score_bar', new THREE.BoxGeometry(0.66, 0.055, 0.045), green, [0, 0.58, 0], [0, 0.4, 0]))
+  const light = new THREE.PointLight(0x9be59d, 0.26, 5)
+  light.name = 'trial_ground_soft_light'
+  light.position.set(0, 0.7, 0)
+  group.add(light)
+  addGroundShadow(group, 1.35)
+  return group
+}
+
 const createNaturalTree = () => {
   const group = new THREE.Group()
   group.name = 'game_natural_tree'
@@ -473,6 +765,19 @@ await exportGlb('map_memory', createMapMemory())
 await exportGlb('world_event_remnant', createWorldEventRemnant())
 await exportGlb('diplomacy_council', createDiplomacyCouncil())
 await exportGlb('standing_ritual', createStandingRitual())
+await exportGlb('sacred_fire', createSacredFire())
+await exportGlb('neutral_sanctuary', createNeutralSanctuary())
+await exportGlb('collection_wall', createCollectionWall())
+await exportGlb('shared_puzzle', createSharedPuzzle())
+await exportGlb('trail_marker', createTrailMarker())
+await exportGlb('named_landmark', createNamedLandmark())
+await exportGlb('world_riddle_site', createWorldRiddleSite())
+await exportGlb('old_camp_echo', createOldCampEcho())
+await exportGlb('cave_return_mark', createCaveReturnMark())
+await exportGlb('traveler_song', createTravelerSong())
+await exportGlb('mutual_aid_alert', createMutualAidAlert())
+await exportGlb('nomad_visitor', createNomadVisitor())
+await exportGlb('trial_ground', createTrialGround())
 await exportGlb('natural_tree', createNaturalTree())
 await exportGlb('natural_rock', createNaturalRock())
 await exportGlb('natural_grass_tuft', createNaturalGrassTuft())

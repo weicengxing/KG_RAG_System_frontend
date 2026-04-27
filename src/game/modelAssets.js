@@ -16,6 +16,19 @@ export const GAME_MODEL_ASSETS = {
   worldEventRemnant: '/game-assets/models/world_event_remnant.glb',
   diplomacyCouncil: '/game-assets/models/diplomacy_council.glb',
   standingRitual: '/game-assets/models/standing_ritual.glb',
+  sacredFire: '/game-assets/models/sacred_fire.glb',
+  neutralSanctuary: '/game-assets/models/neutral_sanctuary.glb',
+  collectionWall: '/game-assets/models/collection_wall.glb',
+  sharedPuzzle: '/game-assets/models/shared_puzzle.glb',
+  trailMarker: '/game-assets/models/trail_marker.glb',
+  namedLandmark: '/game-assets/models/named_landmark.glb',
+  worldRiddleSite: '/game-assets/models/world_riddle_site.glb',
+  oldCampEcho: '/game-assets/models/old_camp_echo.glb',
+  caveReturnMark: '/game-assets/models/cave_return_mark.glb',
+  travelerSong: '/game-assets/models/traveler_song.glb',
+  mutualAidAlert: '/game-assets/models/mutual_aid_alert.glb',
+  nomadVisitor: '/game-assets/models/nomad_visitor.glb',
+  trialGround: '/game-assets/models/trial_ground.glb',
   tree: '/game-assets/models/natural_tree.glb',
   rock: '/game-assets/models/natural_rock.glb',
   grassTuft: '/game-assets/models/natural_grass_tuft.glb',
@@ -67,7 +80,7 @@ export function applyModelMaterialVariant(model, variant = {}) {
         tintMaterial(material, isAccentPart ? primary : accent, isAccentPart ? 0.42 : 0.08)
         return
       }
-      const strongTint = /flag|totem|cloth|banner|tent|storage|workbench|tribe|resource|memory|remnant|council|ritual|leaf|flower|region|migration|caravan|torch|tool|scroll|token/.test(name)
+      const strongTint = /flag|totem|cloth|banner|tent|storage|workbench|tribe|resource|memory|remnant|council|ritual|sacred|sanctuary|collection|puzzle|trail|landmark|riddle|glyph|old|return|song|aid|alert|smoke|visitor|trial|leaf|flower|region|migration|caravan|torch|tool|scroll|token/.test(name)
       tintMaterial(material, strongTint ? primary : accent, strongTint ? 0.55 : 0.12)
     })
   })

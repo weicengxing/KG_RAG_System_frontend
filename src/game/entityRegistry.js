@@ -54,7 +54,7 @@ const materialVariantForEntity = (entity, fallback = 0xfb7185) => {
   }
 }
 
-const markerAssetKeyForType = (type) => ({
+const MARKER_ASSET_KEYS_BY_TYPE = {
   scouted_resource_site: 'resourceSite',
   controlled_resource_site: 'resourceSite',
   trade_route_site: 'resourceSite',
@@ -67,8 +67,25 @@ const markerAssetKeyForType = (type) => ({
   diplomacy_council_site: 'diplomacyCouncil',
   celebration_echo: 'standingRitual',
   standing_ritual_site: 'standingRitual',
-  named_landmark: 'mapMemory'
-}[type] || '')
+  sacred_fire_relay: 'sacredFire',
+  sacred_fire_site: 'sacredFire',
+  neutral_sanctuary: 'neutralSanctuary',
+  collection_wall: 'collectionWall',
+  shared_puzzle: 'sharedPuzzle',
+  shared_puzzle_site: 'sharedPuzzle',
+  trail_marker: 'trailMarker',
+  named_landmark: 'namedLandmark',
+  world_riddle_site: 'worldRiddleSite',
+  old_camp_echo: 'oldCampEcho',
+  cave_return_mark: 'caveReturnMark',
+  traveler_song: 'travelerSong',
+  mutual_aid_alert: 'mutualAidAlert',
+  nomad_visitor: 'nomadVisitor',
+  trial_ground: 'trialGround'
+}
+
+const markerAssetKeyForType = (type) => MARKER_ASSET_KEYS_BY_TYPE[type] || ''
+const isAssetBackedMarkerType = (type) => Boolean(markerAssetKeyForType(type))
 
 const markerTintForEntity = (entity) => {
   const type = entity?.type
@@ -88,7 +105,25 @@ const markerTintForEntity = (entity) => {
     }[entity?.planKey] || 0xffb357
   }
   if (type === 'standing_ritual_site') return 0xb59cff
+  if (type === 'sacred_fire_relay' || type === 'sacred_fire_site') return 0xff9f1c
+  if (type === 'neutral_sanctuary') return entity?.status === 'dormant' ? 0xb8bec7 : 0x7fe7ff
+  if (type === 'collection_wall') return 0xd8c16b
+  if (type === 'shared_puzzle' || type === 'shared_puzzle_site') return 0x7fe7ff
+  if (type === 'trail_marker') {
+    return {
+      wood_sign: 0x74d5ff,
+      stone_cairn: 0xb8bec7,
+      bone_trace: 0xfff0c2
+    }[entity?.markerKey] || 0x74d5ff
+  }
   if (type === 'named_landmark') return 0x7fe7ff
+  if (type === 'old_camp_echo') return 0xffbe68
+  if (type === 'cave_return_mark') return 0xfbbf24
+  if (type === 'traveler_song') return 0xb59cff
+  if (type === 'mutual_aid_alert') return 0x7fe7ff
+  if (type === 'nomad_visitor') return 0xe6c77a
+  if (type === 'trial_ground') return 0x9be59d
+  if (type === 'world_riddle_site') return 0xb59cff
   if (type === 'map_memory_trace') return 0xb59cff
   if (type === 'rare_cave_race') return 0x7dd3fc
   if (type === 'cave_rescue_clue') return 0xfbbf24
@@ -310,7 +345,7 @@ export function getEntityCollider(entity, globalSeed = 0) {
     return { id, type, x: entity.x || 0, z: entity.z || 0, radius: 2.2 * scale }
   }
 
-  if (type === 'scouted_resource_site' || type === 'controlled_resource_site' || type === 'trade_route_site' || type === 'nomad_caravan' || type === 'migration_plan_site' || type === 'world_event_remnant' || type === 'diplomacy_council_site' || type === 'celebration_echo' || type === 'map_memory_trace' || type === 'rare_cave_race' || type === 'cave_rescue_clue' || type === 'standing_ritual_site' || type === 'named_landmark') {
+  if (isAssetBackedMarkerType(type)) {
     const scale = typeof entity.size === 'number' ? entity.size : 1
     return { id, type, x: entity.x || 0, z: entity.z || 0, radius: 1.8 * scale }
   }
@@ -1073,7 +1108,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
     return polishModel(group, rng, { groundShadow: true, shadowRadius: 1.85 })
   }
 
-  if (type === 'scouted_resource_site' || type === 'controlled_resource_site' || type === 'trade_route_site' || type === 'nomad_caravan' || type === 'migration_plan_site' || type === 'world_event_remnant' || type === 'diplomacy_council_site' || type === 'celebration_echo' || type === 'map_memory_trace' || type === 'rare_cave_race' || type === 'cave_rescue_clue' || type === 'standing_ritual_site' || type === 'named_landmark') {
+  if (isAssetBackedMarkerType(type)) {
     const group = new THREE.Group()
     const scale = typeof entity.size === 'number' ? entity.size : 1
     const tint = markerTintForEntity(entity)
@@ -1115,7 +1150,20 @@ export function createEntityMesh(entity, globalSeed = 0) {
     const assetScaleByType = {
       diplomacy_council_site: 1.15,
       nomad_caravan: 1.08,
-      migration_plan_site: 1.05
+      migration_plan_site: 1.05,
+      neutral_sanctuary: 1.12,
+      collection_wall: 1.18,
+      shared_puzzle: 1.05,
+      shared_puzzle_site: 1.05,
+      trail_marker: 1.08,
+      named_landmark: 1.08,
+      world_riddle_site: 1.08,
+      old_camp_echo: 1.08,
+      cave_return_mark: 1.06,
+      traveler_song: 1.05,
+      mutual_aid_alert: 1.08,
+      nomad_visitor: 1.04,
+      trial_ground: 1.08
     }
     return createAssetBackedEntity(assetKey, fallback, rng, {
       scale,

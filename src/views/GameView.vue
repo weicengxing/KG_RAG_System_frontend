@@ -248,10 +248,10 @@ const tradeResourceLabels = {
   food: '食物'
 }
 const tradeResourceOptions = Object.entries(tradeResourceLabels).map(([key, label]) => ({ key, label }))
-const tribeLandmarkDecorationTypes = new Set(['tribe_spawn', 'tribe_camp', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'controlled_resource_site', 'trade_route_site', 'nomad_caravan', 'nomad_visitor', 'mutual_aid_alert', 'alliance_signal', 'world_event_remnant', 'diplomacy_council_site', 'border_theater', 'celebration_echo', 'map_memory_trace', 'world_riddle_site', 'trial_ground', 'forbidden_edge', 'disaster_coop_site', 'old_camp_echo', 'rare_cave_race', 'cave_rescue_clue', 'cave_return_mark', 'traveler_song', 'standing_ritual_site', 'sacred_fire_relay', 'sacred_fire_site', 'neutral_sanctuary', 'collection_wall', 'shared_puzzle', 'shared_puzzle_site', 'trail_marker', 'named_landmark'])
-const tribeInteractableTypes = ['tribe_storage', 'tribe_workbench', 'tribe_hut', 'tribe_fence', 'tribe_road', 'tribe_spawn', 'tribe_camp', 'tribe_totem', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'controlled_resource_site', 'trade_route_site', 'nomad_caravan', 'nomad_visitor', 'mutual_aid_alert', 'alliance_signal', 'world_event_remnant', 'diplomacy_council_site', 'border_theater', 'celebration_echo', 'map_memory_trace', 'world_riddle_site', 'trial_ground', 'forbidden_edge', 'disaster_coop_site', 'old_camp_echo', 'rare_cave_race', 'cave_rescue_clue', 'cave_return_mark', 'traveler_song', 'standing_ritual_site', 'sacred_fire_relay', 'sacred_fire_site', 'neutral_sanctuary', 'collection_wall', 'shared_puzzle', 'shared_puzzle_site', 'trail_marker', 'migration_plan_site', 'named_landmark']
+const tribeLandmarkDecorationTypes = new Set(['tribe_spawn', 'tribe_camp', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'controlled_resource_site', 'trade_route_site', 'nomad_caravan', 'nomad_visitor', 'mutual_aid_alert', 'alliance_signal', 'world_event_remnant', 'diplomacy_council_site', 'border_theater', 'dispute_witness_stone', 'celebration_echo', 'map_memory_trace', 'world_riddle_site', 'trial_ground', 'forbidden_edge', 'fog_trail', 'disaster_coop_site', 'old_camp_echo', 'rare_cave_race', 'cave_rescue_clue', 'cave_return_mark', 'traveler_song', 'standing_ritual_site', 'sacred_fire_relay', 'sacred_fire_site', 'neutral_sanctuary', 'collection_wall', 'shared_puzzle', 'shared_puzzle_site', 'trail_marker', 'named_landmark'])
+const tribeInteractableTypes = ['tribe_storage', 'tribe_workbench', 'tribe_hut', 'tribe_fence', 'tribe_road', 'tribe_spawn', 'tribe_camp', 'tribe_totem', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'controlled_resource_site', 'trade_route_site', 'nomad_caravan', 'nomad_visitor', 'mutual_aid_alert', 'alliance_signal', 'world_event_remnant', 'diplomacy_council_site', 'border_theater', 'dispute_witness_stone', 'celebration_echo', 'map_memory_trace', 'world_riddle_site', 'trial_ground', 'forbidden_edge', 'fog_trail', 'disaster_coop_site', 'old_camp_echo', 'rare_cave_race', 'cave_rescue_clue', 'cave_return_mark', 'traveler_song', 'standing_ritual_site', 'sacred_fire_relay', 'sacred_fire_site', 'neutral_sanctuary', 'collection_wall', 'shared_puzzle', 'shared_puzzle_site', 'trail_marker', 'migration_plan_site', 'named_landmark']
 const regionLandmarkTypes = ['region_forest', 'region_mountain', 'region_coast', 'region_ruin']
-const landmarkFallbackTypes = ['campfire', 'ruin', 'crystal', 'tribe_totem', 'tribe_storage', 'tribe_workbench', 'tribe_fence', 'tribe_road', 'tribe_spawn', 'tribe_camp', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'controlled_resource_site', 'trade_route_site', 'nomad_caravan', 'nomad_visitor', 'mutual_aid_alert', 'alliance_signal', 'world_event_remnant', 'diplomacy_council_site', 'border_theater', 'celebration_echo', 'map_memory_trace', 'world_riddle_site', 'trial_ground', 'forbidden_edge', 'disaster_coop_site', 'old_camp_echo', 'rare_cave_race', 'cave_rescue_clue', 'cave_return_mark', 'traveler_song', 'standing_ritual_site', 'sacred_fire_relay', 'sacred_fire_site', 'neutral_sanctuary', 'collection_wall', 'shared_puzzle', 'shared_puzzle_site', 'trail_marker', 'migration_plan_site', 'named_landmark', 'cave_entrance', ...regionLandmarkTypes]
+const landmarkFallbackTypes = ['campfire', 'ruin', 'crystal', 'tribe_totem', 'tribe_storage', 'tribe_workbench', 'tribe_fence', 'tribe_road', 'tribe_spawn', 'tribe_camp', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'controlled_resource_site', 'trade_route_site', 'nomad_caravan', 'nomad_visitor', 'mutual_aid_alert', 'alliance_signal', 'world_event_remnant', 'diplomacy_council_site', 'border_theater', 'dispute_witness_stone', 'celebration_echo', 'map_memory_trace', 'world_riddle_site', 'trial_ground', 'forbidden_edge', 'fog_trail', 'disaster_coop_site', 'old_camp_echo', 'rare_cave_race', 'cave_rescue_clue', 'cave_return_mark', 'traveler_song', 'standing_ritual_site', 'sacred_fire_relay', 'sacred_fire_site', 'neutral_sanctuary', 'collection_wall', 'shared_puzzle', 'shared_puzzle_site', 'trail_marker', 'migration_plan_site', 'named_landmark', 'cave_entrance', ...regionLandmarkTypes]
 const tribeBuildingTypeLabels = {
   tribe_totem: '图腾',
   tribe_storage: '仓库',
@@ -505,6 +505,7 @@ const describeLandmark = (landmark) => {
   if (landmark.type === 'alliance_signal') return landmark.isOwnTribe ? `${landmark.label || '联盟旗语'} · ${landmark.actionLabel || landmark.otherTribeName || '友好部落'}` : '其他部落的联盟旗语'
   if (landmark.type === 'traveler_song') return landmark.isOwnTribe ? `${landmark.label || '旅人谣曲'} · ${landmark.toneLabel || landmark.rewardLabel || '可传唱'}` : '其他部落旅人谣曲'
   if (landmark.type === 'border_theater') return landmark.isOwnTribe ? `${landmark.label || '边境戏台'} · 登场 ${landmark.participantCount || 0} 人` : '其他部落边境戏台'
+  if (landmark.type === 'dispute_witness_stone') return landmark.isOwnTribe ? `${landmark.label || '争端见证石'} · 见证 ${landmark.progress || 0}/${landmark.target || 1}` : '其他部落争端见证石'
   if (landmark.type === 'celebration_echo') return landmark.isOwnTribe ? `${landmark.label || '庆功余韵'} · ${landmark.rewardLabel || '可加入'}` : '其他部落庆功余韵'
   if (landmark.type === 'world_event_remnant') return landmark.isOwnTribe ? `${landmark.label || '事件余迹'} · ${landmark.rewardLabel || '可整理'}` : '其他部落事件余迹'
   if (landmark.type === 'map_memory_trace') return landmark.isOwnTribe ? `${landmark.label || '活地图记忆'} · ${landmark.rewardLabel || '可重访'}` : '其他部落地图记忆'
@@ -520,6 +521,7 @@ const describeLandmark = (landmark) => {
   if (landmark.type === 'world_riddle_site') return landmark.isOwnTribe ? `${landmark.label || '世界谜语'} · ${landmark.patternLabel || landmark.rewardLabel || '可记录规律'}` : '其他部落世界谜语线索'
   if (landmark.type === 'trial_ground') return landmark.isOwnTribe ? `${landmark.label || '营地试炼场'} · 已试炼 ${landmark.participantCount || 0} 人` : '其他部落试炼场'
   if (landmark.type === 'forbidden_edge') return landmark.isOwnTribe ? `${landmark.label || '禁地边缘'} · 已试探 ${landmark.participantCount || 0} 人` : '其他部落禁地边缘'
+  if (landmark.type === 'fog_trail') return landmark.isOwnTribe ? `${landmark.label || '雾区探路'} · 已探路 ${landmark.participantCount || 0} 人` : '其他部落雾区探路'
   if (landmark.type === 'disaster_coop_site') return landmark.isOwnTribe ? `${landmark.label || '大灾协作点'} · ${landmark.disasterLabel || landmark.rewardLabel || '可协作'}` : '其他部落大灾协作点'
   if (landmark.type === 'named_landmark') return landmark.isOwnTribe ? `${landmark.label || '有名之地'} · ${landmark.sourceLabel || '部落命名'}` : '其他部落命名地标'
   if (landmark.type === 'tribe_totem' && landmark.oathLabel) return `${landmark.oathLabel}图腾`
@@ -863,6 +865,15 @@ const forbiddenEdgeRewardText = (action = {}) => {
   return parts.join('、')
 }
 
+const forbiddenEdgeRouteProofRewardText = (action = {}) => {
+  const parts = []
+  const rewardText = trialGroundRewardText(action)
+  if (rewardText) parts.push(rewardText)
+  if (action.relationDelta) parts.push(`关系+${action.relationDelta}`)
+  if (action.tradeTrustDelta) parts.push(`信任+${action.tradeTrustDelta}`)
+  return parts.join('、')
+}
+
 const personalConflictText = computed(() => {
   const status = personalConflictStatus.value || {}
   const fatigue = status.fatigue || 0
@@ -1123,6 +1134,7 @@ const oldCampEchoActionOptions = computed(() => optionMapToList(currentTribe.val
 const borderTheaterActionOptions = computed(() => optionMapToList(currentTribe.value?.borderTheaterActions))
 const fogTrailActionOptions = computed(() => optionMapToList(currentTribe.value?.fogTrailActions))
 const forbiddenEdgeActionOptions = computed(() => optionMapToList(currentTribe.value?.forbiddenEdgeActions))
+const forbiddenEdgeRouteProofActionOptions = computed(() => optionMapToList(currentTribe.value?.forbiddenEdgeRouteProofActions))
 const trailMarkerTypes = computed(() => optionMapToList(currentTribe.value?.trailMarkerTypes))
 const trailMarkerActions = computed(() => optionMapToList(currentTribe.value?.trailMarkerActions))
 const neutralSanctuaryActions = computed(() => optionMapToList(currentTribe.value?.neutralSanctuaryActions))
@@ -1815,6 +1827,17 @@ const buildTribeInteraction = (entity) => {
     }
   }
 
+  if (entity.type === 'dispute_witness_stone') {
+    return {
+      entity,
+      label: entity.label || '争端见证石',
+      actionText: ownTribe ? '见证' : '观察',
+      rewardText: ownTribe
+        ? `${entity.summary || '争端结果沉成了可公开维护的见证石'}；进度 ${entity.progress || 0}/${entity.target || 1}`
+        : `${tribeName}正在维护争端见证石`
+    }
+  }
+
   if (entity.type === 'world_event_remnant') {
     const sourceText = entity.sourceActionLabel ? `；来自${entity.sourceActionLabel}` : ''
     return {
@@ -1868,6 +1891,17 @@ const buildTribeInteraction = (entity) => {
       rewardText: ownTribe
         ? `${entity.summary || '高风险边缘短时显露'}；可在部落面板选择火把、路标或同伴试探`
         : `${tribeName}正在试探一片禁地边缘`
+    }
+  }
+
+  if (entity.type === 'fog_trail') {
+    return {
+      entity,
+      label: entity.label || '雾区探路',
+      actionText: ownTribe ? '探路' : '观察',
+      rewardText: ownTribe
+        ? `${entity.summary || '雾中路线短时显露'}；已探路 ${entity.participantCount || 0} 人，可在部落面板选择探线方式`
+        : `${tribeName}正在试探雾中路线`
     }
   }
 
@@ -2276,6 +2310,13 @@ const collectInteractionTarget = () => {
     return
   }
 
+  if (target.entity.type === 'dispute_witness_stone') {
+    showTribePanel.value = true
+    triggerPlayerActionAnimation('ritual')
+    showToast(isCurrentTribeEntity(target.entity) ? '争端见证石就在附近，可在部落面板维护见证' : '这是其他部落的争端见证石')
+    return
+  }
+
   if (target.entity.type === 'world_event_remnant') {
     if (!isCurrentTribeEntity(target.entity)) {
       showToast('这是其他部落处理事件留下的余迹')
@@ -2332,6 +2373,13 @@ const collectInteractionTarget = () => {
     showTribePanel.value = true
     triggerPlayerActionAnimation('guard')
     showToast(isCurrentTribeEntity(target.entity) ? '禁地边缘就在附近，可在部落面板选择试探方式' : '这是其他部落的禁地边缘')
+    return
+  }
+
+  if (target.entity.type === 'fog_trail') {
+    showTribePanel.value = true
+    triggerPlayerActionAnimation('guard')
+    showToast(isCurrentTribeEntity(target.entity) ? '雾区路线就在附近，可在部落面板选择探路方式' : '这是其他部落的雾区探路')
     return
   }
 
@@ -2540,6 +2588,15 @@ const exploreForbiddenEdge = (edgeId, actionKey) => {
   if (sendGameMessage({ type: 'tribe_explore_forbidden_edge', edgeId, actionKey })) {
     triggerPlayerActionAnimation(action?.animation || (actionKey === 'linger' ? 'gather' : 'guard'))
     showToast(`正在${action?.label || '试探禁地边缘'}`)
+  }
+}
+
+const markForbiddenEdgeRouteProof = (proofId, actionKey) => {
+  if (!proofId || !actionKey) return
+  const action = forbiddenEdgeRouteProofActionOptions.value.find((item) => item.key === actionKey)
+  if (sendGameMessage({ type: 'tribe_mark_forbidden_edge_route_proof', proofId, actionKey })) {
+    triggerPlayerActionAnimation(action?.animation || 'ritual')
+    showToast(`正在${action?.label || '刻写禁地路证'}`)
   }
 }
 

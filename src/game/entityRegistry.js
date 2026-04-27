@@ -80,11 +80,12 @@ const MARKER_ASSET_KEYS_BY_TYPE = {
   cave_return_mark: 'caveReturnMark',
   traveler_song: 'travelerSong',
   mutual_aid_alert: 'mutualAidAlert',
-  alliance_signal: 'diplomacyCouncil',
+  alliance_signal: 'allianceSignal',
   nomad_visitor: 'nomadVisitor',
   trial_ground: 'trialGround',
-  dispute_witness_stone: 'borderTheater',
+  dispute_witness_stone: 'disputeWitnessStone',
   forbidden_edge: 'forbiddenEdge',
+  fog_trail: 'fogTrail',
   border_theater: 'borderTheater',
   disaster_coop_site: 'disasterCoopSite'
 }
@@ -131,6 +132,7 @@ const markerTintForEntity = (entity) => {
   if (type === 'trial_ground') return 0x9be59d
   if (type === 'dispute_witness_stone') return 0xf8df7b
   if (type === 'forbidden_edge') return 0xfb7185
+  if (type === 'fog_trail') return 0x74d5ff
   if (type === 'border_theater') return 0xffd675
   if (type === 'disaster_coop_site') {
     return {
@@ -1182,8 +1184,9 @@ export function createEntityMesh(entity, globalSeed = 0) {
       alliance_signal: 1.08,
       nomad_visitor: 1.04,
       trial_ground: 1.08,
-      dispute_witness_stone: 1.04,
+      dispute_witness_stone: 1.08,
       forbidden_edge: 1.08,
+      fog_trail: 1.08,
       border_theater: 1.12,
       disaster_coop_site: 1.08
     }

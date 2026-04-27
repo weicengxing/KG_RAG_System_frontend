@@ -645,6 +645,85 @@ const createDisasterCoopSite = () => {
   return group
 }
 
+const createAllianceSignal = () => {
+  const group = new THREE.Group()
+  group.name = 'game_alliance_signal'
+  const wood = mat('alliance_signal_pole_wood', 0x6b4a28, { roughness: 0.88 })
+  const cloth = mat('alliance_signal_cloth', 0x9be59d, { roughness: 0.72, side: THREE.DoubleSide })
+  const pale = mat('alliance_signal_stitch', 0xfff7df, { roughness: 0.62, side: THREE.DoubleSide })
+  const gold = mat('alliance_signal_binding_gold', 0xffd675, { roughness: 0.56, emissive: 0xb8861b, emissiveIntensity: 0.2 })
+  const stone = mat('alliance_signal_anchor_stone', 0x8a8178, { roughness: 0.94 })
+
+  group.add(mesh('alliance_signal_stone_base', new THREE.CylinderGeometry(0.54, 0.72, 0.18, 8), stone, [0, 0.09, 0]))
+  group.add(mesh('alliance_signal_tall_pole', new THREE.CylinderGeometry(0.045, 0.075, 2.55, 7), wood, [0, 1.36, 0], [0.03, 0, -0.06]))
+  group.add(mesh('alliance_signal_crossbar', new THREE.CylinderGeometry(0.032, 0.046, 1.28, 7), wood, [0.48, 2.22, 0], [0, 0, Math.PI / 2]))
+  group.add(mesh('alliance_signal_main_flag', new THREE.PlaneGeometry(0.88, 0.54, 3, 2), cloth, [0.62, 1.95, 0.03], [0, -0.08, 0]))
+  group.add(mesh('alliance_signal_lower_pennant', new THREE.ConeGeometry(0.22, 0.58, 3), cloth, [0.28, 1.36, 0.035], [0, 0, Math.PI]))
+  group.add(mesh('alliance_signal_stitch_line', new THREE.BoxGeometry(0.62, 0.045, 0.026), pale, [0.62, 1.96, 0.052], [0, -0.08, 0]))
+  group.add(mesh('alliance_signal_knot_ring', new THREE.TorusGeometry(0.15, 0.022, 8, 18), gold, [0.06, 2.18, 0], [Math.PI / 2, 0, 0]))
+  for (let i = 0; i < 4; i++) {
+    const angle = (i / 4) * Math.PI * 2 + Math.PI / 4
+    group.add(mesh(`alliance_signal_anchor_${i}`, new THREE.DodecahedronGeometry(0.1 + (i % 2) * 0.025, 0), stone, [Math.cos(angle) * 0.56, 0.08, Math.sin(angle) * 0.56], [0.2 * i, angle, 0], [1.15, 0.55, 0.9]))
+  }
+  const light = new THREE.PointLight(0x9be59d, 0.28, 5)
+  light.name = 'alliance_signal_soft_light'
+  light.position.set(0.45, 1.65, 0.15)
+  group.add(light)
+  addGroundShadow(group, 1.1)
+  return group
+}
+
+const createDisputeWitnessStone = () => {
+  const group = new THREE.Group()
+  group.name = 'game_dispute_witness_stone'
+  const stone = mat('witness_carved_stone', 0x8a8178, { roughness: 0.96 })
+  const darkStone = mat('witness_shadowed_crack', 0x4f5049, { roughness: 0.98 })
+  const gold = mat('witness_public_evidence_gold', 0xf8df7b, { roughness: 0.54, emissive: 0xb8861b, emissiveIntensity: 0.24 })
+  const cloth = mat('witness_offering_cloth', 0x7fe7ff, { roughness: 0.72, side: THREE.DoubleSide })
+  const chalk = mat('witness_chalk_name', 0xfff0c2, { roughness: 0.72 })
+
+  group.add(mesh('witness_flat_plinth', new THREE.CylinderGeometry(0.88, 1.05, 0.18, 9), darkStone, [0, 0.09, 0], [0, Math.PI / 9, 0]))
+  group.add(mesh('witness_upright_tablet', new THREE.BoxGeometry(0.72, 1.38, 0.18), stone, [0, 0.82, -0.05], [-0.06, 0.12, 0]))
+  group.add(mesh('witness_split_notch_left', new THREE.BoxGeometry(0.04, 0.74, 0.04), darkStone, [-0.16, 0.91, 0.06], [0, 0.16, -0.22]))
+  group.add(mesh('witness_split_notch_right', new THREE.BoxGeometry(0.04, 0.62, 0.04), darkStone, [0.15, 0.76, 0.065], [0, -0.12, 0.18]))
+  group.add(mesh('witness_name_bar', new THREE.BoxGeometry(0.46, 0.05, 0.035), chalk, [0, 1.08, 0.07], [0, 0.08, 0.08]))
+  group.add(mesh('witness_evidence_ring', new THREE.TorusGeometry(0.52, 0.026, 8, 28), gold, [0, 0.55, 0.08], [Math.PI / 2, 0, 0]))
+  group.add(mesh('witness_small_offering', new THREE.PlaneGeometry(0.42, 0.24), cloth, [0.46, 0.34, 0.16], [0, -0.45, 0]))
+  const light = new THREE.PointLight(0xf8df7b, 0.3, 5)
+  light.name = 'witness_stone_soft_light'
+  light.position.set(0, 0.95, 0.2)
+  group.add(light)
+  addGroundShadow(group, 1.22)
+  return group
+}
+
+const createFogTrail = () => {
+  const group = new THREE.Group()
+  group.name = 'game_fog_trail'
+  const wetStone = mat('fog_trail_wet_stone', 0x6f7f82, { roughness: 0.98 })
+  const wood = mat('fog_trail_marker_wood', 0x6b4a28, { roughness: 0.9 })
+  const fire = mat('fog_trail_lamp_fire', 0xffd675, { roughness: 0.42, emissive: 0xff9f1c, emissiveIntensity: 0.58 })
+  const mist = new THREE.MeshBasicMaterial({ name: 'fog_trail_mist_ribbon', color: 0x9fd8e8, transparent: true, opacity: 0.36, side: THREE.DoubleSide, depthWrite: false })
+  const cloth = mat('fog_trail_route_cloth', 0x74d5ff, { roughness: 0.72, side: THREE.DoubleSide })
+
+  group.add(mesh('fog_trail_ground_stones', new THREE.CylinderGeometry(0.95, 1.16, 0.09, 12), wetStone, [0, 0.045, 0]))
+  for (let i = 0; i < 5; i++) {
+    const offset = (i - 2) * 0.38
+    group.add(mesh(`fog_trail_stepping_stone_${i}`, new THREE.DodecahedronGeometry(0.18 + (i % 2) * 0.035, 0), wetStone, [offset, 0.16, Math.sin(i) * 0.18], [0.1 * i, 0.4 * i, -0.05], [1.25, 0.42, 0.9]))
+  }
+  group.add(mesh('fog_trail_lantern_post', new THREE.CylinderGeometry(0.04, 0.065, 1.32, 7), wood, [-0.48, 0.74, -0.18], [0.1, 0, -0.08]))
+  group.add(mesh('fog_trail_lamp', new THREE.OctahedronGeometry(0.18, 0), fire, [-0.45, 1.38, -0.16], [0.2, 0.4, 0], [1, 0.72, 1]))
+  group.add(mesh('fog_trail_blue_tag', new THREE.PlaneGeometry(0.36, 0.24), cloth, [0.52, 0.62, 0.08], [0, -0.35, 0]))
+  group.add(mesh('fog_trail_mist_arc_a', new THREE.TorusGeometry(0.78, 0.032, 8, 32, Math.PI * 1.15), mist, [0.04, 0.48, 0.0], [0.12, 0, -0.42]))
+  group.add(mesh('fog_trail_mist_arc_b', new THREE.TorusGeometry(0.54, 0.026, 8, 28, Math.PI * 1.05), mist, [-0.06, 0.82, 0.08], [-0.18, 0, 0.56]))
+  const light = new THREE.PointLight(0xffd675, 0.36, 5.5)
+  light.name = 'fog_trail_lamp_light'
+  light.position.set(-0.45, 1.32, -0.16)
+  group.add(light)
+  addGroundShadow(group, 1.25)
+  return group
+}
+
 const createNaturalTree = () => {
   const group = new THREE.Group()
   group.name = 'game_natural_tree'
@@ -856,6 +935,9 @@ await exportGlb('trial_ground', createTrialGround())
 await exportGlb('border_theater', createBorderTheater())
 await exportGlb('forbidden_edge', createForbiddenEdge())
 await exportGlb('disaster_coop_site', createDisasterCoopSite())
+await exportGlb('alliance_signal', createAllianceSignal())
+await exportGlb('dispute_witness_stone', createDisputeWitnessStone())
+await exportGlb('fog_trail', createFogTrail())
 await exportGlb('natural_tree', createNaturalTree())
 await exportGlb('natural_rock', createNaturalRock())
 await exportGlb('natural_grass_tuft', createNaturalGrassTuft())

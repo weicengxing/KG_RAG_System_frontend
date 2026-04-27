@@ -549,6 +549,15 @@
   box-shadow: 0 0 0 3px rgba(255, 214, 117, 0.18), 0 0 22px rgba(255, 214, 117, 0.78);
 }
 
+.map-marker.dispute_witness_stone {
+  width: 18px;
+  height: 20px;
+  border: 2px solid rgba(255, 247, 223, 0.9);
+  border-radius: 5px 5px 8px 8px;
+  background: linear-gradient(180deg, #fff0c2, #f8df7b 48%, #8a8178 100%);
+  box-shadow: 0 0 0 3px rgba(248, 223, 123, 0.18), 0 0 20px rgba(248, 223, 123, 0.7);
+}
+
 .map-marker.disaster_coop_site {
   width: 20px;
   height: 20px;
@@ -566,6 +575,15 @@
   border-radius: 50% 4px 50% 4px;
   background: radial-gradient(circle, #ff9f1c 0%, #fb7185 48%, #1f2420 100%);
   box-shadow: 0 0 0 3px rgba(251, 113, 133, 0.18), 0 0 22px rgba(251, 113, 133, 0.74);
+}
+
+.map-marker.fog_trail {
+  width: 20px;
+  height: 14px;
+  border: 2px solid rgba(255, 247, 223, 0.84);
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(255, 214, 117, 0.95), rgba(116, 213, 255, 0.95));
+  box-shadow: 0 0 0 4px rgba(116, 213, 255, 0.16), 0 0 22px rgba(116, 213, 255, 0.78);
 }
 
 .map-marker.old_camp_echo {

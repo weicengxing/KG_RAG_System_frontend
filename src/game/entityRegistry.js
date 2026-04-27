@@ -28,6 +28,126 @@ const oathColor = (key, fallback) => ({
   beast: 0x9be59d
 }[key] || fallback)
 
+const hashString = (value) => {
+  const text = String(value || '')
+  let hash = 0
+  for (let i = 0; i < text.length; i++) {
+    hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0
+  }
+  return Math.abs(hash)
+}
+
+const tribeColorForEntity = (entity, fallback = 0xfb7185) => {
+  if (typeof entity?.tribeColor === 'number') return entity.tribeColor
+  if (!entity?.tribeId) return fallback
+  const palette = [0xe85d75, 0x2fbf9f, 0xf2b84b, 0x6aa9ff, 0xb985ff, 0x86c56a]
+  return palette[hashString(entity.tribeId) % palette.length]
+}
+
+const materialVariantForEntity = (entity, fallback = 0xfb7185) => {
+  const primaryColor = oathColor(entity?.oathKey, tribeColorForEntity(entity, fallback))
+  return {
+    role: 'prop',
+    primaryColor,
+    accentColor: 0xfff0c2,
+    pattern: entity?.oathKey || entity?.key || entity?.type || 'tribe'
+  }
+}
+
+const markerAssetKeyForType = (type) => ({
+  scouted_resource_site: 'resourceSite',
+  controlled_resource_site: 'resourceSite',
+  trade_route_site: 'resourceSite',
+  nomad_caravan: 'nomadCaravan',
+  migration_plan_site: 'migrationSite',
+  map_memory_trace: 'mapMemory',
+  world_event_remnant: 'worldEventRemnant',
+  diplomacy_council_site: 'diplomacyCouncil',
+  standing_ritual_site: 'standingRitual'
+}[type] || '')
+
+const markerTintForEntity = (entity) => {
+  const type = entity?.type
+  const colorByRegion = {
+    region_forest: 0x5ecf93,
+    region_mountain: 0xb8bec7,
+    region_coast: 0x74d5ff,
+    region_ruin: 0xf8df7b
+  }
+  if (type === 'diplomacy_council_site') return 0xffd675
+  if (type === 'migration_plan_site') {
+    return {
+      hold: 0x9be59d,
+      temporary_camp: 0xffb357,
+      caravan: 0xe6c77a
+    }[entity?.planKey] || 0xffb357
+  }
+  if (type === 'standing_ritual_site') return 0xb59cff
+  if (type === 'map_memory_trace') return 0xb59cff
+  if (type === 'nomad_caravan') return 0xe6c77a
+  if (type === 'trade_route_site') return entity?.isBorderMarket ? 0xffd675 : 0x7fe7ff
+  if (type === 'controlled_resource_site') return 0xf8df7b
+  if (type === 'world_event_remnant') return 0xffbe68
+  return colorByRegion[entity?.regionType] || 0x5ecf93
+}
+
+const addAssetVariantMarkers = (assetKey, model, variant, scale = 1) => {
+  if (!variant?.primaryColor) return
+  const primary = new THREE.Color(variant.primaryColor)
+  const accent = new THREE.Color(variant.accentColor || 0xfff0c2)
+  const markerMaterial = new THREE.MeshStandardMaterial({
+    color: primary,
+    roughness: 0.72,
+    metalness: 0.02,
+    side: THREE.DoubleSide
+  })
+  const accentMaterial = new THREE.MeshStandardMaterial({
+    color: accent,
+    roughness: 0.7,
+    side: THREE.DoubleSide
+  })
+
+  if (assetKey === 'tribeHut') {
+    const banner = new THREE.Mesh(new THREE.PlaneGeometry(1.25 * scale, 0.32 * scale), markerMaterial)
+    banner.position.set(0, 1.02 * scale, 1.58 * scale)
+    banner.rotation.y = Math.PI
+    model.add(banner)
+
+    const stripe = new THREE.Mesh(new THREE.PlaneGeometry(0.95 * scale, 0.055 * scale), accentMaterial)
+    stripe.position.set(0, 1.02 * scale, 1.585 * scale)
+    stripe.rotation.y = Math.PI
+    model.add(stripe)
+  } else if (assetKey === 'tribeTotem') {
+    for (const y of [1.05, 1.65]) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.28 * scale, 0.035 * scale, 8, 18), markerMaterial)
+      ring.position.y = y * scale
+      ring.rotation.x = Math.PI / 2
+      model.add(ring)
+    }
+
+    const oathStripe = new THREE.Mesh(new THREE.BoxGeometry(0.42 * scale, 0.08 * scale, 0.055 * scale), accentMaterial)
+    oathStripe.position.set(0, 2.08 * scale, 0.18 * scale)
+    model.add(oathStripe)
+  } else if (assetKey === 'caveEntrance') {
+    const glow = new THREE.PointLight(primary, 0.42, 8 * scale)
+    glow.position.set(-0.6 * scale, 1.25 * scale, 0.35 * scale)
+    model.add(glow)
+  } else if (assetKey === 'tribeStorage') {
+    const tag = new THREE.Mesh(new THREE.BoxGeometry(0.52 * scale, 0.08 * scale, 0.04 * scale), markerMaterial)
+    tag.position.set(0, 1.16 * scale, 1.05 * scale)
+    model.add(tag)
+  } else if (assetKey === 'tribeWorkbench') {
+    const wrap = new THREE.Mesh(new THREE.BoxGeometry(0.74 * scale, 0.06 * scale, 1.18 * scale), markerMaterial)
+    wrap.position.set(0, 1.12 * scale, 0)
+    model.add(wrap)
+  } else if (assetKey === 'tribeFlag') {
+    const stripe = new THREE.Mesh(new THREE.PlaneGeometry(0.92 * scale, 0.08 * scale), accentMaterial)
+    stripe.position.set(0.62 * scale, 2.64 * scale, 0.055 * scale)
+    stripe.rotation.y = -0.08
+    model.add(stripe)
+  }
+}
+
 const addGroundShadow = (group, rng, radius = 1.4, opacity = 0.18) => {
   const material = new THREE.MeshBasicMaterial({
     color: 0x102018,
@@ -63,7 +183,9 @@ const createAssetBackedEntity = (assetKey, fallback, rng, transform = {}) => {
   fallbackSlot.add(fallback)
   holder.add(fallbackSlot)
 
-  createModelAssetInstance(assetKey)
+  createModelAssetInstance(assetKey, {
+    materialVariant: transform.materialVariant
+  })
     .then((model) => {
       if (holder.userData.disposed) {
         disposeObject3D(model)
@@ -76,6 +198,7 @@ const createAssetBackedEntity = (assetKey, fallback, rng, transform = {}) => {
       if (Array.isArray(transform.rotation)) model.rotation.set(...transform.rotation)
       if (typeof transform.rotationY === 'number') model.rotation.y = transform.rotationY
       model.name = `${assetKey}_glb`
+      addAssetVariantMarkers(assetKey, model, transform.materialVariant, transform.scale || 1)
       holder.remove(fallbackSlot)
       disposeObject3D(fallbackSlot)
       holder.add(model)
@@ -87,6 +210,12 @@ const createAssetBackedEntity = (assetKey, fallback, rng, transform = {}) => {
 
   return holder
 }
+
+const naturalAssetVariant = (entity, primaryColor, accentColor = 0xfff0c2) => ({
+  role: 'prop',
+  primaryColor: typeof entity?.color === 'number' ? entity.color : primaryColor,
+  accentColor
+})
 
 export function getEntityCollider(entity, globalSeed = 0) {
   if (!entity) return null
@@ -168,7 +297,12 @@ export function getEntityCollider(entity, globalSeed = 0) {
     return { id, type, x: entity.x || 0, z: entity.z || 0, radius: 1.45 * scale }
   }
 
-  if (type === 'scouted_resource_site' || type === 'controlled_resource_site' || type === 'trade_route_site' || type === 'world_event_remnant' || type === 'diplomacy_council_site') {
+  if (type === 'region_forest' || type === 'region_mountain' || type === 'region_coast' || type === 'region_ruin') {
+    const scale = typeof entity.size === 'number' ? entity.size : 1
+    return { id, type, x: entity.x || 0, z: entity.z || 0, radius: 2.2 * scale }
+  }
+
+  if (type === 'scouted_resource_site' || type === 'controlled_resource_site' || type === 'trade_route_site' || type === 'nomad_caravan' || type === 'migration_plan_site' || type === 'world_event_remnant' || type === 'diplomacy_council_site' || type === 'map_memory_trace' || type === 'standing_ritual_site') {
     const scale = typeof entity.size === 'number' ? entity.size : 1
     return { id, type, x: entity.x || 0, z: entity.z || 0, radius: 1.8 * scale }
   }
@@ -239,7 +373,14 @@ export function createEntityMesh(entity, globalSeed = 0) {
     }
 
     tree.rotation.y = rng() * Math.PI * 2
-    return polishModel(tree, rng, { groundShadow: true, shadowRadius: foliageRadius * 0.82 })
+    const fallback = polishModel(tree, rng, { groundShadow: true, shadowRadius: foliageRadius * 0.82 })
+    return createAssetBackedEntity('tree', fallback, rng, {
+      scale,
+      assetScale: 1.05 + rng() * 0.18,
+      rotationY: tree.rotation.y,
+      materialVariant: naturalAssetVariant(entity, 0x2f8f4b, trunkBaseColor),
+      polish: { groundShadow: true, shadowRadius: foliageRadius * 0.82 }
+    })
   }
 
   if (type === 'rock') {
@@ -255,7 +396,14 @@ export function createEntityMesh(entity, globalSeed = 0) {
     rock.receiveShadow = true
     rock.rotation.set(rng() * Math.PI, rng() * Math.PI, rng() * Math.PI)
     rock.scale.set(0.85 + rng() * 0.6, 0.75 + rng() * 0.8, 0.85 + rng() * 0.6)
-    return polishModel(rock, rng)
+    const fallback = polishModel(rock, rng)
+    return createAssetBackedEntity('rock', fallback, rng, {
+      scale: baseSize,
+      assetScale: 0.92,
+      rotationY: rock.rotation.y,
+      materialVariant: naturalAssetVariant(entity, 0x8a8f82, 0xc1c7c9),
+      polish: { groundShadow: true, shadowRadius: baseSize }
+    })
   }
 
   if (type === 'grass') {
@@ -277,7 +425,14 @@ export function createEntityMesh(entity, globalSeed = 0) {
     }
 
     group.rotation.y = rng() * Math.PI * 2
-    return polishModel(group, rng, { castShadow: false })
+    const fallback = polishModel(group, rng, { castShadow: false })
+    return createAssetBackedEntity('grassTuft', fallback, rng, {
+      scale: typeof entity.size === 'number' ? entity.size : 1,
+      assetScale: 0.95 + rng() * 0.2,
+      rotationY: group.rotation.y,
+      materialVariant: naturalAssetVariant(entity, 0x4f9f3c, 0x9be59d),
+      polish: { castShadow: false }
+    })
   }
 
   if (type === 'flower') {
@@ -298,7 +453,14 @@ export function createEntityMesh(entity, globalSeed = 0) {
     group.add(bloom)
 
     group.rotation.y = rng() * Math.PI * 2
-    return polishModel(group, rng, { castShadow: false })
+    const fallback = polishModel(group, rng, { castShadow: false })
+    return createAssetBackedEntity('flowerPatch', fallback, rng, {
+      scale: typeof entity.size === 'number' ? entity.size : 1,
+      assetScale: 0.95 + rng() * 0.18,
+      rotationY: group.rotation.y,
+      materialVariant: naturalAssetVariant(entity, bloomColor, 0x4f9f3c),
+      polish: { castShadow: false }
+    })
   }
 
   if (type === 'campfire') {
@@ -336,7 +498,14 @@ export function createEntityMesh(entity, globalSeed = 0) {
     group.add(glow)
 
     group.rotation.y = rng() * Math.PI * 2
-    return polishModel(group, rng, { groundShadow: true, shadowRadius: 1.2 })
+    const fallback = polishModel(group, rng, { groundShadow: true, shadowRadius: 1.2 })
+    return createAssetBackedEntity('campfire', fallback, rng, {
+      scale: typeof entity.size === 'number' ? entity.size : 1,
+      assetScale: 1,
+      rotationY: group.rotation.y,
+      materialVariant: { role: 'prop', primaryColor: 0xff9f1c, accentColor: 0xfff1a8 },
+      polish: { groundShadow: true, shadowRadius: 1.2 }
+    })
   }
 
   if (type === 'ruin') {
@@ -409,6 +578,49 @@ export function createEntityMesh(entity, globalSeed = 0) {
     return polishModel(mesh, rng)
   }
 
+  if (type === 'region_forest' || type === 'region_mountain' || type === 'region_coast' || type === 'region_ruin') {
+    const group = new THREE.Group()
+    const scale = typeof entity.size === 'number' ? entity.size : 1
+    const tint = markerTintForEntity(entity)
+    const mat = new THREE.MeshStandardMaterial({
+      color: colorJitter(tint, rng, 0.07),
+      roughness: 0.76,
+      emissive: new THREE.Color(tint).multiplyScalar(0.14)
+    })
+    const stone = new THREE.MeshStandardMaterial({
+      color: colorJitter(0x827a68, rng, 0.08),
+      roughness: 0.94
+    })
+
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(1.05 * scale, 1.28 * scale, 0.18 * scale, 8), stone)
+    base.position.y = 0.09 * scale
+    group.add(base)
+
+    const column = new THREE.Mesh(new THREE.BoxGeometry(0.42 * scale, 1.35 * scale, 0.3 * scale), mat)
+    column.position.y = 0.82 * scale
+    column.rotation.y = rng() * 0.4
+    group.add(column)
+
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(0.82 * scale, 0.035 * scale, 8, 28), mat)
+    halo.position.y = 0.28 * scale
+    halo.rotation.x = Math.PI / 2
+    group.add(halo)
+
+    const light = new THREE.PointLight(tint, 0.28, 6 * scale)
+    light.position.y = 1.15 * scale
+    group.add(light)
+
+    group.rotation.y = rng() * Math.PI * 2
+    const fallback = polishModel(group, rng, { groundShadow: true, shadowRadius: 1.45 })
+    return createAssetBackedEntity('regionMarker', fallback, rng, {
+      scale,
+      assetScale: 1,
+      rotationY: group.rotation.y,
+      materialVariant: { role: 'prop', primaryColor: tint, accentColor: 0xfff0c2 },
+      polish: { groundShadow: true, shadowRadius: 1.45 }
+    })
+  }
+
   if (type === 'tribe_totem') {
     const group = new THREE.Group()
     const scale = typeof entity.size === 'number' ? entity.size : 1
@@ -454,6 +666,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
       scale,
       assetScale: 14,
       rotationY: group.rotation.y,
+      materialVariant: materialVariantForEntity(entity, 0x74d5ff),
       polish: { groundShadow: true, shadowRadius: 1.15 }
     })
     return holder
@@ -499,7 +712,14 @@ export function createEntityMesh(entity, globalSeed = 0) {
     }
 
     group.rotation.y = rng() * Math.PI * 2
-    return polishModel(group, rng, { groundShadow: true, shadowRadius: 1.45 })
+    const fallback = polishModel(group, rng, { groundShadow: true, shadowRadius: 1.45 })
+    return createAssetBackedEntity('tribeStorage', fallback, rng, {
+      scale,
+      assetScale: 1,
+      rotationY: group.rotation.y,
+      materialVariant: materialVariantForEntity(entity, 0x8fb7ff),
+      polish: { groundShadow: true, shadowRadius: 1.45 }
+    })
   }
 
   if (type === 'tribe_workbench') {
@@ -551,7 +771,14 @@ export function createEntityMesh(entity, globalSeed = 0) {
     group.add(ember)
 
     group.rotation.y = rng() * Math.PI * 2
-    return polishModel(group, rng, { groundShadow: true, shadowRadius: 1.5 })
+    const fallback = polishModel(group, rng, { groundShadow: true, shadowRadius: 1.5 })
+    return createAssetBackedEntity('tribeWorkbench', fallback, rng, {
+      scale,
+      assetScale: 1,
+      rotationY: group.rotation.y,
+      materialVariant: materialVariantForEntity(entity, 0x8fb7ff),
+      polish: { groundShadow: true, shadowRadius: 1.5 }
+    })
   }
 
   if (type === 'tribe_hut') {
@@ -593,6 +820,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
       scale,
       assetScale: 4.8,
       rotationY: group.rotation.y,
+      materialVariant: materialVariantForEntity(entity, 0xb39152),
       polish: { groundShadow: true, shadowRadius: 1.8 }
     })
     return holder
@@ -756,7 +984,14 @@ export function createEntityMesh(entity, globalSeed = 0) {
     group.add(light)
 
     group.rotation.y = rng() * Math.PI * 2
-    return polishModel(group, rng, { groundShadow: true, shadowRadius: 1.65 })
+    const fallback = polishModel(group, rng, { groundShadow: true, shadowRadius: 1.65 })
+    return createAssetBackedEntity('tribeFlag', fallback, rng, {
+      scale,
+      assetScale: 1,
+      rotationY: group.rotation.y,
+      materialVariant: materialVariantForEntity(entity, 0xfb7185),
+      polish: { groundShadow: true, shadowRadius: 1.65 }
+    })
   }
 
   if (type === 'tribe_beast_marker') {
@@ -830,20 +1065,10 @@ export function createEntityMesh(entity, globalSeed = 0) {
     return polishModel(group, rng, { groundShadow: true, shadowRadius: 1.85 })
   }
 
-  if (type === 'scouted_resource_site' || type === 'controlled_resource_site' || type === 'trade_route_site' || type === 'world_event_remnant' || type === 'diplomacy_council_site') {
+  if (type === 'scouted_resource_site' || type === 'controlled_resource_site' || type === 'trade_route_site' || type === 'nomad_caravan' || type === 'migration_plan_site' || type === 'world_event_remnant' || type === 'diplomacy_council_site' || type === 'map_memory_trace' || type === 'standing_ritual_site') {
     const group = new THREE.Group()
     const scale = typeof entity.size === 'number' ? entity.size : 1
-    const colorByRegion = {
-      region_forest: 0x5ecf93,
-      region_mountain: 0xb8bec7,
-      region_coast: 0x74d5ff,
-      region_ruin: 0xf8df7b
-    }
-    const tint = type === 'diplomacy_council_site'
-      ? 0xffd675
-      : type === 'trade_route_site'
-      ? 0x7fe7ff
-      : (type === 'controlled_resource_site' ? 0xf8df7b : (type === 'world_event_remnant' ? 0xffbe68 : (colorByRegion[entity.regionType] || 0x5ecf93)))
+    const tint = markerTintForEntity(entity)
     const mat = new THREE.MeshStandardMaterial({
       color: colorJitter(tint, rng, 0.08),
       roughness: 0.78,
@@ -876,7 +1101,21 @@ export function createEntityMesh(entity, globalSeed = 0) {
     group.add(light)
 
     group.rotation.y = rng() * Math.PI * 2
-    return polishModel(group, rng, { groundShadow: true, shadowRadius: 2.4 })
+    const fallback = polishModel(group, rng, { groundShadow: true, shadowRadius: 2.4 })
+    const assetKey = markerAssetKeyForType(type)
+    if (!assetKey) return fallback
+    const assetScaleByType = {
+      diplomacy_council_site: 1.15,
+      nomad_caravan: 1.08,
+      migration_plan_site: 1.05
+    }
+    return createAssetBackedEntity(assetKey, fallback, rng, {
+      scale,
+      assetScale: assetScaleByType[type] || 1,
+      rotationY: group.rotation.y,
+      materialVariant: { role: 'prop', primaryColor: tint, accentColor: tribeColorForEntity(entity, 0xfff0c2) },
+      polish: { groundShadow: true, shadowRadius: 2.4 }
+    })
   }
 
   if (type === 'cave_entrance') {
@@ -919,6 +1158,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
       scale,
       assetScale: 2.7,
       rotationY: group.rotation.y,
+      materialVariant: { role: 'prop', primaryColor: 0xff9f1c, accentColor: 0x8a8178 },
       polish: { groundShadow: true, shadowRadius: 2.5 }
     })
     return holder

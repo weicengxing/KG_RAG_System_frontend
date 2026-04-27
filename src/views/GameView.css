@@ -512,6 +512,15 @@
   box-shadow: 0 0 0 3px rgba(116, 213, 255, 0.18), 0 0 20px rgba(116, 213, 255, 0.82);
 }
 
+.map-marker.nomad_visitor {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 247, 223, 0.9);
+  border-radius: 50% 50% 6px 50%;
+  background: linear-gradient(135deg, #ffd36e 0%, #60d6a7 52%, #4267b2 100%);
+  box-shadow: 0 0 0 3px rgba(96, 214, 167, 0.18), 0 0 18px rgba(255, 211, 110, 0.72);
+}
+
 .map-marker.season_objective {
   width: 18px;
   height: 18px;
@@ -519,6 +528,15 @@
   border-radius: 6px;
   background: rgba(181, 156, 255, 0.78);
   box-shadow: 0 0 18px rgba(181, 156, 255, 0.78);
+}
+
+.map-marker.celestial_window {
+  width: 22px;
+  height: 22px;
+  border: 2px solid rgba(255, 247, 223, 0.9);
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff7df 0 18%, #74d5ff 42%, #2dd4bf 68%, rgba(45, 212, 191, 0.12));
+  box-shadow: 0 0 24px rgba(116, 213, 255, 0.72), 0 0 12px rgba(45, 212, 191, 0.48);
 }
 
 @keyframes rare-event-pulse {
@@ -605,6 +623,22 @@
   color: #fff7df;
   border: 1px solid rgba(181, 156, 255, 0.32);
   background: rgba(181, 156, 255, 0.12);
+}
+
+.resource-tide-hint.celestial {
+  color: #e4fbff;
+  border: 1px solid rgba(116, 213, 255, 0.36);
+  background: rgba(45, 212, 191, 0.12);
+  box-shadow: 0 0 14px rgba(116, 213, 255, 0.14);
+}
+
+.map-marker.migration_plan_site {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(155, 229, 157, 0.86);
+  border-radius: 5px;
+  background: rgba(155, 229, 157, 0.2);
+  box-shadow: 0 0 12px rgba(155, 229, 157, 0.28);
 }
 
 .world-rumor-board {
@@ -1134,6 +1168,16 @@
   background: rgba(248, 223, 123, 0.09);
 }
 
+.beast-link-item {
+  border-color: rgba(155, 229, 157, 0.32);
+  background: rgba(155, 229, 157, 0.08);
+}
+
+.apprentice-exchange-item {
+  border-color: rgba(116, 213, 255, 0.28);
+  background: rgba(116, 213, 255, 0.08);
+}
+
 .tribe-flag-row {
   display: flex;
   align-items: center;
@@ -1492,6 +1536,11 @@
   background: rgba(255, 205, 86, 0.08);
 }
 
+.atonement-token-item {
+  border-color: rgba(248, 113, 113, 0.26);
+  background: linear-gradient(135deg, rgba(248, 113, 113, 0.1), rgba(45, 212, 191, 0.08));
+}
+
 .standing-ritual-item {
   border-color: rgba(116, 213, 255, 0.26);
   background: rgba(116, 213, 255, 0.08);
@@ -1520,6 +1569,16 @@
   background: linear-gradient(135deg, rgba(248, 223, 123, 0.08), rgba(116, 213, 255, 0.08));
 }
 
+.history-fact-item {
+  border-color: rgba(255, 247, 223, 0.24);
+  background: linear-gradient(135deg, rgba(255, 247, 223, 0.09), rgba(255, 129, 77, 0.08));
+}
+
+.messenger-task-item {
+  border-color: rgba(45, 212, 191, 0.26);
+  background: linear-gradient(135deg, rgba(45, 212, 191, 0.1), rgba(248, 223, 123, 0.07));
+}
+
 .myth-shared-note {
   color: rgba(116, 213, 255, 0.94);
 }
@@ -1534,6 +1593,16 @@
   white-space: normal;
 }
 
+.history-fact-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.history-fact-actions button {
+  min-width: 0;
+  white-space: normal;
+}
+
 .season-taboo-item {
   border-color: rgba(244, 211, 94, 0.24);
   background: linear-gradient(135deg, rgba(244, 211, 94, 0.09), rgba(155, 229, 157, 0.08));
@@ -1542,6 +1611,20 @@
 .standing-ritual-item {
   border-color: rgba(181, 156, 255, 0.26);
   background: linear-gradient(135deg, rgba(181, 156, 255, 0.1), rgba(248, 223, 123, 0.07));
+}
+
+.migration-plan-item {
+  border-color: rgba(155, 229, 157, 0.26);
+  background: linear-gradient(135deg, rgba(155, 229, 157, 0.1), rgba(116, 213, 255, 0.07));
+}
+
+.celestial-window-item {
+  border-color: rgba(116, 213, 255, 0.28);
+  background: linear-gradient(135deg, rgba(116, 213, 255, 0.1), rgba(45, 212, 191, 0.08));
+}
+
+.celestial-branch-actions {
+  flex-wrap: wrap;
 }
 
 .standing-choice-actions {

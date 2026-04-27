@@ -570,6 +570,81 @@ const createTrialGround = () => {
   return group
 }
 
+const createBorderTheater = () => {
+  const group = new THREE.Group()
+  group.name = 'game_border_theater'
+  const wood = mat('theater_stage_wood', 0x6b3f1a, { roughness: 0.9 })
+  const cloth = mat('theater_border_cloth', 0xfb7185, { roughness: 0.76, side: THREE.DoubleSide })
+  const gold = mat('theater_gift_gold', 0xffd675, { roughness: 0.58, emissive: 0xb8861b, emissiveIntensity: 0.18 })
+  const stone = mat('theater_seat_stone', 0x8a8178, { roughness: 0.94 })
+
+  group.add(mesh('theater_raised_stage', new THREE.CylinderGeometry(1.12, 1.32, 0.24, 8), wood, [0, 0.16, 0], [0, Math.PI / 8, 0], [1.25, 1, 0.82]))
+  group.add(mesh('theater_back_pole_left', new THREE.CylinderGeometry(0.045, 0.07, 1.58, 7), wood, [-0.72, 0.92, -0.42], [0.08, 0, -0.06]))
+  group.add(mesh('theater_back_pole_right', new THREE.CylinderGeometry(0.045, 0.07, 1.58, 7), wood, [0.72, 0.92, -0.42], [-0.08, 0, 0.06]))
+  group.add(mesh('theater_crossbar', new THREE.CylinderGeometry(0.04, 0.06, 1.62, 7), wood, [0, 1.58, -0.42], [0, 0, Math.PI / 2]))
+  group.add(mesh('theater_curtain', new THREE.PlaneGeometry(1.32, 0.62), cloth, [0, 1.26, -0.39], [0, 0, 0]))
+  group.add(mesh('theater_center_gift', new THREE.OctahedronGeometry(0.2, 0), gold, [0, 0.58, 0.08], [0.2, 0.4, 0], [1, 0.62, 1]))
+  for (let i = 0; i < 4; i++) {
+    const angle = Math.PI * 0.2 + i * Math.PI * 0.2
+    group.add(mesh(`theater_front_seat_${i}`, new THREE.BoxGeometry(0.28, 0.14, 0.2), stone, [Math.cos(angle) * 1.05, 0.15, Math.sin(angle) * 0.82 + 0.3], [0, -angle, 0]))
+  }
+  const light = new THREE.PointLight(0xffd675, 0.28, 6)
+  light.name = 'theater_stage_light'
+  light.position.set(0, 0.9, 0)
+  group.add(light)
+  addGroundShadow(group, 1.55)
+  return group
+}
+
+const createForbiddenEdge = () => {
+  const group = new THREE.Group()
+  group.name = 'game_forbidden_edge'
+  const dark = mat('forbidden_black_stone', 0x222622, { roughness: 0.98 })
+  const warning = mat('forbidden_warning_mark', 0xfb7185, { roughness: 0.62, emissive: 0x9f1239, emissiveIntensity: 0.36 })
+  const chalk = mat('forbidden_boundary_chalk', 0xfff0c2, { roughness: 0.72 })
+  const ember = mat('forbidden_low_ember', 0xff9f1c, { roughness: 0.42, emissive: 0xff7a18, emissiveIntensity: 0.5 })
+
+  group.add(mesh('forbidden_cracked_ground', new THREE.CylinderGeometry(1.0, 1.18, 0.08, 10), dark, [0, 0.04, 0], [0, Math.PI / 10, 0]))
+  group.add(mesh('forbidden_outer_warning_ring', new THREE.TorusGeometry(1.08, 0.03, 8, 36), warning, [0, 0.1, 0], [Math.PI / 2, 0, 0]))
+  for (let i = 0; i < 3; i++) {
+    const angle = (i / 3) * Math.PI * 2 + 0.3
+    group.add(mesh(`forbidden_tilted_stone_${i}`, new THREE.BoxGeometry(0.28, 0.95 + i * 0.16, 0.22), dark, [Math.cos(angle) * 0.56, 0.48 + i * 0.05, Math.sin(angle) * 0.56], [0.1 * i, -angle, 0.18 * (i - 1)]))
+  }
+  group.add(mesh('forbidden_warning_slash', new THREE.BoxGeometry(0.78, 0.055, 0.045), warning, [0, 0.92, 0.08], [0, 0.32, -0.55]))
+  group.add(mesh('forbidden_chalk_cut', new THREE.BoxGeometry(0.5, 0.04, 0.04), chalk, [-0.22, 0.62, 0.1], [0, 0.25, 0.22]))
+  group.add(mesh('forbidden_ember_crack', new THREE.BoxGeometry(0.62, 0.035, 0.05), ember, [0.18, 0.12, 0.1], [0, 0.8, 0]))
+  const light = new THREE.PointLight(0xfb7185, 0.36, 6)
+  light.name = 'forbidden_edge_glow'
+  light.position.set(0, 0.72, 0)
+  group.add(light)
+  addGroundShadow(group, 1.3)
+  return group
+}
+
+const createDisasterCoopSite = () => {
+  const group = new THREE.Group()
+  group.name = 'game_disaster_coop_site'
+  const wood = mat('disaster_brace_wood', 0x6e4722, { roughness: 0.9 })
+  const water = mat('disaster_water_blue', 0x74d5ff, { roughness: 0.48, emissive: 0x1d8fb8, emissiveIntensity: 0.22 })
+  const ember = mat('disaster_fire_orange', 0xff9f1c, { roughness: 0.42, emissive: 0xff7a18, emissiveIntensity: 0.52 })
+  const cloth = mat('disaster_aid_cloth', 0x9be59d, { roughness: 0.76, side: THREE.DoubleSide })
+  const stone = mat('disaster_anchor_stone', 0x8c867d, { roughness: 0.96 })
+
+  group.add(mesh('disaster_work_pad', new THREE.CylinderGeometry(1.05, 1.24, 0.1, 12), stone, [0, 0.05, 0]))
+  group.add(mesh('disaster_cross_brace_a', new THREE.CylinderGeometry(0.055, 0.08, 1.9, 7), wood, [0, 0.36, 0], [Math.PI / 2.45, 0, Math.PI / 4]))
+  group.add(mesh('disaster_cross_brace_b', new THREE.CylinderGeometry(0.055, 0.08, 1.9, 7), wood, [0, 0.42, 0], [Math.PI / 2.45, 0, -Math.PI / 4]))
+  group.add(mesh('disaster_water_bucket', new THREE.CylinderGeometry(0.22, 0.28, 0.34, 10), water, [-0.52, 0.33, 0.28]))
+  group.add(mesh('disaster_fire_core', new THREE.OctahedronGeometry(0.22, 0), ember, [0.45, 0.32, -0.16], [0.2, 0.4, 0], [1.1, 0.5, 1]))
+  group.add(mesh('disaster_signal_cloth', new THREE.PlaneGeometry(0.44, 0.34), cloth, [0.06, 0.92, 0.2], [0, -0.12, 0]))
+  group.add(mesh('disaster_supplies_crate', new THREE.BoxGeometry(0.44, 0.28, 0.34), wood, [-0.16, 0.25, -0.52], [0, 0.28, 0]))
+  const light = new THREE.PointLight(0xff9f1c, 0.26, 5)
+  light.name = 'disaster_fire_light'
+  light.position.set(0.45, 0.45, -0.16)
+  group.add(light)
+  addGroundShadow(group, 1.35)
+  return group
+}
+
 const createNaturalTree = () => {
   const group = new THREE.Group()
   group.name = 'game_natural_tree'
@@ -778,6 +853,9 @@ await exportGlb('traveler_song', createTravelerSong())
 await exportGlb('mutual_aid_alert', createMutualAidAlert())
 await exportGlb('nomad_visitor', createNomadVisitor())
 await exportGlb('trial_ground', createTrialGround())
+await exportGlb('border_theater', createBorderTheater())
+await exportGlb('forbidden_edge', createForbiddenEdge())
+await exportGlb('disaster_coop_site', createDisasterCoopSite())
 await exportGlb('natural_tree', createNaturalTree())
 await exportGlb('natural_rock', createNaturalRock())
 await exportGlb('natural_grass_tuft', createNaturalGrassTuft())

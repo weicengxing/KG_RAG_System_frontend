@@ -437,6 +437,15 @@
   box-shadow: 0 0 0 4px rgba(255, 214, 117, 0.2), 0 0 22px rgba(255, 214, 117, 0.78);
 }
 
+.map-marker.alliance_signal {
+  width: 19px;
+  height: 19px;
+  border-radius: 50% 50% 50% 10%;
+  border: 2px solid rgba(255, 247, 223, 0.9);
+  background: #9be59d;
+  box-shadow: 0 0 0 4px rgba(110, 228, 166, 0.18), 0 0 20px rgba(110, 228, 166, 0.74);
+}
+
 .map-marker.region_forest,
 .map-marker.region_mountain,
 .map-marker.region_coast,
@@ -529,6 +538,34 @@
   border-radius: 4px 50% 4px 50%;
   background: linear-gradient(135deg, #facc15, #38bdf8 52%, #86efac);
   box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.18), 0 0 20px rgba(250, 204, 21, 0.7);
+}
+
+.map-marker.border_theater {
+  width: 19px;
+  height: 16px;
+  border: 2px solid rgba(255, 247, 223, 0.9);
+  border-radius: 4px 4px 50% 50%;
+  background: linear-gradient(135deg, #ff5f87, #ffd675 54%, #7fe7ff);
+  box-shadow: 0 0 0 3px rgba(255, 214, 117, 0.18), 0 0 22px rgba(255, 214, 117, 0.78);
+}
+
+.map-marker.disaster_coop_site {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 247, 223, 0.9);
+  border-radius: 50% 50% 4px 50%;
+  transform: translate(-50%, -50%) rotate(45deg);
+  background: linear-gradient(135deg, #fb7185, #facc15 50%, #38bdf8);
+  box-shadow: 0 0 0 3px rgba(251, 113, 133, 0.18), 0 0 22px rgba(250, 204, 21, 0.78);
+}
+
+.map-marker.forbidden_edge {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 247, 223, 0.86);
+  border-radius: 50% 4px 50% 4px;
+  background: radial-gradient(circle, #ff9f1c 0%, #fb7185 48%, #1f2420 100%);
+  box-shadow: 0 0 0 3px rgba(251, 113, 133, 0.18), 0 0 22px rgba(251, 113, 133, 0.74);
 }
 
 .map-marker.old_camp_echo {
@@ -1706,6 +1743,11 @@
   background: linear-gradient(135deg, rgba(250, 204, 21, 0.1), rgba(56, 189, 248, 0.08));
 }
 
+.forbidden-edge-item {
+  border-color: rgba(248, 113, 113, 0.34);
+  background: linear-gradient(135deg, rgba(248, 113, 113, 0.12), rgba(125, 211, 252, 0.08));
+}
+
 .old-camp-echo-item {
   border-color: rgba(251, 191, 36, 0.3);
   background: linear-gradient(135deg, rgba(251, 191, 36, 0.1), rgba(148, 163, 184, 0.08));
@@ -1714,6 +1756,11 @@
 .border-theater-item {
   border-color: rgba(244, 114, 182, 0.3);
   background: linear-gradient(135deg, rgba(244, 114, 182, 0.1), rgba(45, 212, 191, 0.08));
+}
+
+.fog-trail-item {
+  border-color: rgba(125, 211, 252, 0.32);
+  background: linear-gradient(135deg, rgba(125, 211, 252, 0.1), rgba(167, 243, 208, 0.08));
 }
 
 .neutral-sanctuary-item {
@@ -1734,6 +1781,21 @@
 .camp-trial-item {
   border-color: rgba(16, 185, 129, 0.34);
   background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(56, 189, 248, 0.07));
+}
+
+.craft-legacy-item {
+  border-color: rgba(216, 193, 107, 0.34);
+  background: linear-gradient(135deg, rgba(216, 193, 107, 0.11), rgba(116, 213, 255, 0.07));
+}
+
+.disaster-coop-item {
+  border-color: rgba(251, 113, 133, 0.32);
+  background: linear-gradient(135deg, rgba(251, 113, 133, 0.1), rgba(250, 204, 21, 0.08));
+}
+
+.consensus-fire-item {
+  border-color: rgba(250, 204, 21, 0.34);
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.11), rgba(45, 212, 191, 0.08));
 }
 
 .standing-ritual-item {
@@ -1777,6 +1839,11 @@
 .mutual-aid-item {
   border-color: rgba(249, 115, 22, 0.26);
   background: linear-gradient(135deg, rgba(249, 115, 22, 0.1), rgba(56, 189, 248, 0.08));
+}
+
+.alliance-signal-item {
+  border-color: rgba(110, 228, 166, 0.34);
+  background: linear-gradient(135deg, rgba(110, 228, 166, 0.1), rgba(255, 214, 117, 0.08));
 }
 
 .myth-shared-note {

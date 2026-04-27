@@ -29,6 +29,9 @@ export const GAME_MODEL_ASSETS = {
   mutualAidAlert: '/game-assets/models/mutual_aid_alert.glb',
   nomadVisitor: '/game-assets/models/nomad_visitor.glb',
   trialGround: '/game-assets/models/trial_ground.glb',
+  borderTheater: '/game-assets/models/border_theater.glb',
+  forbiddenEdge: '/game-assets/models/forbidden_edge.glb',
+  disasterCoopSite: '/game-assets/models/disaster_coop_site.glb',
   tree: '/game-assets/models/natural_tree.glb',
   rock: '/game-assets/models/natural_rock.glb',
   grassTuft: '/game-assets/models/natural_grass_tuft.glb',
@@ -80,7 +83,7 @@ export function applyModelMaterialVariant(model, variant = {}) {
         tintMaterial(material, isAccentPart ? primary : accent, isAccentPart ? 0.42 : 0.08)
         return
       }
-      const strongTint = /flag|totem|cloth|banner|tent|storage|workbench|tribe|resource|memory|remnant|council|ritual|sacred|sanctuary|collection|puzzle|trail|landmark|riddle|glyph|old|return|song|aid|alert|smoke|visitor|trial|leaf|flower|region|migration|caravan|torch|tool|scroll|token/.test(name)
+      const strongTint = /flag|totem|cloth|banner|tent|storage|workbench|tribe|resource|memory|remnant|council|ritual|sacred|sanctuary|collection|puzzle|trail|landmark|riddle|glyph|old|return|song|aid|alert|smoke|visitor|trial|theater|forbidden|disaster|brace|leaf|flower|region|migration|caravan|torch|tool|scroll|token/.test(name)
       tintMaterial(material, strongTint ? primary : accent, strongTint ? 0.55 : 0.12)
     })
   })

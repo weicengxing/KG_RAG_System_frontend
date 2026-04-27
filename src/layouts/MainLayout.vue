@@ -64,6 +64,7 @@ const navItems = [
   { name: '音乐播放器', path: '/music', icon: '🎵' },
   { name: '聊天室', path: '/chat-room', icon: '💬' },
   { name: '游戏世界', path: '/game', icon: '🎮' },
+  { name: '双人格斗', path: '/dual-fighter', icon: '⚔️' },
   { name: '植物大战僵尸', path: '/plants-vs-zombies', icon: '🌻' }
   // 可以在这里添加更多导航项
   // { name: '知识图谱', path: '/knowledge-graph', icon: '🔗' },
@@ -186,23 +187,31 @@ onUnmounted(() => {
   flex: 1;
   display: flex;
   align-items: center;
-  justify-content: space-evenly;
+  justify-content: center;
   gap: 8px;
   padding: 0 20px;
   min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.navbar-center::-webkit-scrollbar {
+  display: none;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 20px;
+  padding: 10px 14px;
   border-radius: 12px;
   text-decoration: none;
   color: #6b7280;
   font-weight: 500;
   font-size: 14px;
   transition: all 0.2s ease;
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .nav-item:hover {

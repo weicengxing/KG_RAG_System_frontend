@@ -521,6 +521,15 @@
   box-shadow: 0 0 0 3px rgba(116, 213, 255, 0.18), 0 0 20px rgba(116, 213, 255, 0.82);
 }
 
+.map-marker.map_tile_trace {
+  width: 18px;
+  height: 13px;
+  border: 2px solid rgba(255, 247, 223, 0.86);
+  border-radius: 50%;
+  background: linear-gradient(135deg, #8fbf6a 0%, #ffd675 48%, #fb7185 100%);
+  box-shadow: 0 0 0 3px rgba(255, 214, 117, 0.16), 0 0 18px rgba(255, 214, 117, 0.7);
+}
+
 .map-marker.world_riddle_site {
   width: 18px;
   height: 18px;
@@ -1328,6 +1337,15 @@
   background: rgba(255, 129, 77, 0.08);
 }
 
+.living-legend-item {
+  border-color: rgba(246, 211, 101, 0.3);
+  background: linear-gradient(135deg, rgba(246, 211, 101, 0.12), rgba(95, 212, 190, 0.08));
+}
+
+.living-legend-item.settled {
+  border-color: rgba(95, 212, 190, 0.34);
+}
+
 .scout-site-item {
   border-color: rgba(94, 207, 147, 0.34);
   background: rgba(94, 207, 147, 0.08);
@@ -1920,6 +1938,30 @@
 .standing-choice-actions button {
   min-width: 0;
   white-space: normal;
+}
+
+.standing-puzzle-slots {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.standing-puzzle-slots span {
+  min-width: 0;
+  padding: 5px 6px;
+  border: 1px solid rgba(181, 156, 255, 0.28);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 10px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.standing-puzzle-slots span.filled {
+  border-color: rgba(155, 229, 157, 0.48);
+  color: #f5ffe8;
+  background: rgba(155, 229, 157, 0.14);
 }
 
 .tribe-history-filters {

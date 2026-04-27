@@ -14,6 +14,7 @@ const NovelUploadView = () => import('../views/NovelUploadView.vue')
 const ChatRoomView = () => import('../views/ChatRoomView.vue')
 const KnowledgeGraphView = () => import('../views/KnowledgeGraphView.vue')
 const GameView = () => import('../views/GameView.vue')
+const DualFighterView = () => import('../views/DualFighterView.vue')
 const PlantsVsZombiesView = () => import('../views/PlantsVsZombiesView.vue')
 const PlantSelectionView = () => import('../views/PlantSelectionView.vue')
 const ZombieSelectionView = () => import('../views/ZombieSelectionView.vue')
@@ -44,6 +45,7 @@ const routes = [
       { path: 'claude-web-chat', name: 'ClaudeWebChat', component: ClaudeWebChatView },
       { path: 'knowledge-graph', name: 'KnowledgeGraph', component: KnowledgeGraphView },
       { path: 'game', name: 'Game', component: GameView },
+      { path: 'dual-fighter', name: 'DualFighter', component: DualFighterView },
       { path: 'plants-vs-zombies', name: 'PlantsVsZombies', component: PlantsVsZombiesView },
       { path: 'plant-selection', name: 'PlantSelection', component: PlantSelectionView },
       { path: 'zombie-selection/:roomId/:userId?', name: 'ZombieSelection', component: ZombieSelectionView },

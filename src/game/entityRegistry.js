@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { createModelAssetInstance } from './modelAssets.js'
 import { rngForKey } from './random.js'
+import { isAssetBackedMarkerType, markerAssetKeyForType } from './worldEntityTypes.js'
 
 const clamp01 = (v) => Math.max(0, Math.min(1, v))
 
@@ -54,45 +55,6 @@ const materialVariantForEntity = (entity, fallback = 0xfb7185) => {
   }
 }
 
-const MARKER_ASSET_KEYS_BY_TYPE = {
-  scouted_resource_site: 'resourceSite',
-  controlled_resource_site: 'resourceSite',
-  trade_route_site: 'resourceSite',
-  nomad_caravan: 'nomadCaravan',
-  migration_plan_site: 'migrationSite',
-  map_memory_trace: 'mapMemory',
-  rare_cave_race: 'caveEntrance',
-  cave_rescue_clue: 'mapMemory',
-  world_event_remnant: 'worldEventRemnant',
-  diplomacy_council_site: 'diplomacyCouncil',
-  celebration_echo: 'standingRitual',
-  standing_ritual_site: 'standingRitual',
-  sacred_fire_relay: 'sacredFire',
-  sacred_fire_site: 'sacredFire',
-  neutral_sanctuary: 'neutralSanctuary',
-  collection_wall: 'collectionWall',
-  shared_puzzle: 'sharedPuzzle',
-  shared_puzzle_site: 'sharedPuzzle',
-  trail_marker: 'trailMarker',
-  named_landmark: 'namedLandmark',
-  world_riddle_site: 'worldRiddleSite',
-  old_camp_echo: 'oldCampEcho',
-  cave_return_mark: 'caveReturnMark',
-  traveler_song: 'travelerSong',
-  mutual_aid_alert: 'mutualAidAlert',
-  alliance_signal: 'allianceSignal',
-  nomad_visitor: 'nomadVisitor',
-  trial_ground: 'trialGround',
-  dispute_witness_stone: 'disputeWitnessStone',
-  forbidden_edge: 'forbiddenEdge',
-  fog_trail: 'fogTrail',
-  border_theater: 'borderTheater',
-  disaster_coop_site: 'disasterCoopSite'
-}
-
-const markerAssetKeyForType = (type) => MARKER_ASSET_KEYS_BY_TYPE[type] || ''
-const isAssetBackedMarkerType = (type) => Boolean(markerAssetKeyForType(type))
-
 const markerTintForEntity = (entity) => {
   const type = entity?.type
   const colorByRegion = {
@@ -144,6 +106,14 @@ const markerTintForEntity = (entity) => {
   }
   if (type === 'world_riddle_site') return 0xb59cff
   if (type === 'map_memory_trace') return 0xb59cff
+  if (type === 'map_tile_trace') {
+    return {
+      exhausted_grove: 0x8fbf6a,
+      old_battlefield: 0xfb7185,
+      safe_cave_path: 0x74d5ff,
+      busy_market_site: 0xffd675
+    }[entity?.traceKind] || 0x9be59d
+  }
   if (type === 'rare_cave_race') return 0x7dd3fc
   if (type === 'cave_rescue_clue') return 0xfbbf24
   if (type === 'nomad_caravan') return 0xe6c77a

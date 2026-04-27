@@ -157,7 +157,7 @@
               <select v-model="guestStayDraft.targetTribeId">
                 <option value="">选择客居营地</option>
                 <option v-for="target in guestStayTargets" :key="target.id" :value="target.id">
-                  {{ target.name }} · {{ target.summary }}
+                  {{ target.name }} · {{ target.summary }}{{ target.tribePersonality?.diplomacyText ? ` · ${target.tribePersonality.diplomacyText}` : '' }}
                 </option>
               </select>
               <select v-model="guestStayDraft.actionKey">
@@ -201,6 +201,40 @@
             </div>
           </div>
 
+          <div class="tribe-trade-card" v-if="currentTribe.livingLegendCandidates?.length || currentTribe.livingLegendRecords?.length">
+            <div class="tribe-target-title">活人传说榜</div>
+            <div class="tribe-target-text">近期营救、调停、探索和破戒补救会推举候选，成员见证后可定榜。</div>
+            <div class="tribe-trade-list" v-if="currentTribe.livingLegendCandidates?.length">
+              <div v-for="candidate in currentTribe.livingLegendCandidates" :key="candidate.id" class="tribe-trade-item living-legend-item">
+                <strong>{{ candidate.memberName || '成员' }} · {{ candidate.supportCount || 0 }} / {{ candidate.supportTarget || 1 }}</strong>
+                <small>{{ candidate.sourceTitle || '部落记忆' }} · 分数 {{ candidate.score || 0 }} · {{ candidate.actionSummary || '等待表态' }}</small>
+                <small>{{ candidate.summary }}</small>
+                <small v-if="candidate.supporterNames?.length">见证：{{ candidate.supporterNames.join('、') }}</small>
+                <small v-if="candidate.elaborationNames?.length">补述：{{ candidate.elaborationNames.join('、') }}</small>
+                <small v-if="candidate.questionNames?.length">质疑：{{ candidate.questionNames.join('、') }}</small>
+                <small v-if="candidate.activeUntil">剩余 {{ formatRemainingSeconds(candidate.activeUntil) || '即将散去' }}</small>
+                <div class="tribe-vote-actions">
+                  <button
+                    v-for="action in candidate.actionOptions || [{ key: 'witness', label: '见证' }]"
+                    :key="action.key"
+                    @click="respondLivingLegend(candidate.id, action.key)"
+                  >
+                    {{ action.label }}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="tribe-trade-list" v-if="currentTribe.livingLegendRecords?.length">
+              <div v-for="record in currentTribe.livingLegendRecords" :key="record.id" class="tribe-trade-item living-legend-item settled">
+                <strong>{{ record.memberName || '成员' }} · {{ record.legendTitle || '已定榜' }}</strong>
+                <small>{{ record.sourceTitle || '部落记忆' }} · {{ record.supportCount || 0 }} 人传唱<span v-if="record.questionCount"> · {{ record.questionCount }} 人质疑</span></small>
+                <small>{{ record.summary }}</small>
+                <small v-if="record.totemRuneCandidate">图腾：{{ record.totemRuneCandidate }}</small>
+                <small v-if="record.landmarkReference">{{ record.landmarkReference }}</small>
+              </div>
+            </div>
+          </div>
+
           <div class="tribe-announcement-card">
             <div class="tribe-target-title">部落公告</div>
             <div class="tribe-target-text">{{ currentTribe.announcement || '首领还没有留下公告。' }}</div>
@@ -215,6 +249,15 @@
             <div class="tribe-target-text">
               当前{{ currentTribe.tribeCustoms.dominant ? `偏向“${currentTribe.tribeCustoms.dominant.label}”` : '尚未形成主导风俗' }}
               <template v-if="currentTribe.tribeCustoms.dominant"> · {{ currentTribe.tribeCustoms.dominant.effectSummary }}</template>
+            </div>
+            <div class="tribe-target-text" v-if="currentTribe.tribePersonality">
+              {{ currentTribe.tribePersonality.summary }}
+            </div>
+            <div class="tribe-trade-list" v-if="currentTribe.tribePersonality?.traits?.length">
+              <div v-for="trait in currentTribe.tribePersonality.traits" :key="trait.key" class="tribe-trade-item season-taboo-item" :class="{ active: trait.active }">
+                <strong>{{ trait.label }} · {{ trait.score || 0 }} / {{ currentTribe.tribePersonality.threshold || 3 }}</strong>
+                <small>{{ trait.summary }}</small>
+              </div>
             </div>
             <div class="tribe-trade-list" v-if="currentTribe.tribeCustoms.tendencies?.length">
               <div v-for="custom in currentTribe.tribeCustoms.tendencies" :key="custom.key" class="tribe-trade-item season-taboo-item" :class="{ active: custom.active }">
@@ -326,6 +369,30 @@
               <div v-for="record in currentTribe.rumorTruthRecords" :key="record.id" class="tribe-trade-item rumor-truth-item">
                 <strong>{{ record.sourceLabel }} · {{ record.actionLabel || '辨认' }}</strong>
                 <small>{{ record.memberName || '成员' }} · {{ record.outcomeLabel || '已处理' }}</small>
+                <small v-if="record.rewardParts?.length">{{ record.rewardParts.join('、') }}</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="tribe-trade-card" v-if="currentTribe.publicSecrets?.length || currentTribe.publicSecretRecords?.length">
+            <div class="tribe-target-title">公共秘密</div>
+            <div class="tribe-target-text">旅人预言、洞穴壁画和旧证据会先压成未揭晓秘密，成员决定公开、暂存、交给裁判或交给讲述者。</div>
+            <div class="tribe-trade-list" v-if="currentTribe.publicSecrets?.length">
+              <div v-for="secret in currentTribe.publicSecrets" :key="secret.id" class="tribe-trade-item rumor-truth-item">
+                <strong>{{ secret.title }} · {{ secret.sourceLabel || '秘密来源' }}</strong>
+                <small>{{ secret.summary }}</small>
+                <small>{{ secret.discoveredByName || '成员' }}发现<span v-if="secret.activeUntil"> · 剩余 {{ formatRemainingSeconds(secret.activeUntil) || '即将散去' }}</span></small>
+                <div class="tribe-vote-actions celestial-branch-actions">
+                  <button v-for="action in publicSecretActions" :key="`${secret.id}-${action.key}`" @click="resolvePublicSecret(secret.id, action.key)">
+                    {{ action.label }}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="tribe-trade-list" v-if="currentTribe.publicSecretRecords?.length">
+              <div v-for="record in currentTribe.publicSecretRecords" :key="record.id" class="tribe-trade-item rumor-truth-item">
+                <strong>{{ record.title }} · {{ record.actionLabel || '已处理' }}</strong>
+                <small>{{ record.memberName || '成员' }}处理了{{ record.sourceLabel || '秘密' }}<span v-if="record.judgeReady"> · 可被共同裁判引用</span><span v-if="record.storyReady"> · 讲述者保管</span></small>
                 <small v-if="record.rewardParts?.length">{{ record.rewardParts.join('、') }}</small>
               </div>
             </div>
@@ -445,7 +512,7 @@
               <select v-model="tradeDraft.targetTribeId">
                 <option value="">选择目标部落</option>
                 <option v-for="tribe in currentTribe.tradeTargets" :key="tribe.id" :value="tribe.id">
-                  {{ tribe.name }} · {{ tribe.tradeReputation?.title || '尚未建信' }}{{ tribe.marketPact ? ' · 互市约定' : '' }}{{ tribe.tradeCredit ? ` · ${tribe.tradeCredit.label}` : '' }}
+                  {{ tribe.name }} · {{ tribe.tradeReputation?.title || '尚未建信' }}{{ tribe.tribePersonality?.diplomacyText ? ` · ${tribe.tribePersonality.diplomacyText}` : '' }}{{ tribe.marketPact ? ' · 互市约定' : '' }}{{ tribe.tradeCredit ? ` · ${tribe.tradeCredit.label}` : '' }}
                 </option>
               </select>
               <select v-model="tradeDraft.offerResource">
@@ -457,6 +524,12 @@
               </select>
               <input v-model.number="tradeDraft.requestAmount" type="number" min="1" max="999" placeholder="换取数量" />
               <button class="tribe-mini-btn" @click="createTribeTrade">发布贸易</button>
+            </div>
+            <div class="tribe-trade-list" v-if="currentTribe.tradeTargets?.some((tribe) => tribe.tribePersonality?.traits?.length)">
+              <div v-for="tribe in currentTribe.tradeTargets.filter((item) => item.tribePersonality?.traits?.length)" :key="`${tribe.id}-personality`" class="tribe-trade-item">
+                <strong>{{ tribe.name }} · {{ tribe.tribePersonality.diplomacyText }}</strong>
+                <small>{{ tribe.tribePersonality.traits.map((trait) => `${trait.label}${trait.score || 0}`).join('、') }}</small>
+              </div>
             </div>
             <div class="tribe-trade-list" v-if="currentTribe.tradeRequests?.length">
               <div v-for="trade in currentTribe.tradeRequests" :key="trade.id" class="tribe-trade-item">
@@ -501,7 +574,7 @@
               <select v-model="apprenticeDraft.targetTribeId">
                 <option value="">选择友好部落</option>
                 <option v-for="tribe in currentTribe.apprenticeExchangeTargets" :key="tribe.id" :value="tribe.id">
-                  {{ tribe.name }} · {{ tribe.summary }}
+                  {{ tribe.name }} · {{ tribe.summary }}{{ tribe.tribePersonality?.diplomacyText ? ` · ${tribe.tribePersonality.diplomacyText}` : '' }}
                 </option>
               </select>
               <select v-model="apprenticeDraft.focusKey">
@@ -537,7 +610,7 @@
               <select v-model="guestStayDraft.targetTribeId">
                 <option value="">选择客居部落</option>
                 <option v-for="target in guestStayTargets" :key="target.id" :value="target.id">
-                  {{ target.name }} · {{ target.summary }}
+                  {{ target.name }} · {{ target.summary }}{{ target.tribePersonality?.diplomacyText ? ` · ${target.tribePersonality.diplomacyText}` : '' }}
                 </option>
               </select>
               <select v-model="guestStayDraft.actionKey">
@@ -613,7 +686,12 @@
                 <strong>{{ ledger.label || '灰烬账谱' }} · {{ ledger.publicShareCount || 0 }}次公开分配</strong>
                 <small>{{ ledger.summary }}</small>
                 <small v-if="ledger.rewardParts?.length">{{ ledger.rewardParts.join('、') }}</small>
+                <small v-if="ledger.promiseCount || ledger.usedPromiseCount">分配承诺：可用 {{ ledger.promiseCount || 0 }} / 已引用 {{ ledger.usedPromiseCount || 0 }}</small>
+                <small v-if="ledger.promises?.length">背书：{{ ledger.promises.map((item) => `${item.memberName || '成员'}${item.status === 'used' ? '已引用' : '待引用'}`).join('、') }}</small>
                 <small>剩余 {{ formatRemainingSeconds(ledger.activeUntil) || '即将散去' }}</small>
+                <div class="tribe-vote-actions">
+                  <button @click="endorseAshLedger(ledger.id)">背书分配承诺</button>
+                </div>
               </div>
             </div>
           </div>
@@ -726,6 +804,7 @@
                 <strong>{{ record.label }} · {{ record.status === 'fulfilled' ? '已揭示' : '已失约' }}</strong>
                 <small>{{ record.memberName || '成员' }} 的个人暗誓</small>
                 <small v-if="record.rewardParts?.length">{{ record.rewardParts.join('、') }}</small>
+                <small v-if="record.sourceChain?.length">来源链：{{ record.sourceChain.map((item) => item.memberName || item.label || item.sourceLabel).join(' / ') }}</small>
               </div>
             </div>
           </div>
@@ -889,8 +968,15 @@
                 <small v-if="tune.rewardParts?.length">{{ tune.rewardParts.join('、') }}</small>
                 <small>传唱谱系 {{ tune.lineageCount || 0 }} / {{ tune.lineageTarget || 3 }}<span v-if="tune.lineageLabels?.length"> · {{ tune.lineageLabels.join('、') }}</span></small>
                 <small v-if="tune.lineageBonusLabel">已解锁：{{ tune.lineageBonusLabel }}<span v-if="tune.lineageBonusSummary"> · {{ tune.lineageBonusSummary }}</span><span v-if="tune.lineageBonusActiveUntil"> · 剩余 {{ formatRemainingSeconds(tune.lineageBonusActiveUntil) || '即将结束' }}</span></small>
+                <div v-for="adoption in (tune.oldSongAdoptions || [])" :key="adoption.id" class="tribe-target-text">
+                  旧歌采信：{{ adoption.sourceLabel || '新近事件' }} · {{ adoption.bonusLabel || '曲牌加成' }} · 剩余 {{ formatRemainingSeconds(adoption.activeUntil) || '即将淡去' }}
+                </div>
                 <div class="tribe-vote-actions">
-                  <button v-for="action in travelerTuneLineageActionOptions" :key="`${tune.id}-${action.key}`" @click="referenceTravelerTune(tune.id, action.key)">
+                  <button
+                    v-for="action in travelerTuneLineageActionOptions.filter((item) => !item.oldSongAdoption || tune.oldSongAdoptions?.length)"
+                    :key="`${tune.id}-${action.key}`"
+                    @click="referenceTravelerTune(tune.id, action.key)"
+                  >
                     {{ action.label }}
                   </button>
                 </div>
@@ -1108,7 +1194,7 @@
                 <small>路线加成：收获 +{{ bonus.findsBonus || 0 }}<span v-if="bonus.foodReduction"> · 食物消耗 -{{ bonus.foodReduction }}</span></small>
               </div>
             </div>
-            <div class="tribe-trade-list" v-if="currentTribe.oralMapSources?.length || currentTribe.oralMapRecords?.length || currentTribe.oralMapLineages?.length || currentTribe.oralMapReferences?.length">
+            <div class="tribe-trade-list" v-if="currentTribe.oralMapSources?.length || currentTribe.oralMapRecords?.length || currentTribe.oralMapLineages?.length || currentTribe.oralMapReferences?.length || currentTribe.oralMapNarrators?.length">
               <div v-for="source in (currentTribe.oralMapSources || [])" :key="source.id" class="tribe-trade-item controlled-site-item cave-race-item">
                 <strong>{{ source.label || '可讲述旧痕' }} · 口述地图</strong>
                 <small>{{ source.summary }}</small>
@@ -1131,10 +1217,17 @@
                 <small>{{ lineage.bonusLabel || '后续行动加成' }}<span v-if="lineage.sourceLabels?.length"> · 来源：{{ lineage.sourceLabels.join('、') }}</span></small>
                 <small v-if="lineage.activeUntil">剩余 {{ formatRemainingSeconds(lineage.activeUntil) || '即将淡去' }}</small>
               </div>
+              <div v-for="narrator in (currentTribe.oralMapNarrators || [])" :key="narrator.id" class="tribe-trade-item controlled-site-item cave-race-item">
+                <strong>{{ narrator.memberName || '成员' }} · {{ narrator.title || '讲路师' }}</strong>
+                <small>{{ narrator.summary }}</small>
+                <small>引用 {{ narrator.referenceCount || 0 }} 次<span v-if="narrator.contexts?.length"> · 场景：{{ narrator.contexts.join('、') }}</span></small>
+                <small v-if="narrator.activeUntil">剩余 {{ formatRemainingSeconds(narrator.activeUntil) || '即将淡去' }}</small>
+              </div>
               <div v-for="reference in (currentTribe.oralMapReferences || [])" :key="reference.id" class="tribe-trade-item controlled-site-item cave-race-item">
                 <strong>{{ reference.actionLabel || '口述地图' }} · {{ reference.contextLabel || '引用' }}</strong>
-                <small>{{ reference.memberName || '成员' }} 引用到 {{ reference.outcomeLabel || '后续行动' }}</small>
+                <small>{{ reference.memberName || '成员' }} 引用到 {{ reference.outcomeLabel || '后续行动' }}<span v-if="reference.sourceMemberName"> · 原讲述：{{ reference.sourceMemberName }}</span></small>
                 <small v-if="reference.lineageCreated">形成 {{ reference.lineageCreated.label || '路线讲述谱系' }}</small>
+                <small v-if="reference.narratorTitle">获得 {{ reference.narratorTitle.title || '讲路师' }}</small>
               </div>
             </div>
             <div class="tribe-trade-list" v-if="currentTribe.nomadVisitors?.length">
@@ -1169,6 +1262,25 @@
                 <small>重访：{{ memory.rewardLabel || '小收益' }}</small>
                 <div class="tribe-vote-actions">
                   <button @click="revisitMapMemory(memory.id)">重访</button>
+                </div>
+              </div>
+            </div>
+            <div class="tribe-trade-list" v-if="currentTribe.mapTileTraces?.length">
+              <div v-for="trace in currentTribe.mapTileTraces" :key="trace.id" class="tribe-trade-item map-tile-trace-item">
+                <strong>{{ trace.label }} · 地块痕迹</strong>
+                <small>{{ trace.summary }}</small>
+                <small v-if="trace.impactLabel">影响：{{ trace.impactLabel }}</small>
+                <small v-if="trace.recoveryHint">恢复：{{ trace.recoveryHint }}</small>
+                <small>整理：{{ trace.rewardLabel || '小收益' }} · 强度 {{ trace.intensity || 1 }} · 剩余 {{ formatRemainingSeconds(trace.activeUntil) || '即将淡去' }}</small>
+                <div class="tribe-vote-actions celestial-branch-actions">
+                  <button
+                    v-for="action in mapTileTraceActions(trace)"
+                    :key="action.key"
+                    @click="settleMapTileTrace(trace.id, action.key)"
+                  >
+                    {{ action.label }}
+                  </button>
+                  <button v-if="!mapTileTraceActions(trace).length" @click="settleMapTileTrace(trace.id)">整理</button>
                 </div>
               </div>
             </div>
@@ -1308,6 +1420,21 @@
               <div v-for="record in (currentTribe.echoItemRecords || [])" :key="record.id" class="tribe-trade-item collection-wall-item">
                 <strong>{{ record.itemLabel }} · 转手</strong>
                 <small>{{ record.fromName || '成员' }} 传给 {{ record.toName || '成员' }}</small>
+              </div>
+              <div v-for="item in (currentTribe.lostItems || [])" :key="item.id" class="tribe-trade-item collection-wall-item">
+                <strong>{{ item.label || '漂流失物' }} · 失物漂流</strong>
+                <small>{{ item.summary }}</small>
+                <small>{{ item.originTribeName || '来源部落' }} · {{ item.sourceLabel || '旧事来源' }} · 剩余 {{ formatRemainingSeconds(item.activeUntil) || '即将漂走' }}</small>
+                <div class="tribe-vote-actions celestial-branch-actions">
+                  <button v-for="action in lostItemActions" :key="`${item.id}-${action.key}`" @click="resolveLostItem(item.id, action.key)">
+                    {{ action.label }}
+                  </button>
+                </div>
+              </div>
+              <div v-for="record in (currentTribe.lostItemRecords || [])" :key="record.id" class="tribe-trade-item collection-wall-item">
+                <strong>{{ record.label || '失物' }} · {{ record.actionLabel || '已处理' }}</strong>
+                <small>{{ record.memberName || '成员' }} 在 {{ record.actorTribeName || '部落' }} 处理了来自 {{ record.originTribeName || '来源部落' }} 的失物。</small>
+                <small>{{ record.sourceLabel || '旧事来源' }}<span v-if="record.rewardParts?.length"> · {{ record.rewardParts.join('、') }}</span><span v-if="record.collectionReady"> · 可作收藏来源</span></small>
               </div>
               <div v-for="candidate in (currentTribe.collectionCandidates || [])" :key="candidate.id" class="tribe-trade-item collection-wall-item">
                 <strong>{{ candidate.label }} · 可入收藏</strong>
@@ -1893,9 +2020,10 @@
                 <strong>{{ record.title }} · 律令记录</strong>
                 <small>{{ record.completedByName || '成员' }}完成补救<span v-if="record.lawLabel"> · {{ record.lawLabel }}</span></small>
                 <small v-if="record.rewardParts?.length">{{ record.rewardParts.join('、') }}</small>
+                <small v-if="record.sourceChain?.length">来源链：{{ record.sourceChain.map((item) => item.memberName || item.label || item.sourceLabel).join(' / ') }}</small>
               </div>
             </div>
-            <div class="tribe-trade-list" v-if="currentTribe.seasonTaboo || seasonTabooOptions.length || currentTribe.seasonTabooRemedies?.length || currentTribe.atonementTokens?.length">
+            <div class="tribe-trade-list" v-if="currentTribe.seasonTaboo || seasonTabooOptions.length || currentTribe.seasonTabooRemedies?.length || currentTribe.seasonTabooEvidence?.length || currentTribe.atonementTokens?.length">
               <div v-if="currentTribe.seasonTaboo" class="tribe-trade-item season-taboo-item">
                 <strong>{{ currentTribe.seasonTaboo.label }} · 祭典与禁忌季</strong>
                 <small>{{ currentTribe.seasonTaboo.summary }}</small>
@@ -1904,8 +2032,17 @@
                 <small v-if="currentTribe.seasonTaboo.observerNames?.length">践行者：{{ currentTribe.seasonTaboo.observerNames.join('、') }}</small>
                 <div class="tribe-vote-actions">
                   <button @click="observeSeasonTaboo">{{ currentTribe.seasonTaboo.observeLabel || '践行禁忌' }}</button>
-                  <button @click="breakSeasonTaboo">{{ currentTribe.seasonTaboo.breakLabel || '破戒取急用' }}</button>
+                  <button
+                    v-for="temptation in (currentTribe.seasonTaboo.temptationOptions || [{ key: '', label: currentTribe.seasonTaboo.breakLabel || '破戒取急用' }])"
+                    :key="temptation.key || 'default'"
+                    @click="breakSeasonTaboo(temptation.key)"
+                  >
+                    {{ temptation.label }}
+                  </button>
                 </div>
+                <small v-for="temptation in (currentTribe.seasonTaboo.temptationOptions || [])" :key="temptation.key">
+                  诱惑：{{ temptation.label }} · {{ temptation.rewardLabel || '短时优势' }} · 证据 {{ temptation.evidenceLabel || '破戒证据' }}<span v-if="temptation.lawHint"> · {{ temptation.lawHint }}</span>
+                </small>
               </div>
               <div v-for="option in seasonTabooOptions" :key="option.key" class="tribe-trade-item season-taboo-item">
                 <strong>{{ option.label }} · 可宣布</strong>
@@ -1920,10 +2057,23 @@
                 <strong>{{ remedy.title }} · {{ remedy.kind === 'season_atonement' ? '赎罪任务' : '季节补救' }}</strong>
                 <small>{{ remedy.summary }}</small>
                 <small v-if="remedy.sourceLabel">来源：{{ remedy.sourceLabel }}</small>
+                <small v-if="remedy.temptationLabel">诱惑：{{ remedy.temptationLabel }}</small>
                 <small>需求：食物 {{ remedy.foodCost || 0 }} / 木材 {{ remedy.woodCost || 0 }} · 奖励：声望 +{{ remedy.renownReward || 0 }}<span v-if="remedy.discoveryReward"> / 发现 +{{ remedy.discoveryReward }}</span><span v-if="remedy.tradeReward"> / 贸易 +{{ remedy.tradeReward }}</span><span v-if="remedy.relationDelta"> / 关系 {{ remedy.relationDelta > 0 ? '+' : '' }}{{ remedy.relationDelta }}</span><span v-if="remedy.tradeTrustDelta"> / 信任 +{{ remedy.tradeTrustDelta }}</span><span v-if="remedy.pressureRelief"> / 战压 -{{ remedy.pressureRelief }}</span></small>
                 <div class="tribe-vote-actions">
                   <button @click="completeSeasonTabooRemedy(remedy.id)">{{ remedy.kind === 'season_atonement' ? '赎罪' : '补救' }}</button>
                 </div>
+              </div>
+              <div v-for="evidence in (currentTribe.seasonTabooEvidence || [])" :key="evidence.id" class="tribe-trade-item season-taboo-item temptation-evidence">
+                <strong>{{ evidence.label }} · 破戒证据</strong>
+                <small>{{ evidence.summary }}</small>
+                <small>{{ evidence.tabooLabel || '季节禁忌' }}<span v-if="evidence.actorName"> · {{ evidence.actorName }}</span><span v-if="evidence.rewardLabel"> · {{ evidence.rewardLabel }}</span></small>
+                <small v-if="evidence.lawHint">{{ evidence.lawHint }}</small>
+                <small v-if="evidence.commonJudgeHint || evidence.mythClaimId || evidence.oldGrudgeHint">
+                  <span v-if="evidence.commonJudgeHint">{{ evidence.commonJudgeHint }}</span>
+                  <span v-if="evidence.mythClaimId"> · 已进入神话解释</span>
+                  <span v-if="evidence.oldGrudgeHint"> · {{ evidence.oldGrudgeHint }}</span>
+                </small>
+                <small>状态：{{ evidence.status === 'remedied' ? '已补救' : '公开中' }}<span v-if="evidence.remediedByName"> · 补救者 {{ evidence.remediedByName }}</span><span v-if="evidence.activeUntil"> · 剩余 {{ formatRemainingSeconds(evidence.activeUntil) || '即将淡去' }}</span></small>
               </div>
               <div v-for="token in (currentTribe.atonementTokens || [])" :key="token.id" class="tribe-trade-item atonement-token-item">
                 <strong>{{ token.title }} · {{ token.messengerReady ? '可护送' : '旧痕承认' }}</strong>
@@ -2302,6 +2452,17 @@
                   <strong>{{ currentTribe.standingRitual.label }} · 多人站位</strong>
                   <small>{{ currentTribe.standingRitual.summary }}</small>
                   <small>站位 {{ currentTribe.standingRitual.participantCount || 0 }} / {{ currentTribe.standingRitual.target || 3 }} · 至少 {{ currentTribe.standingRitual.minParticipants || 2 }} 人 · 剩余 {{ formatRemainingSeconds(currentTribe.standingRitual.activeUntil) || '即将结束' }}</small>
+                  <small v-if="currentTribe.standingRitual.puzzle">
+                    方位谜题：{{ currentTribe.standingRitual.puzzle.hintLabel }} · {{ currentTribe.standingRitual.puzzle.anchor?.label || '仪式中心' }} {{ currentTribe.standingRitual.puzzle.filledCount || 0 }} / {{ currentTribe.standingRitual.puzzle.target || 0 }}
+                    <template v-if="currentTribe.standingRitual.puzzle.missingLabels?.length"> · 还缺 {{ currentTribe.standingRitual.puzzle.missingLabels.join('、') }}</template>
+                  </small>
+                  <small v-if="currentTribe.standingRitual.puzzle?.hintSummary">{{ currentTribe.standingRitual.puzzle.hintSummary }}</small>
+                  <small v-for="hint in (currentTribe.standingRitual.puzzle?.contextHints || [])" :key="hint">{{ hint }}</small>
+                  <div class="standing-puzzle-slots" v-if="currentTribe.standingRitual.puzzle?.slots?.length">
+                    <span v-for="slot in currentTribe.standingRitual.puzzle.slots" :key="slot.key" :class="{ filled: slot.filled }">
+                      {{ slot.label }}<template v-if="slot.name"> · {{ slot.name }}</template>
+                    </span>
+                  </div>
                   <small v-if="standingRitualLandmarkBonusText(currentTribe.standingRitual)">地标加成：{{ standingRitualLandmarkBonusText(currentTribe.standingRitual) }}</small>
                   <small v-if="currentTribe.standingRitual.participants?.length">已站位：{{ standingParticipantText(currentTribe.standingRitual.participants) }}</small>
                   <div class="tribe-vote-actions standing-choice-actions">
@@ -2316,6 +2477,7 @@
                 <div v-for="option in standingRitualOptions" :key="option.key" class="tribe-trade-item standing-ritual-item">
                   <strong>{{ option.label }} · 可发起</strong>
                   <small>{{ option.summary }}</small>
+                  <small v-if="option.puzzleSummary">方位谜题：{{ option.puzzleSummary }}</small>
                   <small>目标 {{ currentTribe.standingRitualConfig?.target || 3 }} 人 · 至少 {{ currentTribe.standingRitualConfig?.minParticipants || 2 }} 人</small>
                   <small v-if="standingRitualLandmarkHint(option.key)">地标加成：{{ standingRitualLandmarkHint(option.key) }}</small>
                   <div class="tribe-vote-actions" v-if="canManageTribeTargets">

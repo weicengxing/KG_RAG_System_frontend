@@ -57,6 +57,10 @@
               <div class="quick-link-icon">🎮</div>
               <div class="quick-link-text">小游戏</div>
             </router-link>
+            <router-link to="/dual-fighter" class="quick-link">
+              <div class="quick-link-icon">⚔️</div>
+              <div class="quick-link-text">双人格斗</div>
+            </router-link>
           </div>
         </el-card>
         

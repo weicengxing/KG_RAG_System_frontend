@@ -97,6 +97,10 @@ const apprenticeDraft = ref({
   targetTribeId: '',
   focusKey: 'customs'
 })
+const personalTokenDraft = ref({
+  tokenKey: 'camp_help',
+  targetId: 'tribe'
+})
 const tribeRitualTick = ref(Date.now())
 const tribeHistoryFilter = ref('all')
 const tribeHistoryPageSize = 6
@@ -226,7 +230,7 @@ const tradeResourceOptions = Object.entries(tradeResourceLabels).map(([key, labe
 const tribeLandmarkDecorationTypes = new Set(['tribe_spawn', 'tribe_camp', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'controlled_resource_site', 'trade_route_site', 'nomad_caravan', 'nomad_visitor', 'world_event_remnant', 'diplomacy_council_site', 'map_memory_trace', 'standing_ritual_site'])
 const tribeInteractableTypes = ['tribe_storage', 'tribe_workbench', 'tribe_hut', 'tribe_fence', 'tribe_road', 'tribe_spawn', 'tribe_camp', 'tribe_totem', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'controlled_resource_site', 'trade_route_site', 'nomad_caravan', 'nomad_visitor', 'world_event_remnant', 'diplomacy_council_site', 'map_memory_trace', 'standing_ritual_site', 'migration_plan_site']
 const regionLandmarkTypes = ['region_forest', 'region_mountain', 'region_coast', 'region_ruin']
-const landmarkFallbackTypes = ['campfire', 'ruin', 'crystal', 'tribe_totem', 'tribe_storage', 'tribe_workbench', 'tribe_fence', 'tribe_road', 'tribe_spawn', 'tribe_camp', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'controlled_resource_site', 'trade_route_site', 'nomad_caravan', 'nomad_visitor', 'world_event_remnant', 'diplomacy_council_site', 'map_memory_trace', 'standing_ritual_site', 'migration_plan_site', 'cave_entrance', ...regionLandmarkTypes]
+const landmarkFallbackTypes = ['campfire', 'ruin', 'crystal', 'tribe_totem', 'tribe_storage', 'tribe_workbench', 'tribe_fence', 'tribe_road', 'tribe_spawn', 'tribe_camp', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'controlled_resource_site', 'trade_route_site', 'nomad_caravan', 'nomad_visitor', 'mutual_aid_alert', 'world_event_remnant', 'diplomacy_council_site', 'map_memory_trace', 'standing_ritual_site', 'migration_plan_site', 'cave_entrance', ...regionLandmarkTypes]
 const tribeBuildingTypeLabels = {
   tribe_totem: '图腾',
   tribe_storage: '仓库',
@@ -476,6 +480,7 @@ const describeLandmark = (landmark) => {
   if (landmark.type === 'trade_route_site') return landmark.isOwnTribe ? `交换通路 · ${landmark.partnerTribeName || '邻近部落'}` : '其他部落交换通路'
   if (landmark.type === 'nomad_caravan') return landmark.isOwnTribe ? `游牧商队 · ${landmark.focusLabel || '中立货物'}` : '其他部落接待的商队'
   if (landmark.type === 'nomad_visitor') return landmark.isOwnTribe ? `${landmark.label || '神秘旅人'} · ${landmark.giftLabel || '口信'}` : '其他部落来访者'
+  if (landmark.type === 'mutual_aid_alert') return landmark.isOwnTribe ? `${landmark.label || '火烟互助警报'} · ${landmark.sourceTitle || '紧急事件'}` : '其他部落的火烟警报'
   if (landmark.type === 'world_event_remnant') return landmark.isOwnTribe ? `${landmark.label || '事件余迹'} · ${landmark.rewardLabel || '可整理'}` : '其他部落事件余迹'
   if (landmark.type === 'map_memory_trace') return landmark.isOwnTribe ? `${landmark.label || '活地图记忆'} · ${landmark.rewardLabel || '可重访'}` : '其他部落地图记忆'
   if (landmark.type === 'tribe_totem' && landmark.oathLabel) return `${landmark.oathLabel}图腾`
@@ -698,6 +703,7 @@ const activeTribeCelestialWindow = computed(() => currentTribe.value?.celestialW
 const celestialBranchOptions = computed(() => activeTribeCelestialWindow.value?.branches || [])
 const weatherForecastSignOptions = computed(() => optionMapToList(currentTribe.value?.weatherForecastSigns))
 const weatherName = (weatherKey) => weatherMeta[weatherKey]?.label || weatherKey || '未知天气'
+const tribeLawOptions = computed(() => optionMapToList(currentTribe.value?.tribeLawOptions))
 
 const beastSpecialtyLabel = (specialtyKey) => {
   const specialtyLabels = {
@@ -932,10 +938,14 @@ const boundaryClass = (relation) => relation?.state ? `boundary-${relation.state
 const boundaryActionOptions = computed(() => optionMapToList(currentTribe.value?.boundaryActions))
 const diplomacyCouncilActionOptions = computed(() => optionMapToList(currentTribe.value?.diplomacyCouncilActions))
 const apprenticeExchangeActionOptions = computed(() => optionMapToList(currentTribe.value?.apprenticeExchangeActions))
+const personalTokenOptions = computed(() => optionMapToList(currentTribe.value?.personalTokenOptions))
 const emergencyChoiceActionOptions = computed(() => optionMapToList(currentTribe.value?.emergencyChoiceActions))
+const mutualAidActionOptions = computed(() => optionMapToList(currentTribe.value?.mutualAidActions))
 const caravanActionOptions = computed(() => optionMapToList(currentTribe.value?.caravanActions))
 const nomadVisitorActionOptions = computed(() => optionMapToList(currentTribe.value?.nomadVisitorActions))
 const nomadVisitorAftereffectActionOptions = computed(() => optionMapToList(currentTribe.value?.nomadVisitorAftereffectActions))
+const farReplyActionOptions = computed(() => optionMapToList(currentTribe.value?.farReplyActions))
+const tribeLawOptions = computed(() => optionMapToList(currentTribe.value?.tribeLawOptions))
 const activeBoundaryFlag = computed(() => {
   const entity = interactionTarget.value?.entity
   if (!entity || entity.type !== 'tribe_flag' || !isCurrentTribeEntity(entity) || !entity.boundaryRelation) return null
@@ -995,6 +1005,12 @@ const standingRitualOptions = computed(() => optionMapToList(currentTribe.value?
 const standingRitualStances = computed(() => optionMapToList(currentTribe.value?.standingRitualStances))
 const communalCookOptions = computed(() => optionMapToList(currentTribe.value?.communalCookOptions))
 const communalCookIngredients = computed(() => optionMapToList(currentTribe.value?.communalCookIngredients))
+const drumRhythmOptions = computed(() => optionMapToList(currentTribe.value?.drumRhythmOptions))
+const drumRhythmBeats = computed(() => optionMapToList(currentTribe.value?.drumRhythmBeats))
+const groupEmoteOptions = computed(() => optionMapToList(currentTribe.value?.groupEmoteActions))
+const nightOutingOptions = computed(() => optionMapToList(currentTribe.value?.nightOutingOptions))
+const trailMarkerTypes = computed(() => optionMapToList(currentTribe.value?.trailMarkerTypes))
+const trailMarkerActions = computed(() => optionMapToList(currentTribe.value?.trailMarkerActions))
 const standingRitualLandmarkBonuses = computed(() => {
   return currentTribe.value?.standingRitual?.landmarkBonuses || currentTribe.value?.standingRitualConfig?.landmarkBonuses || {}
 })
@@ -2149,6 +2165,36 @@ const revisitMapMemory = (memoryId) => {
   }
 }
 
+const createTrailMarker = (markerKey) => {
+  if (!currentTribe.value) {
+    showToast('请先加入部落')
+    return
+  }
+  if (!localPlayer) {
+    showToast('还没有当前位置')
+    return
+  }
+  const marker = trailMarkerTypes.value.find((item) => item.key === markerKey)
+  if (sendGameMessage({
+    type: 'tribe_create_trail_marker',
+    markerKey,
+    x: localPlayer.position.x,
+    z: localPlayer.position.z
+  })) {
+    triggerPlayerActionAnimation(markerKey === 'stone_cairn' ? 'gather' : 'ritual')
+    showToast(`已留下${marker?.label || '活路标'}`)
+  }
+}
+
+const updateTrailMarker = (markerId, actionKey) => {
+  if (!markerId || !actionKey) return
+  const action = trailMarkerActions.value.find((item) => item.key === actionKey)
+  if (sendGameMessage({ type: 'tribe_update_trail_marker', markerId, actionKey })) {
+    triggerPlayerActionAnimation(actionKey === 'break' ? 'gather' : 'ritual')
+    showToast(`路标${action?.label || '改写'}已提交`)
+  }
+}
+
 const supportMythClaim = (claimId, interpretationKey) => {
   if (!claimId || !interpretationKey) return
   const claim = currentTribe.value?.mythClaims?.find((item) => item.id === claimId)
@@ -2349,6 +2395,77 @@ const escortCovenantMessenger = (taskId) => {
   }
 }
 
+const sendMutualAidAlert = (source, targetTribeId) => {
+  if (!source?.sourceKind || !source?.sourceId || !targetTribeId) return
+  if (sendGameMessage({
+    type: 'tribe_send_mutual_aid_alert',
+    sourceKind: source.sourceKind,
+    sourceId: source.sourceId,
+    targetTribeId
+  })) {
+    triggerPlayerActionAnimation('guard')
+    const target = (source.targetTribes || []).find((item) => item.id === targetTribeId)
+    showToast(`已放出互助火烟：${target?.name || '友好部落'}`)
+  }
+}
+
+const answerMutualAidAlert = (alertId, actionKey) => {
+  if (!alertId || !actionKey) return
+  const action = mutualAidActionOptions.value.find((item) => item.key === actionKey)
+  if (sendGameMessage({ type: 'tribe_answer_mutual_aid_alert', alertId, actionKey })) {
+    triggerPlayerActionAnimation(actionKey === 'night_watch' ? 'guard' : (actionKey === 'send_supplies' ? 'gather' : 'cheer'))
+    showToast(`互助响应已提交：${action?.label || '回应火烟'}`)
+  }
+}
+
+const respondFarReply = (replyId, actionKey) => {
+  if (!replyId || !actionKey) return
+  const action = farReplyActionOptions.value.find((item) => item.key === actionKey)
+  if (sendGameMessage({ type: 'tribe_respond_far_reply', replyId, actionKey })) {
+    triggerPlayerActionAnimation(actionKey === 'clarify' ? 'ritual' : 'cheer')
+    showToast(`远方回信已回应：${action?.label || '回应'}`)
+  }
+}
+
+const createPersonalToken = () => {
+  if (!personalTokenDraft.value.tokenKey) {
+    showToast('先选择一种信物')
+    return
+  }
+  const option = personalTokenOptions.value.find((item) => item.key === personalTokenDraft.value.tokenKey)
+  if (sendGameMessage({
+    type: 'tribe_create_personal_token',
+    tokenKey: personalTokenDraft.value.tokenKey,
+    targetId: personalTokenDraft.value.targetId || 'tribe'
+  })) {
+    triggerPlayerActionAnimation('ritual')
+    showToast(`已交出信物：${option?.label || '个人信物'}`)
+  }
+}
+
+const redeemPersonalToken = (tokenId) => {
+  if (!tokenId) return
+  if (sendGameMessage({ type: 'tribe_redeem_personal_token', tokenId })) {
+    triggerPlayerActionAnimation('cheer')
+    showToast('正在兑现信物')
+  }
+}
+
+const callPersonalDebt = (tokenId) => {
+  if (!tokenId) return
+  if (sendGameMessage({ type: 'tribe_call_personal_debt', tokenId })) {
+    showToast('已追记为人情债')
+  }
+}
+
+const settlePersonalDebt = (taskId) => {
+  if (!taskId) return
+  if (sendGameMessage({ type: 'tribe_settle_personal_debt', taskId })) {
+    triggerPlayerActionAnimation('gather')
+    showToast('正在补偿人情债')
+  }
+}
+
 const completeWarAftermath = (aftermathId) => {
   if (!aftermathId) return
   if (sendGameMessage({ type: 'tribe_complete_war_aftermath', aftermathId })) {
@@ -2476,6 +2593,50 @@ const contributeCommunalCook = (ingredientKey) => {
   if (sendGameMessage({ type: 'tribe_contribute_communal_cook', ingredientKey })) {
     triggerPlayerActionAnimation(ingredientKey === 'story' ? 'cheer' : 'gather')
     showToast(`已贡献：${ingredient?.label || '补料'}`)
+  }
+}
+
+const startDrumRhythm = (rhythmKey) => {
+  const rhythm = drumRhythmOptions.value.find((item) => item.key === rhythmKey)
+  if (sendGameMessage({ type: 'tribe_start_drum_rhythm', rhythmKey })) {
+    triggerPlayerActionAnimation('ritual')
+    showToast(`已起鼓：${rhythm?.label || '鼓点节奏'}`)
+  }
+}
+
+const joinDrumRhythm = (beatKey) => {
+  const beat = drumRhythmBeats.value.find((item) => item.key === beatKey)
+  if (sendGameMessage({ type: 'tribe_join_drum_rhythm', beatKey })) {
+    triggerPlayerActionAnimation(beatKey === 'watch' ? 'guard' : beatKey === 'echo' ? 'ritual' : 'cheer')
+    showToast(`已应鼓：${beat?.label || '鼓拍'}`)
+  }
+}
+
+const completeDrumRhythm = () => {
+  const rhythm = currentTribe.value?.drumRhythm
+  if (sendGameMessage({ type: 'tribe_complete_drum_rhythm' })) {
+    triggerPlayerActionAnimation('cheer')
+    showToast(`正在收束：${rhythm?.label || '鼓点节奏'}`)
+  }
+}
+
+const performGroupEmote = (emoteKey) => {
+  const emote = groupEmoteOptions.value.find((item) => item.key === emoteKey)
+  if (sendGameMessage({ type: 'tribe_group_emote', emoteKey })) {
+    triggerPlayerActionAnimation(emote?.animation || 'cheer')
+    showToast(`已发起：${emote?.label || '群体动作'}`)
+  }
+}
+
+const startNightOuting = (optionKey) => {
+  const option = nightOutingOptions.value.find((item) => item.key === optionKey)
+  if (option?.available === false) {
+    showToast(option.lockedReason || '当前不能夜行')
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_start_night_outing', optionKey })) {
+    triggerPlayerActionAnimation(optionKey === 'torch' ? 'guard' : 'ritual')
+    showToast(`夜行出发：${option?.label || '夜路'}`)
   }
 }
 
@@ -2642,6 +2803,54 @@ const chooseSeasonCelebration = (choiceKey) => {
   }
 }
 
+const enactTribeLaw = (lawKey) => {
+  if (!canManageTribeTargets.value) {
+    showToast('只有首领或长老可以启用部落律令')
+    return
+  }
+  const option = tribeLawOptions.value.find((item) => item.key === lawKey)
+  if (sendGameMessage({ type: 'tribe_enact_law', lawKey })) {
+    triggerPlayerActionAnimation('ritual')
+    showToast(`部落律令已启用：${option?.label || '律令'}`)
+  }
+}
+
+const upholdTribeLaw = () => {
+  const law = currentTribe.value?.tribeLaw
+  if (!law) {
+    showToast('当前没有生效中的部落律令')
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_uphold_law' })) {
+    triggerPlayerActionAnimation('guard')
+    showToast(`已提交：${law.upholdLabel || '遵令行动'}`)
+  }
+}
+
+const breakTribeLaw = () => {
+  const law = currentTribe.value?.tribeLaw
+  if (!law) {
+    showToast('当前没有可以违背的部落律令')
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_break_law' })) {
+    triggerPlayerActionAnimation('conflict')
+    showToast(`已留下违令记录：${law.breakLabel || '违背律令'}`)
+  }
+}
+
+const completeLawRemedy = (remedyId) => {
+  const remedy = currentTribe.value?.tribeLawRemedies?.find((item) => item.id === remedyId)
+  if (!remedy) {
+    showToast('这条律令补救已经结束')
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_complete_law_remedy', remedyId })) {
+    triggerPlayerActionAnimation('gather')
+    showToast(`开始补救：${remedy.title || '律令补救'}`)
+  }
+}
+
 const chooseSeasonTaboo = (tabooKey) => {
   if (!canManageTribeTargets.value) {
     showToast('只有首领或长老可以宣布季节禁忌')
@@ -2777,6 +2986,50 @@ const observeWeatherSign = (signKey) => {
   if (sendGameMessage({ type: 'tribe_observe_weather_sign', signKey })) {
     triggerPlayerActionAnimation('ritual')
     showToast(`已观察天气迹象：${sign?.label || '风向预判'}`)
+  }
+}
+
+const enactTribeLaw = (lawKey) => {
+  if (!canManageTribeTargets.value) {
+    showToast('只有首领或长老可以启用部落律令')
+    return
+  }
+  const law = tribeLawOptions.value.find((item) => item.key === lawKey)
+  if (sendGameMessage({ type: 'tribe_enact_law', lawKey })) {
+    triggerPlayerActionAnimation('ritual')
+    showToast(`部落律令已启用：${law?.label || '法律牌'}`)
+  }
+}
+
+const upholdTribeLaw = () => {
+  const law = currentTribe.value?.tribeLaw
+  if (!law) {
+    showToast('当前没有生效中的部落律令')
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_uphold_law' })) {
+    triggerPlayerActionAnimation('guard')
+    showToast(`已提交：${law.upholdLabel || '遵守律令'}`)
+  }
+}
+
+const breakTribeLaw = () => {
+  const law = currentTribe.value?.tribeLaw
+  if (!law) {
+    showToast('当前没有生效中的部落律令')
+    return
+  }
+  if (sendGameMessage({ type: 'tribe_break_law' })) {
+    triggerPlayerActionAnimation('conflict')
+    showToast(`已公开违令：${law.breakLabel || '违背律令'}`)
+  }
+}
+
+const completeLawRemedy = (remedyId) => {
+  if (!remedyId) return
+  if (sendGameMessage({ type: 'tribe_complete_law_remedy', remedyId })) {
+    triggerPlayerActionAnimation('gather')
+    showToast('正在补救部落律令')
   }
 }
 
@@ -3159,12 +3412,17 @@ const setupPlayerModelAnimation = (player, model, clips) => {
 
 const updatePlayerAnimation = (player, delta, moving = false) => {
   const animation = player?.userData?.playerAnimation
-  if (!animation?.mixer) return
   const now = performance.now()
   const heldPose = player?.userData?.heldPoseUntil > now ? player.userData.heldPoseState : ''
-  const state = animation.actionUntil > now ? animation.actionState : (!moving && heldPose ? heldPose : (moving ? 'walk' : 'idle'))
+  const timedProp = player?.userData?.heldPropUntil > now ? player.userData.heldPropState : ''
+  if (!animation?.mixer) {
+    updatePlayerHeldProp(player, timedProp || heldPose)
+    return
+  }
+  const activeAction = animation.actionUntil > now ? animation.actionState : timedProp
+  const state = activeAction || (!moving && heldPose ? heldPose : (moving ? 'walk' : 'idle'))
   playPlayerAnimation(player, state)
-  updatePlayerHeldProp(player, animation.actionUntil > now ? animation.actionState : heldPose)
+  updatePlayerHeldProp(player, activeAction || heldPose)
   animation.mixer.update(delta)
 }
 
@@ -3175,6 +3433,10 @@ const playerMeshForId = (id) => {
 }
 
 const triggerPlayerActionAnimation = (state = 'gather', player = localPlayer) => {
+  if (player) {
+    player.userData.heldPropState = state
+    player.userData.heldPropUntil = performance.now() + (playerActionDurations[state] || 900)
+  }
   playPlayerAnimation(player, state, { reset: true, oneShot: true })
   updatePlayerHeldProp(player, state)
 }

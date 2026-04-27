@@ -56,6 +56,7 @@ const personalConflictStatus = ref({
   inspirationSourceName: '',
   inspirationContribution: 0,
   inspireMinRenown: 5,
+  personalRelations: [],
   identity: null
 })
 
@@ -97,12 +98,22 @@ const apprenticeDraft = ref({
   targetTribeId: '',
   focusKey: 'customs'
 })
+const guestStayDraft = ref({
+  targetTribeId: '',
+  actionKey: 'build_help'
+})
+const noTribeGuestStayTargets = ref([])
+const noTribeGuestStayActions = ref({})
 const personalTokenDraft = ref({
   tokenKey: 'camp_help',
   targetId: 'tribe'
 })
 const renownPledgeDraft = ref({
   pledgeKey: 'gather'
+})
+const namedLandmarkDraft = ref({
+  sourceKey: 'first_scout',
+  name: ''
 })
 const tribeRitualTick = ref(Date.now())
 const tribeHistoryFilter = ref('all')
@@ -230,10 +241,10 @@ const tradeResourceLabels = {
   food: '食物'
 }
 const tradeResourceOptions = Object.entries(tradeResourceLabels).map(([key, label]) => ({ key, label }))
-const tribeLandmarkDecorationTypes = new Set(['tribe_spawn', 'tribe_camp', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'controlled_resource_site', 'trade_route_site', 'nomad_caravan', 'nomad_visitor', 'world_event_remnant', 'diplomacy_council_site', 'celebration_echo', 'map_memory_trace', 'standing_ritual_site'])
-const tribeInteractableTypes = ['tribe_storage', 'tribe_workbench', 'tribe_hut', 'tribe_fence', 'tribe_road', 'tribe_spawn', 'tribe_camp', 'tribe_totem', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'controlled_resource_site', 'trade_route_site', 'nomad_caravan', 'nomad_visitor', 'world_event_remnant', 'diplomacy_council_site', 'celebration_echo', 'map_memory_trace', 'standing_ritual_site', 'migration_plan_site']
+const tribeLandmarkDecorationTypes = new Set(['tribe_spawn', 'tribe_camp', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'controlled_resource_site', 'trade_route_site', 'nomad_caravan', 'nomad_visitor', 'world_event_remnant', 'diplomacy_council_site', 'celebration_echo', 'map_memory_trace', 'world_riddle_site', 'rare_cave_race', 'cave_rescue_clue', 'standing_ritual_site', 'named_landmark'])
+const tribeInteractableTypes = ['tribe_storage', 'tribe_workbench', 'tribe_hut', 'tribe_fence', 'tribe_road', 'tribe_spawn', 'tribe_camp', 'tribe_totem', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'controlled_resource_site', 'trade_route_site', 'nomad_caravan', 'nomad_visitor', 'world_event_remnant', 'diplomacy_council_site', 'celebration_echo', 'map_memory_trace', 'world_riddle_site', 'rare_cave_race', 'cave_rescue_clue', 'standing_ritual_site', 'migration_plan_site', 'named_landmark']
 const regionLandmarkTypes = ['region_forest', 'region_mountain', 'region_coast', 'region_ruin']
-const landmarkFallbackTypes = ['campfire', 'ruin', 'crystal', 'tribe_totem', 'tribe_storage', 'tribe_workbench', 'tribe_fence', 'tribe_road', 'tribe_spawn', 'tribe_camp', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'controlled_resource_site', 'trade_route_site', 'nomad_caravan', 'nomad_visitor', 'mutual_aid_alert', 'world_event_remnant', 'diplomacy_council_site', 'celebration_echo', 'map_memory_trace', 'standing_ritual_site', 'migration_plan_site', 'cave_entrance', ...regionLandmarkTypes]
+const landmarkFallbackTypes = ['campfire', 'ruin', 'crystal', 'tribe_totem', 'tribe_storage', 'tribe_workbench', 'tribe_fence', 'tribe_road', 'tribe_spawn', 'tribe_camp', 'tribe_flag', 'tribe_beast_marker', 'scouted_resource_site', 'controlled_resource_site', 'trade_route_site', 'nomad_caravan', 'nomad_visitor', 'mutual_aid_alert', 'world_event_remnant', 'diplomacy_council_site', 'celebration_echo', 'map_memory_trace', 'world_riddle_site', 'rare_cave_race', 'cave_rescue_clue', 'standing_ritual_site', 'migration_plan_site', 'named_landmark', 'cave_entrance', ...regionLandmarkTypes]
 const tribeBuildingTypeLabels = {
   tribe_totem: '图腾',
   tribe_storage: '仓库',
@@ -487,6 +498,9 @@ const describeLandmark = (landmark) => {
   if (landmark.type === 'celebration_echo') return landmark.isOwnTribe ? `${landmark.label || '庆功余韵'} · ${landmark.rewardLabel || '可加入'}` : '其他部落庆功余韵'
   if (landmark.type === 'world_event_remnant') return landmark.isOwnTribe ? `${landmark.label || '事件余迹'} · ${landmark.rewardLabel || '可整理'}` : '其他部落事件余迹'
   if (landmark.type === 'map_memory_trace') return landmark.isOwnTribe ? `${landmark.label || '活地图记忆'} · ${landmark.rewardLabel || '可重访'}` : '其他部落地图记忆'
+  if (landmark.type === 'rare_cave_race') return landmark.isOwnTribe ? `${landmark.label || '稀有洞穴'} · 可抢首探` : '其他部落稀有洞穴线索'
+  if (landmark.type === 'cave_rescue_clue') return landmark.isOwnTribe ? `${landmark.label || '洞穴营救'} · ${landmark.progress || 0}/${landmark.target || 1}` : '其他部落洞穴营救线索'
+  if (landmark.type === 'named_landmark') return landmark.isOwnTribe ? `${landmark.label || '有名之地'} · ${landmark.sourceLabel || '部落命名'}` : '其他部落命名地标'
   if (landmark.type === 'tribe_totem' && landmark.oathLabel) return `${landmark.oathLabel}图腾`
   if (landmark.type === 'tribe_totem' && landmark.hasRuneHonor) return landmark.honorText
   return landmark.label || '未知地标'
@@ -709,6 +723,11 @@ const weatherForecastSignOptions = computed(() => optionMapToList(currentTribe.v
 const weatherName = (weatherKey) => weatherMeta[weatherKey]?.label || weatherKey || '未知天气'
 const tribeLawOptions = computed(() => optionMapToList(currentTribe.value?.tribeLawOptions))
 const sharedPuzzleOptions = computed(() => optionMapToList(currentTribe.value?.sharedPuzzleOptions))
+const worldRiddlePredictionOptions = computed(() => optionMapToList(currentTribe.value?.worldRiddlePredictions))
+const rumorTruthActions = computed(() => optionMapToList(currentTribe.value?.rumorTruthActions))
+const echoItemTypeOptions = computed(() => optionMapToList(currentTribe.value?.echoItemTypes))
+const echoItemExperienceOptions = computed(() => optionMapToList(currentTribe.value?.echoItemExperiences))
+const namedLandmarkOptions = computed(() => optionMapToList(currentTribe.value?.namedLandmarkOptions))
 
 const beastSpecialtyLabel = (specialtyKey) => {
   const specialtyLabels = {
@@ -817,6 +836,10 @@ const personalConflictText = computed(() => {
   if (inspirationTime) {
     const source = status.inspirationSourceName ? `${status.inspirationSourceName} ` : ''
     parts.push(`${source}鼓舞 +${status.inspirationContribution || 1} ${inspirationTime}`)
+  }
+  const relation = (status.personalRelations || [])[0]
+  if (relation?.targetName && relation?.label) {
+    parts.push(`${relation.label} ${relation.targetName} ${relation.score || 0}`)
   }
   return parts.join(' · ')
 })
@@ -941,8 +964,11 @@ const flagPatrolChainText = computed(() => {
 const tribeGatherBonus = computed(() => (activeTribeRitual.value?.gatherBonus || 0) + celebrationGatherBonus.value + oathGatherBonus.value)
 const boundaryClass = (relation) => relation?.state ? `boundary-${relation.state}` : ''
 const boundaryActionOptions = computed(() => optionMapToList(currentTribe.value?.boundaryActions))
+const boundaryTemperatureActionOptions = computed(() => optionMapToList(currentTribe.value?.boundaryTemperatureActions))
 const diplomacyCouncilActionOptions = computed(() => optionMapToList(currentTribe.value?.diplomacyCouncilActions))
 const apprenticeExchangeActionOptions = computed(() => optionMapToList(currentTribe.value?.apprenticeExchangeActions))
+const guestStayTargets = computed(() => currentTribe.value?.guestStayTargets || noTribeGuestStayTargets.value || [])
+const guestStayActionOptions = computed(() => optionMapToList(currentTribe.value?.guestStayActions || noTribeGuestStayActions.value))
 const personalTokenOptions = computed(() => optionMapToList(currentTribe.value?.personalTokenOptions))
 const renownPledgeOptions = computed(() => optionMapToList(currentTribe.value?.renownPledgeOptions))
 const emergencyChoiceActionOptions = computed(() => optionMapToList(currentTribe.value?.emergencyChoiceActions))
@@ -952,6 +978,8 @@ const nomadVisitorActionOptions = computed(() => optionMapToList(currentTribe.va
 const nomadVisitorAftereffectActionOptions = computed(() => optionMapToList(currentTribe.value?.nomadVisitorAftereffectActions))
 const farReplyActionOptions = computed(() => optionMapToList(currentTribe.value?.farReplyActions))
 const collectionActionOptions = computed(() => optionMapToList(currentTribe.value?.collectionActions))
+const caveRaceActionOptions = computed(() => optionMapToList(currentTribe.value?.caveRaceActions))
+const tribeCustomOptions = computed(() => optionMapToList(currentTribe.value?.tribeCustomOptions))
 const activeBoundaryFlag = computed(() => {
   const entity = interactionTarget.value?.entity
   if (!entity || entity.type !== 'tribe_flag' || !isCurrentTribeEntity(entity) || !entity.boundaryRelation) return null
@@ -1018,6 +1046,9 @@ const sacredFireDestinationOptions = computed(() => optionMapToList(currentTribe
 const sacredFireStepOptions = computed(() => optionMapToList(currentTribe.value?.sacredFireSteps))
 const mentorshipFocusOptions = computed(() => optionMapToList(currentTribe.value?.mentorshipFocusOptions))
 const nightOutingOptions = computed(() => optionMapToList(currentTribe.value?.nightOutingOptions))
+const dreamOmenSources = computed(() => currentTribe.value?.dreamOmenSources || [])
+const dreamOmenActions = computed(() => optionMapToList(currentTribe.value?.dreamOmenActions))
+const oldCampEchoActionOptions = computed(() => optionMapToList(currentTribe.value?.oldCampEchoActions))
 const trailMarkerTypes = computed(() => optionMapToList(currentTribe.value?.trailMarkerTypes))
 const trailMarkerActions = computed(() => optionMapToList(currentTribe.value?.trailMarkerActions))
 const neutralSanctuaryActions = computed(() => optionMapToList(currentTribe.value?.neutralSanctuaryActions))
@@ -1721,6 +1752,28 @@ const buildTribeInteraction = (entity) => {
     }
   }
 
+  if (entity.type === 'rare_cave_race') {
+    return {
+      entity,
+      label: entity.label || '短时稀有洞穴',
+      actionText: ownTribe ? '抢首探' : '观察',
+      rewardText: ownTribe
+        ? `${entity.summary || '短时岔洞正在开启'}；可在部落面板抢首探`
+        : `${tribeName}发现了稀有洞穴线索`
+    }
+  }
+
+  if (entity.type === 'cave_rescue_clue') {
+    return {
+      entity,
+      label: entity.label || '洞穴营救线索',
+      actionText: ownTribe ? '营救' : '观察',
+      rewardText: ownTribe
+        ? `${entity.missingMemberName || '队友'}留下线索，营救 ${entity.progress || 0}/${entity.target || 1}`
+        : `${tribeName}正在处理洞穴营救线索`
+    }
+  }
+
   if (entity.type === 'diplomacy_council_site') {
     const names = Array.isArray(entity.participantTribeNames) ? entity.participantTribeNames.join('、') : ''
     return {
@@ -1741,6 +1794,17 @@ const buildTribeInteraction = (entity) => {
       rewardText: ownTribe
         ? `${entity.summary || '营地留下了短时庆功队列'}；地点：${entity.anchorLabel || '营地地标'}；奖励：${entity.rewardLabel || '声望或发现'}`
         : `${tribeName}的营地正在庆功`
+    }
+  }
+
+  if (entity.type === 'named_landmark') {
+    return {
+      entity,
+      label: entity.label || '有名之地',
+      actionText: '查看',
+      rewardText: ownTribe
+        ? `${entity.summary || '这个名字已经写进部落地图'}；来源：${entity.sourceLabel || '部落命名'}`
+        : `${tribeName}把这里写成了有名之地`
     }
   }
 
@@ -2089,6 +2153,27 @@ const collectInteractionTarget = () => {
     return
   }
 
+  if (target.entity.type === 'world_riddle_site') {
+    showTribePanel.value = true
+    triggerPlayerActionAnimation('ritual')
+    showToast(isCurrentTribeEntity(target.entity) ? '世界谜语正在附近显现，可在部落面板提交预测' : '这是其他部落正在解读的世界谜语')
+    return
+  }
+
+  if (target.entity.type === 'rare_cave_race') {
+    showTribePanel.value = true
+    triggerPlayerActionAnimation('guard')
+    showToast(isCurrentTribeEntity(target.entity) ? '稀有洞穴短时开启，可在部落面板抢首探' : '这是其他部落的稀有洞穴线索')
+    return
+  }
+
+  if (target.entity.type === 'cave_rescue_clue') {
+    showTribePanel.value = true
+    triggerPlayerActionAnimation('guard')
+    showToast(isCurrentTribeEntity(target.entity) ? '洞穴营救线索已标出，可在部落面板循线营救' : '这是其他部落的洞穴营救线索')
+    return
+  }
+
   if (target.entity.type === 'diplomacy_council_site') {
     showTribePanel.value = true
     showToast(isCurrentTribeEntity(target.entity) ? '大议会会场已展开，可在部落面板选择议题' : '这是其他部落正在筹备的公开外交会场')
@@ -2104,6 +2189,11 @@ const collectInteractionTarget = () => {
       triggerPlayerActionAnimation('cheer')
       showToast(`已加入${target.entity.label || '庆功余韵'}`)
     }
+    return
+  }
+
+  if (target.entity.type === 'named_landmark') {
+    showToast(`${target.entity.label || '有名之地'}：${target.entity.summary || target.entity.sourceLabel || '部落地图已经记住这个名字'}`)
     return
   }
 
@@ -2198,6 +2288,22 @@ const revisitMapMemory = (memoryId) => {
   }
 }
 
+const claimCaveRace = (raceId) => {
+  if (!raceId) return
+  if (sendGameMessage({ type: 'tribe_claim_cave_race', raceId })) {
+    triggerPlayerActionAnimation('guard')
+    showToast('正在抢探短时稀有洞穴')
+  }
+}
+
+const advanceCaveRescue = (raceId) => {
+  if (!raceId) return
+  if (sendGameMessage({ type: 'tribe_advance_cave_rescue', raceId })) {
+    triggerPlayerActionAnimation('guard')
+    showToast('正在循线营救洞穴队友')
+  }
+}
+
 const createTrailMarker = (markerKey) => {
   if (!currentTribe.value) {
     showToast('请先加入部落')
@@ -2228,6 +2334,46 @@ const updateTrailMarker = (markerId, actionKey) => {
   }
 }
 
+const proposeNamedLandmark = () => {
+  if (!currentTribe.value) {
+    showToast('请先加入部落')
+    return
+  }
+  if (!localPlayer) {
+    showToast('还没有当前位置')
+    return
+  }
+  const name = namedLandmarkDraft.value.name.trim()
+  if (!name) {
+    showToast('先写下一个地名')
+    return
+  }
+  const source = namedLandmarkOptions.value.find((item) => item.key === namedLandmarkDraft.value.sourceKey)
+  if (!source?.available) {
+    showToast('部落还没有这种可命名的故事来源')
+    return
+  }
+  if (sendGameMessage({
+    type: 'tribe_propose_named_landmark',
+    sourceKey: source.key,
+    name,
+    x: localPlayer.position.x,
+    z: localPlayer.position.z
+  })) {
+    triggerPlayerActionAnimation('ritual')
+    showToast(`已提议地名：${name}`)
+    namedLandmarkDraft.value.name = ''
+  }
+}
+
+const supportNamedLandmark = (proposalId) => {
+  if (!proposalId) return
+  if (sendGameMessage({ type: 'tribe_support_named_landmark', proposalId })) {
+    triggerPlayerActionAnimation('cheer')
+    showToast('已支持这条地名')
+  }
+}
+
 const visitNeutralSanctuary = (sanctuaryId, actionKey) => {
   if (!sanctuaryId || !actionKey) return
   const action = neutralSanctuaryActions.value.find((item) => item.key === actionKey)
@@ -2243,6 +2389,31 @@ const curateCollectionWall = (candidateId, actionKey) => {
   if (sendGameMessage({ type: 'tribe_curate_collection_wall', candidateId, actionKey })) {
     triggerPlayerActionAnimation(actionKey === 'rubbing' ? 'gather' : 'ritual')
     showToast(`收藏墙已整理：${action?.label || '收藏'}`)
+  }
+}
+
+const createEchoItem = (itemKey) => {
+  const item = echoItemTypeOptions.value.find((option) => option.key === itemKey)
+  if (sendGameMessage({ type: 'tribe_create_echo_item', itemKey })) {
+    triggerPlayerActionAnimation(itemKey === 'stone_axe' ? 'gather' : 'ritual')
+    showToast(`回声物品成形：${item?.label || '旧物'}`)
+  }
+}
+
+const addEchoItemMemory = (itemId, experienceKey) => {
+  const experience = echoItemExperienceOptions.value.find((option) => option.key === experienceKey)
+  if (sendGameMessage({ type: 'tribe_add_echo_item_memory', itemId, experienceKey })) {
+    triggerPlayerActionAnimation(experienceKey === 'border' ? 'guard' : experienceKey === 'gather' ? 'gather' : 'ritual')
+    showToast(`已记录：${experience?.label || '物品经历'}`)
+  }
+}
+
+const transferEchoItem = (itemId, targetId) => {
+  if (!itemId || !targetId) return
+  const target = sortedTribeMembers.value.find((member) => member.id === targetId)
+  if (sendGameMessage({ type: 'tribe_transfer_echo_item', itemId, targetId })) {
+    triggerPlayerActionAnimation('cheer')
+    showToast(`已转交给 ${target?.name || '成员'}`)
   }
 }
 
@@ -2436,6 +2607,22 @@ const startApprenticeExchange = () => {
   })) {
     triggerPlayerActionAnimation(apprenticeDraft.value.focusKey === 'building' ? 'gather' : 'ritual')
     showToast(`已安排学徒交换：${focus?.label || '学徒交换'}`)
+  }
+}
+
+const startGuestStay = () => {
+  if (!guestStayDraft.value.targetTribeId) {
+    showToast('先选择客居营地')
+    return
+  }
+  const action = guestStayActionOptions.value.find((item) => item.key === guestStayDraft.value.actionKey)
+  if (sendGameMessage({
+    type: 'tribe_start_guest_stay',
+    targetTribeId: guestStayDraft.value.targetTribeId,
+    actionKey: guestStayDraft.value.actionKey
+  })) {
+    triggerPlayerActionAnimation(guestStayDraft.value.actionKey === 'relief_help' ? 'guard' : guestStayDraft.value.actionKey === 'market_help' ? 'cheer' : 'gather')
+    showToast(`短期客居已提交：${action?.label || '帮忙'}`)
   }
 }
 
@@ -2764,6 +2951,22 @@ const startNightOuting = (optionKey) => {
   if (sendGameMessage({ type: 'tribe_start_night_outing', optionKey })) {
     triggerPlayerActionAnimation(optionKey === 'torch' ? 'guard' : 'ritual')
     showToast(`夜行出发：${option?.label || '夜路'}`)
+  }
+}
+
+const startDreamOmen = (sourceId) => {
+  const source = dreamOmenSources.value.find((item) => item.id === sourceId)
+  if (sendGameMessage({ type: 'tribe_start_dream_omen', sourceId })) {
+    triggerPlayerActionAnimation('sit')
+    showToast(`共梦成形：${source?.label || '梦兆'}`)
+  }
+}
+
+const resolveDreamOmen = (actionKey) => {
+  const action = dreamOmenActions.value.find((item) => item.key === actionKey)
+  if (sendGameMessage({ type: 'tribe_resolve_dream_omen', actionKey })) {
+    triggerPlayerActionAnimation(actionKey === 'quiet' ? 'guard' : actionKey === 'share' ? 'cheer' : 'ritual')
+    showToast(`已处理共梦：${action?.label || '解梦'}`)
   }
 }
 
@@ -3112,6 +3315,14 @@ const completeLawRemedy = (remedyId) => {
   }
 }
 
+const commitTribeCustomPractice = (customKey) => {
+  const option = tribeCustomOptions.value.find((item) => item.key === customKey)
+  if (sendGameMessage({ type: 'tribe_commit_custom_practice', customKey })) {
+    triggerPlayerActionAnimation(customKey === 'warlike' ? 'guard' : customKey === 'merchant' ? 'cheer' : 'ritual')
+    showToast(`正在沉淀风俗：${option?.label || '部落风俗'}`)
+  }
+}
+
 const recordSharedPuzzleFragment = (sourceKey) => {
   const option = sharedPuzzleOptions.value.find((item) => item.key === sourceKey)
   if (!option?.available) {
@@ -3132,6 +3343,23 @@ const completeSharedPuzzle = () => {
   if (sendGameMessage({ type: 'tribe_complete_shared_puzzle' })) {
     triggerPlayerActionAnimation('cheer')
     showToast('正在拼合共享谜图')
+  }
+}
+
+const resolveRumorTruth = (rumorId, actionKey) => {
+  if (!rumorId || !actionKey) return
+  const action = rumorTruthActions.value.find((item) => item.key === actionKey)
+  if (sendGameMessage({ type: 'tribe_resolve_rumor_truth', rumorId, actionKey })) {
+    triggerPlayerActionAnimation(actionKey === 'counter' ? 'guard' : 'ritual')
+    showToast(`传闻处理已提交：${action?.label || '辨认真伪'}`)
+  }
+}
+
+const solveWorldRiddle = (riddleId, predictionKey) => {
+  const prediction = worldRiddlePredictionOptions.value.find((item) => item.key === predictionKey)
+  if (sendGameMessage({ type: 'tribe_solve_world_riddle', riddleId, predictionKey })) {
+    triggerPlayerActionAnimation('ritual')
+    showToast(`已提交谜语预测：${prediction?.label || '未知指向'}`)
   }
 }
 
@@ -3278,6 +3506,15 @@ const resolveBoundaryAction = (actionKey) => {
   if (sendGameMessage({ type: 'tribe_boundary_action', flagId: flag.id, actionKey })) {
     const label = boundaryActionOptions.value.find((item) => item.key === actionKey)?.label || '边界行动'
     showToast(`边界${label}已记录`)
+  }
+}
+
+const tuneBoundaryTemperature = (otherTribeId, actionKey) => {
+  if (!otherTribeId || !actionKey) return
+  const action = boundaryTemperatureActionOptions.value.find((item) => item.key === actionKey)
+  if (sendGameMessage({ type: 'tribe_tune_boundary_temperature', otherTribeId, actionKey })) {
+    triggerPlayerActionAnimation(actionKey === 'awe_watch' ? 'guard' : 'ritual')
+    showToast(`边界口风已整理：${action?.label || '口风'}`)
   }
 }
 
@@ -4251,7 +4488,8 @@ const handleServerMessage = (message) => {
       if (message.actionKey === 'inspire') {
         triggerPlayerActionById(message.actorId, 'cheer')
         const title = message.renownTitle?.title ? `「${message.renownTitle.title}」` : ''
-        const text = `${title}${message.actorName || '玩家'} 鼓舞了 ${message.targetName || '玩家'}，下次集结贡献 +${message.inspirationContribution || 1}`
+        const relationText = message.relationship?.label ? `，关系转为${message.relationship.label}` : ''
+        const text = `${title}${message.actorName || '玩家'} 鼓舞了 ${message.targetName || '玩家'}，下次集结贡献 +${message.inspirationContribution || 1}${relationText}`
         if (message.status && isActor) personalConflictStatus.value = { ...personalConflictStatus.value, ...message.status }
         if (message.targetStatus && isTarget) personalConflictStatus.value = { ...personalConflictStatus.value, ...message.targetStatus }
         if (isActor || isTarget) showToast(text)
@@ -4263,7 +4501,8 @@ const handleServerMessage = (message) => {
         ? `，${message.guardianName || message.targetName || '守势'}抵消了部分疲劳`
         : ''
       const trainingText = message.trainingReward ? `，切磋训练 +${message.trainingReward}${message.trainingBonus ? `（称号+${message.trainingBonus}）` : ''}` : ''
-      const text = `${message.actorName || '玩家'} 对 ${message.targetName || '玩家'} 发起${message.actionLabel || '冲突'}，${winnerText || '一方'}占了上风${guardText}${trainingText}`
+      const relationText = message.relationship?.label ? `，关系转为${message.relationship.label}` : ''
+      const text = `${message.actorName || '玩家'} 对 ${message.targetName || '玩家'} 发起${message.actionLabel || '冲突'}，${winnerText || '一方'}占了上风${guardText}${trainingText}${relationText}`
       triggerPlayerActionById(message.actorId, message.actionKey === 'spar' ? 'conflict' : 'conflict')
       if (message.guarded) triggerPlayerActionById(message.guardianId || message.targetId, 'guard')
       if (isActor || isTarget) showToast(text)
@@ -4364,6 +4603,8 @@ const handleServerMessage = (message) => {
       tribeRole.value = message.role || null
       tribeContribution.value = message.contribution || 0
       tribeVotes.value = Array.isArray(message.votes) ? message.votes : []
+      noTribeGuestStayTargets.value = Array.isArray(message.guestStayTargets) ? message.guestStayTargets : []
+      noTribeGuestStayActions.value = message.guestStayActions || {}
       resetTribeHistoryPage(message.tribe)
       if (message.tribe) pendingTribeJoinRequests.value = new Set()
       syncTribeAnnouncementDraft()

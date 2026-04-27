@@ -61,6 +61,8 @@ const markerAssetKeyForType = (type) => ({
   nomad_caravan: 'nomadCaravan',
   migration_plan_site: 'migrationSite',
   map_memory_trace: 'mapMemory',
+  rare_cave_race: 'caveEntrance',
+  cave_rescue_clue: 'mapMemory',
   world_event_remnant: 'worldEventRemnant',
   diplomacy_council_site: 'diplomacyCouncil',
   celebration_echo: 'standingRitual',
@@ -88,6 +90,8 @@ const markerTintForEntity = (entity) => {
   if (type === 'standing_ritual_site') return 0xb59cff
   if (type === 'named_landmark') return 0x7fe7ff
   if (type === 'map_memory_trace') return 0xb59cff
+  if (type === 'rare_cave_race') return 0x7dd3fc
+  if (type === 'cave_rescue_clue') return 0xfbbf24
   if (type === 'nomad_caravan') return 0xe6c77a
   if (type === 'trade_route_site') return entity?.isBorderMarket ? 0xffd675 : 0x7fe7ff
   if (type === 'controlled_resource_site') return 0xf8df7b
@@ -306,7 +310,7 @@ export function getEntityCollider(entity, globalSeed = 0) {
     return { id, type, x: entity.x || 0, z: entity.z || 0, radius: 2.2 * scale }
   }
 
-  if (type === 'scouted_resource_site' || type === 'controlled_resource_site' || type === 'trade_route_site' || type === 'nomad_caravan' || type === 'migration_plan_site' || type === 'world_event_remnant' || type === 'diplomacy_council_site' || type === 'celebration_echo' || type === 'map_memory_trace' || type === 'standing_ritual_site' || type === 'named_landmark') {
+  if (type === 'scouted_resource_site' || type === 'controlled_resource_site' || type === 'trade_route_site' || type === 'nomad_caravan' || type === 'migration_plan_site' || type === 'world_event_remnant' || type === 'diplomacy_council_site' || type === 'celebration_echo' || type === 'map_memory_trace' || type === 'rare_cave_race' || type === 'cave_rescue_clue' || type === 'standing_ritual_site' || type === 'named_landmark') {
     const scale = typeof entity.size === 'number' ? entity.size : 1
     return { id, type, x: entity.x || 0, z: entity.z || 0, radius: 1.8 * scale }
   }
@@ -1069,7 +1073,7 @@ export function createEntityMesh(entity, globalSeed = 0) {
     return polishModel(group, rng, { groundShadow: true, shadowRadius: 1.85 })
   }
 
-  if (type === 'scouted_resource_site' || type === 'controlled_resource_site' || type === 'trade_route_site' || type === 'nomad_caravan' || type === 'migration_plan_site' || type === 'world_event_remnant' || type === 'diplomacy_council_site' || type === 'celebration_echo' || type === 'map_memory_trace' || type === 'standing_ritual_site' || type === 'named_landmark') {
+  if (type === 'scouted_resource_site' || type === 'controlled_resource_site' || type === 'trade_route_site' || type === 'nomad_caravan' || type === 'migration_plan_site' || type === 'world_event_remnant' || type === 'diplomacy_council_site' || type === 'celebration_echo' || type === 'map_memory_trace' || type === 'rare_cave_race' || type === 'cave_rescue_clue' || type === 'standing_ritual_site' || type === 'named_landmark') {
     const group = new THREE.Group()
     const scale = typeof entity.size === 'number' ? entity.size : 1
     const tint = markerTintForEntity(entity)

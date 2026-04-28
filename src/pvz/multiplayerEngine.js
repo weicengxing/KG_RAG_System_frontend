@@ -14,8 +14,17 @@ const MULTIPLAYER_GRASS_COLOR = '#4a7c4e'
 const REMOTE_INTERPOLATION_DELAY_MS = 60
 const REMOTE_MAX_EXTRAPOLATION_MS = 180
 const REMOTE_POSITION_EPSILON = 0.1
+// Client-side prediction tuning. While the zombie side waits for the next delta
+// (50ms cadence) we keep stepping entities with their last known velocity. When
+// a delta arrives, small server-vs-local divergence is silently absorbed; only
+// noticeable drift triggers a smoothed correction.
+const PREDICTION_SOFT_RECONCILE_PX = 6   // ≤6px diff: snap to local prediction (no visible jump)
+const PREDICTION_HARD_SNAP_PX = 80       // >80px diff: hard snap (teleport / spawn)
+const PREDICTION_RECONCILE_DURATION_MS = 200  // 6..80px: ease back to authoritative over 200ms
 const SNAPSHOT_SEND_INTERVAL_MS = 500
 const STATE_DELTA_SEND_INTERVAL_MS = 50
+const MULTIPLAYER_INITIAL_SUN_ENERGY = gameConfig.multiplayer?.initialSunEnergy ?? 10000
+const MULTIPLAYER_INITIAL_ZOMBIE_ENERGY = gameConfig.multiplayer?.initialZombieEnergy ?? 10000
 
 const zombieTypeAlias = {
   basic: 'normal'
@@ -61,7 +70,7 @@ export class MultiplayerGameEngine extends GameEngine {
     this.role = role
     this.isAuthoritative = role === 'plant'
 
-    this.zombieEnergy = 10000
+    this.zombieEnergy = MULTIPLAYER_INITIAL_ZOMBIE_ENERGY
     this.selectedZombie = null
     this.lastBroadcastState = ''
     this.lastDeltaBroadcastState = ''
@@ -81,8 +90,8 @@ export class MultiplayerGameEngine extends GameEngine {
     this.isPaused = false
     this.gameOver = false
 
-    this.sunEnergy = 10000
-    this.zombieEnergy = 10000
+    this.sunEnergy = MULTIPLAYER_INITIAL_SUN_ENERGY
+    this.zombieEnergy = MULTIPLAYER_INITIAL_ZOMBIE_ENERGY
     this.score = 0
     this.wave = 1
     this.totalScore = 0
@@ -410,82 +419,97 @@ export class MultiplayerGameEngine extends GameEngine {
 
   updateRemoteVisuals(deltaTime) {
     const now = Date.now()
-    const renderTimestamp = now - REMOTE_INTERPOLATION_DELAY_MS
-    const zombieBlend = expSmoothing(deltaTime, 22)
-    const projectileBlend = expSmoothing(deltaTime, 28)
-    const mowerBlend = expSmoothing(deltaTime, 24)
 
+    // 1. Predict zombies forward using their server-reported speed/state.
+    //    This runs at 60fps, so we get smooth motion regardless of delta cadence.
     for (const zombie of this.zombies) {
-      if (zombie.state === 'WALKING' && typeof zombie.baseSpeed === 'number') {
-        let actualSpeed = zombie.baseSpeed
-        if (zombie.slowDuration > 0) {
-          zombie.slowDuration = Math.max(0, zombie.slowDuration - deltaTime)
-          actualSpeed *= zombie.slowFactor || 0.5
-        }
-
-        const moveStep = actualSpeed * deltaTime * 60
-        zombie.x += zombie.isCharmed ? moveStep : -moveStep
-      }
+      this._predictZombie(zombie, deltaTime, now)
     }
 
-    const advanceEntity = (entity, blend, props = ['x', 'y']) => {
-      const previousTimestamp = Number(
-        entity.previousSnapshotTimestamp ??
-        entity.lastSnapshotTimestamp ??
-        entity.snapshotTimestamp ??
-        renderTimestamp
-      )
-      const snapshotTimestamp = Number(
-        entity.lastSnapshotTimestamp ??
-        entity.snapshotTimestamp ??
-        previousTimestamp
-      )
-      const interpolationDuration = Math.max(snapshotTimestamp - previousTimestamp, 1)
-      const interpolationAlpha = clamp(
-        (renderTimestamp - previousTimestamp) / interpolationDuration,
-        0,
-        1
-      )
-      const extrapolationMs = clamp(renderTimestamp - snapshotTimestamp, 0, REMOTE_MAX_EXTRAPOLATION_MS)
-      const extrapolationSeconds = extrapolationMs / 1000
-
-      for (const prop of props) {
-        const targetProp = `${prop}Target`
-        const previousProp = `${prop}Previous`
-        const velocityProp = `${prop}Velocity`
-        if (typeof entity[targetProp] !== 'number') {
-          continue
-        }
-
-        const previousValue = typeof entity[previousProp] === 'number'
-          ? entity[previousProp]
-          : entity[targetProp]
-        const interpolatedTarget = previousValue + ((entity[targetProp] - previousValue) * interpolationAlpha)
-        const predictedTarget = extrapolationMs > 0
-          ? entity[targetProp] + ((entity[velocityProp] || 0) * extrapolationSeconds)
-          : interpolatedTarget
-        const currentValue = Number(entity[prop])
-        const nextValue = currentValue + ((predictedTarget - currentValue) * blend)
-        entity[prop] = Math.abs(predictedTarget - nextValue) <= REMOTE_POSITION_EPSILON
-          ? predictedTarget
-          : nextValue
-      }
-    }
-
-    for (const zombie of this.zombies) {
-      advanceEntity(zombie, zombieBlend)
-    }
-
+    // 2. Predict projectiles using their last known velocity.
     for (const projectile of this.projectileManager.projectiles) {
-      advanceEntity(projectile, projectileBlend)
+      this._predictBallistic(projectile, deltaTime, now)
     }
 
+    // 3. Lawn mowers: same ballistic model.
     for (const lawnMower of this.lawnMowers) {
-      advanceEntity(lawnMower, mowerBlend)
+      this._predictBallistic(lawnMower, deltaTime, now)
     }
+
+    // 4. Local fire-particle reconstruction (P3).
+    this._fireParticleAccum = (this._fireParticleAccum || 0) + deltaTime
+    if (this._fireParticleAccum > 0.05) {
+      this._fireParticleAccum = 0
+      const ps = this.projectileManager.getParticleSystem()
+      for (const projectile of this.projectileManager.projectiles) {
+        if (projectile.type === 'firePea') {
+          ps.emitFireParticles(projectile.x, projectile.y, 2)
+        }
+      }
+    }
+    this.projectileManager.getParticleSystem().update(deltaTime)
+  }
+
+  // Walk a zombie locally based on its last server-reported speed/state. If a
+  // pending reconciliation is set (server position diverged from local guess),
+  // ease toward it over PREDICTION_RECONCILE_DURATION_MS.
+  _predictZombie(zombie, deltaTime, now) {
+    if (zombie.state === 'WALKING' && typeof zombie.baseSpeed === 'number') {
+      let actualSpeed = zombie.baseSpeed
+      if (zombie.slowDuration > 0) {
+        zombie.slowDuration = Math.max(0, zombie.slowDuration - deltaTime)
+        actualSpeed *= zombie.slowFactor || 0.5
+      }
+      const moveStep = actualSpeed * deltaTime * 60
+      zombie.x += zombie.isCharmed ? moveStep : -moveStep
+    }
+    this._applyReconciliation(zombie, now)
+  }
+
+  // Move with last-known velocity (px/sec). Use *Velocity computed from the
+  // delta path so projectiles keep flying smoothly between deltas.
+  _predictBallistic(entity, deltaTime, now) {
+    if (typeof entity.xVelocity === 'number') entity.x += entity.xVelocity * deltaTime
+    if (typeof entity.yVelocity === 'number') entity.y += entity.yVelocity * deltaTime
+    this._applyReconciliation(entity, now)
+  }
+
+  // If the latest authoritative delta diverged from our prediction, smooth the
+  // gap over a short window. _reconcileEnd is set in mergeDeltaInPlace.
+  _applyReconciliation(entity, now) {
+    const end = entity._reconcileEnd
+    if (!end || now >= end) {
+      if (entity._reconcileEnd) {
+        entity._reconcileEnd = 0
+        entity._reconcileDx = 0
+        entity._reconcileDy = 0
+      }
+      return
+    }
+    // Remaining fraction of the correction window. Apply linear easing each
+    // frame: move a proportional chunk of the residual gap.
+    const start = entity._reconcileStart || (end - PREDICTION_RECONCILE_DURATION_MS)
+    const total = Math.max(1, end - start)
+    const remaining = Math.max(0, end - now)
+    // How much of the remaining gap to consume this frame.
+    const frameMs = Math.min(remaining, 16)
+    const frac = frameMs / Math.max(1, remaining)
+    const dx = (entity._reconcileDx || 0) * frac
+    const dy = (entity._reconcileDy || 0) * frac
+    entity.x += dx
+    entity.y += dy
+    entity._reconcileDx = (entity._reconcileDx || 0) - dx
+    entity._reconcileDy = (entity._reconcileDy || 0) - dy
+    // Suppress unused-warn on `total`.
+    void total
   }
 
   serializeGameState() {
+    // The whole payload is JSON.stringify'd by syncAuthoritativeState before send,
+    // so we do not need to deep-clone individual fields here. Returning live
+    // references is safe because nothing mutates them between this call and the
+    // synchronous send. Saves ~8 redundant JSON.parse(JSON.stringify(...)) round
+    // trips per snapshot, ~500ms cadence.
     return {
       version: 1,
       role: 'plant',
@@ -495,27 +519,31 @@ export class MultiplayerGameEngine extends GameEngine {
       sunEnergy: this.sunEnergy,
       zombieEnergy: this.zombieEnergy,
       autoCollectSun: this.autoCollectSun,
-      plants: this.plants.map((plant) => clonePlain(plant)),
-      zombies: this.zombies.map((zombie) => ({
-        ...clonePlain(zombie),
-        targetPlant: null,
-        targetZombie: null
-      })),
-      suns: clonePlain(this.suns),
-      lawnMowers: clonePlain(this.lawnMowers),
-      animations: clonePlain(this.animations),
-      messages: clonePlain(this.messages),
+      plants: this.plants,
+      zombies: this.zombies.map((zombie) => {
+        // Strip non-serializable references (Plant/Zombie object pointers).
+        const out = { ...zombie }
+        out.targetPlant = null
+        out.targetZombie = null
+        return out
+      }),
+      suns: this.suns,
+      lawnMowers: this.lawnMowers,
+      animations: this.animations,
+      messages: this.messages,
       projectiles: this.projectileManager.getProjectiles().map((projectile) => {
-        const snapshot = {}
-        for (const [key, value] of Object.entries(projectile)) {
+        const out = {}
+        for (const key in projectile) {
           if (!SNAPSHOT_PROJECTILE_KEYS_TO_DROP.has(key)) {
-            snapshot[key] = clonePlain(value)
+            out[key] = projectile[key]
           }
         }
-        return snapshot
+        return out
       }),
-      weaponStaffs: clonePlain(this.projectileManager.getWeaponStaffs()),
-      particles: clonePlain(this.projectileManager.getParticleSystem().getParticles()),
+      weaponStaffs: this.projectileManager.getWeaponStaffs(),
+      // particles intentionally NOT shipped — they are pure visual fluff that
+      // the zombie side reconstructs locally from firePea projectile positions
+      // (see spawnLocalParticlesForFireProjectiles).
       lightningChains: []
     }
   }
@@ -679,36 +707,44 @@ export class MultiplayerGameEngine extends GameEngine {
       }
     }
 
-    this.zombies = this.createSmoothedSnapshotEntities(
-      (snapshot.zombies || []).map((zombie) => ({
-        ...zombie,
-        snapshotTimestamp
-      })),
-      this.zombies,
-      'zombie'
-    )
+    this.mergeDeltaInPlace(this.zombies, snapshot.zombies || [], snapshotTimestamp)
     this.suns = snapshot.suns || []
-    this.lawnMowers = this.createSmoothedSnapshotEntities(
-      (snapshot.lawnMowers || []).map((lawnMower) => ({
-        ...lawnMower,
-        snapshotTimestamp
-      })),
-      this.lawnMowers,
-      'lawn-mower'
-    )
+    this.mergeDeltaInPlace(this.lawnMowers, snapshot.lawnMowers || [], snapshotTimestamp)
     this.animations = snapshot.animations || []
     this.messages = snapshot.messages || []
 
-    this.projectileManager.projectiles = this.createSmoothedSnapshotEntities(
-      (snapshot.projectiles || []).map((projectile) => ({
-        ...projectile,
-        snapshotTimestamp
-      })),
-      this.projectileManager.projectiles,
-      'projectile'
-    )
+    // Projectiles have no stable id (they're created/destroyed quickly).
+    // Wholesale-replace and seed velocity from x/y delta so prediction works.
+    const incomingProjectiles = snapshot.projectiles || []
+    const oldProjectilesByKey = new Map()
+    for (const p of this.projectileManager.projectiles) {
+      const key = `${p.type}:${Math.round((p.row ?? 0))}:${Math.round((p.x ?? 0) / 4)}`
+      if (!oldProjectilesByKey.has(key)) oldProjectilesByKey.set(key, p)
+    }
+    this.projectileManager.projectiles = incomingProjectiles.map((p) => {
+      const out = p
+      const key = `${out.type}:${Math.round((out.row ?? 0))}:${Math.round((out.x ?? 0) / 4)}`
+      const prev = oldProjectilesByKey.get(key)
+      if (prev) {
+        // Reuse local x for smoothness; carry forward velocity if available.
+        out.x = prev.x
+        out.y = prev.y
+        out.xVelocity = typeof prev.xVelocity === 'number' ? prev.xVelocity : (Number(out.speed) || 300)
+        out.yVelocity = prev.yVelocity || 0
+      } else {
+        // New projectile — fly rightward at its configured speed.
+        out.xVelocity = Number(out.speed) || 300
+        out.yVelocity = 0
+      }
+      return out
+    })
     this.projectileManager.weaponStaffs = snapshot.weaponStaffs || []
-    this.projectileManager.getParticleSystem().particles = snapshot.particles || []
+    // Particles are no longer shipped over the wire — preserve whatever the
+    // local visual reconstruction has produced. (Older payloads with `particles`
+    // are still honored to avoid breaking mid-upgrade sessions.)
+    if (Array.isArray(snapshot.particles)) {
+      this.projectileManager.getParticleSystem().particles = snapshot.particles
+    }
     this.lightningChain.activeChains = snapshot.lightningChains || []
   }
 
@@ -731,43 +767,74 @@ export class MultiplayerGameEngine extends GameEngine {
       seen.add(next.id)
       const idx = indexById.get(next.id)
       if (idx == null) {
-        // New entity: seed smoothing fields and append.
+        // New entity: seed prediction fields and append.
         for (const prop of props) {
           const v = Number(next[prop])
           next[`${prop}Target`] = v
           next[`${prop}Previous`] = v
           next[`${prop}Velocity`] = 0
         }
-        next.previousSnapshotTimestamp = snapshotTimestamp
         next.snapshotTimestamp = snapshotTimestamp
         next.lastSnapshotTimestamp = snapshotTimestamp
+        next._reconcileEnd = 0
+        next._reconcileDx = 0
+        next._reconcileDy = 0
         currentList.push(next)
         continue
       }
-      // Update existing entity in place. Copy scalar fields, refresh smoothing.
+      // Existing entity: copy non-position scalars; reconcile position.
       const cur = currentList[idx]
       const previousTimestamp = Number(cur.snapshotTimestamp ?? snapshotTimestamp)
       const elapsedSeconds = Math.max((snapshotTimestamp - previousTimestamp) / 1000, 0.001)
+
+      // Position reconciliation: compare server's authoritative position to
+      // wherever local prediction has drifted to. Small diff -> trust local.
+      // Big diff -> hard snap. Medium -> queue a smoothed correction.
       for (const prop of props) {
         const targetProp = `${prop}Target`
         const previousProp = `${prop}Previous`
         const velocityProp = `${prop}Velocity`
-        const nextValue = Number(next[prop])
-        const previousValue = Number(cur[targetProp] ?? cur[prop] ?? nextValue)
-        cur[previousProp] = previousValue
-        cur[targetProp] = nextValue
-        cur[velocityProp] = Number.isFinite(nextValue)
-          ? (nextValue - previousValue) / elapsedSeconds
+        const serverValue = Number(next[prop])
+        const previousServerValue = Number(cur[targetProp] ?? cur[prop] ?? serverValue)
+        cur[previousProp] = previousServerValue
+        cur[targetProp] = serverValue
+        cur[velocityProp] = Number.isFinite(serverValue)
+          ? (serverValue - previousServerValue) / elapsedSeconds
           : 0
       }
-      // Copy other scalar fields the delta provides without disturbing the
-      // smoothed `x/y` (which advanceEntity drives).
+      // Compute drift vs local prediction (only for x/y).
+      const dx = (Number(next.x) || 0) - (Number(cur.x) || 0)
+      const dy = (Number(next.y) || 0) - (Number(cur.y) || 0)
+      const distSq = dx * dx + dy * dy
+      if (distSq <= PREDICTION_SOFT_RECONCILE_PX * PREDICTION_SOFT_RECONCILE_PX) {
+        // Within tolerance — keep local prediction, no visible adjustment.
+        cur._reconcileEnd = 0
+        cur._reconcileDx = 0
+        cur._reconcileDy = 0
+      } else if (distSq >= PREDICTION_HARD_SNAP_PX * PREDICTION_HARD_SNAP_PX) {
+        // Big drift (likely teleport / state mismatch) — hard snap to server.
+        cur.x = Number(next.x) || cur.x
+        cur.y = Number(next.y) || cur.y
+        cur._reconcileEnd = 0
+        cur._reconcileDx = 0
+        cur._reconcileDy = 0
+      } else {
+        // Moderate drift — fold the gap in over PREDICTION_RECONCILE_DURATION_MS.
+        // Accumulate so back-to-back deltas don't lose pending corrections.
+        cur._reconcileDx = (cur._reconcileDx || 0) + dx
+        cur._reconcileDy = (cur._reconcileDy || 0) + dy
+        cur._reconcileStart = snapshotTimestamp
+        cur._reconcileEnd = snapshotTimestamp + PREDICTION_RECONCILE_DURATION_MS
+      }
+
+      // Copy other scalar fields the delta provides without touching x/y or
+      // smoothing bookkeeping.
       for (const key in next) {
         if (key === 'x' || key === 'y') continue
         if (props.includes(key)) continue
+        if (key.startsWith('_reconcile')) continue
         cur[key] = next[key]
       }
-      cur.previousSnapshotTimestamp = previousTimestamp
       cur.snapshotTimestamp = snapshotTimestamp
       cur.lastSnapshotTimestamp = snapshotTimestamp
     }

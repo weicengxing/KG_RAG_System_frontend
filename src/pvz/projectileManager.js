@@ -4,15 +4,21 @@ import { gameConfig, plantConfig, zombieConfig } from './config.js'
 class ParticleSystem {
   constructor() {
     this.particles = []
+    this.maxParticles = 80   // hard cap; oldest are dropped on overflow
   }
 
   // 发射火焰粒子
   emitFireParticles(x, y, count = 5) {
-    for (let i = 0; i < count; i++) {
+    // Skip emission entirely if we're at cap — newest are most relevant only
+    // when accompanied by old ones; once full, take a beat.
+    if (this.particles.length >= this.maxParticles) return
+    const room = this.maxParticles - this.particles.length
+    const actual = Math.min(count, room)
+    for (let i = 0; i < actual; i++) {
       const angle = Math.random() * Math.PI * 2
       const speed = Math.random() * 50 + 30
       const lifeTime = Math.random() * 0.3 + 0.2
-      
+
       this.particles.push({
         x: x,
         y: y,

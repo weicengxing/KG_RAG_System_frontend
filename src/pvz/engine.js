@@ -115,7 +115,7 @@ export class GameEngine {
     )
     
     // 游戏数据
-    this.sunEnergy = 1800
+    this.sunEnergy = gameConfig.initialSunEnergy
     this.score = 0
     this.wave = 1
     this.totalScore = 0
@@ -190,7 +190,7 @@ export class GameEngine {
   start() {
     this.isPlaying = true
     this.gameOver = false
-    this.sunEnergy = 180000
+    this.sunEnergy = gameConfig.initialSunEnergy
     this.score = 0
     this.wave = 1
     this.zombiesKilled = 0
@@ -442,32 +442,27 @@ export class GameEngine {
   
   // 游戏主循环
   gameLoop(currentTime = performance.now()) {
-    this._dbgLastLog ??= 0
-    if (currentTime - this._dbgLastLog > 1000) {
-      console.log('[loop]', {
-        isPlaying: this.isPlaying,
-        gameOver: this.gameOver,
-        plants: this.plants?.length,
-        zombies: this.zombies?.length,
-      })
-      this._dbgLastLog = currentTime
-    }
-    
     if (!this.isPlaying || this.gameOver) {
-      console.warn('[loop] early exit:', {
-        isPlaying: this.isPlaying,
-        gameOver: this.gameOver
-      })
       return
     }
-    
-    this.loopCount = (this.loopCount || 0) + 1
-    
-    this.deltaTime = (currentTime - this.lastTime) / 1000
+
+    // Frame-rate cap (~60fps). On 120/144Hz monitors, rAF would otherwise call
+    // us 2-2.4× more often than needed; we'd burn CPU re-rendering near-identical
+    // frames. Skip frames that arrive sooner than ~16ms after the last paint.
+    const elapsed = currentTime - this.lastTime
+    if (elapsed < 15) {
+      if (!this._boundGameLoop) {
+        this._boundGameLoop = (time) => this.gameLoop(time)
+      }
+      requestAnimationFrame(this._boundGameLoop)
+      return
+    }
+
+    this.deltaTime = elapsed / 1000
     this.lastTime = currentTime
-    
+
     if (this.deltaTime > 0.1) this.deltaTime = 0.1
-    
+
     try {
       this.update(this.deltaTime)
       this.render()
@@ -476,8 +471,11 @@ export class GameEngine {
       this.isPlaying = false
       return
     }
-    
-    requestAnimationFrame((time) => this.gameLoop(time))
+
+    if (!this._boundGameLoop) {
+      this._boundGameLoop = (time) => this.gameLoop(time)
+    }
+    requestAnimationFrame(this._boundGameLoop)
   }
   
   // 更新逻辑
@@ -893,28 +891,8 @@ export class GameEngine {
   
   // 渲染
   render() {
-    this._dbgRenderLast ??= 0
-    const now = performance.now()
-    if (now - this._dbgRenderLast > 1000) {
-      console.log('[render data]', {
-        grid: this.grid ? 'ok' : 'null',
-        plants: this.plants?.length,
-        zombies: this.zombies?.length,
-      })
-      this._dbgRenderLast = now
-    }
-    
     this.ctx.clearRect(0, 0, this.width, this.height)
-    
-    // 画一个肉眼可见的调试点
-    this.ctx.save()
-    this.ctx.fillStyle = '#ff0000'
-    this.ctx.font = '20px Arial'
-    this.ctx.fillText(`DBG ${Math.floor(performance.now()) % 10000}`, 10, 30)
-    this.ctx.fillStyle = '#00ff00'
-    this.ctx.fillRect(10, 40, 20, 20)
-    this.ctx.restore()
-    
+
     // 原有渲染
     
     this.renderer.drawGrid(this.grid)
@@ -928,20 +906,6 @@ export class GameEngine {
     this.renderer.drawLightningChains(this.lightningChain.getActiveChains())
     this.renderer.drawAnimations(this.animations)
     this.renderer.drawMessages(this.messages)
-    
-    // 调试：在 render 末尾添加日志检查闪电链数据
-    const chains = this.lightningChain.getActiveChains()
-    if (chains.length > 0) {
-      console.log('[闪电链调试]', {
-        chainsCount: chains.length,
-        firstChain: chains[0] ? {
-          jumpsCount: chains[0].jumps?.length,
-          currentJump: chains[0].currentJump,
-          isComplete: chains[0].isComplete,
-          firstJumpSegments: chains[0].jumps?.[0]?.segments?.length
-        } : null
-      })
-    }
   }
   
   // 更新植物
@@ -950,14 +914,6 @@ export class GameEngine {
     plantLoop: for (let i = this.plants.length - 1; i >= 0; i--) {
       const plant = this.plants[i]
       const config = plantConfig[plant.type]
-      
-      // [LOG1] 西瓜投手进入 updatePlants 循环
-      if (plant.type === 'watermelon' || plant.type === 'iceWatermelon') {
-        console.log('[LOG1] 西瓜投手进入 updatePlants, type:', plant.type, 
-                    'row:', plant.row, 'col:', plant.col,
-                    'attackTimer:', plant.attackTimer?.toFixed(2), 
-                    'interval:', config.attackInterval)
-      }
 
       // 魅惑菇逻辑：检测僵尸接触
       if (plant.type === 'hypnoShroom' && !plant.hasTriggered) {
@@ -1059,14 +1015,7 @@ export class GameEngine {
         if (plant.attackTimer >= config.attackInterval) {
           const row = Math.floor((plant.y + plant.height / 2) / gameConfig.cellHeight)
           const hasZombie = this.hasZombieInRow(row, plant.x)
-          
-          // [DEBUG] 西瓜投手攻击检测
-          console.log('[西瓜投手调试] 植物:', plant.type, '行:', row, '位置:', Math.round(plant.x), Math.round(plant.y), '有僵尸:', hasZombie, '僵尸数量:', this.zombies.length)
-          this.zombies.forEach((z, i) => {
-            const zRow = Math.floor((z.y + z.height / 2) / gameConfig.cellHeight)
-            console.log('  僵尸['+i+']: 类型='+z.type+', 行='+zRow+', x='+Math.round(z.x)+', y='+Math.round(z.y))
-          })
-          
+
           if (hasZombie) {
             plant.attackTimer = 0
             this.shootWatermelon(plant)

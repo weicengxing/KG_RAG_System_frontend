@@ -15,6 +15,7 @@
         <button @click="toggleMute" class="control-btn">{{ isMuted ? '🔇' : '🔊' }}</button>
         <button @click="showAchievements = true" class="control-btn">🏆 成就</button>
         <button @click="showStats = true" class="control-btn">📊 统计</button>
+        <button v-if="isVip" @click="openPvzConfigPanel" class="vip-config-btn">VIP配置</button>
         <button @click="goToMultiplayerRoom" class="multiplayer-btn">👥 双人模式</button>
         <button @click="goToPlantSelection" class="start-btn">{{ isPlaying ? '重新开始' : '开始游戏' }}</button>
       </div>
@@ -137,20 +138,93 @@
       </div>
     </div>
 
+    <!-- VIP配置面板 -->
+    <div v-if="showPvzConfigPanel" class="modal-overlay" @click="showPvzConfigPanel = false">
+      <div class="modal-content pvz-config-modal" @click.stop>
+        <div class="pvz-config-header">
+          <div>
+            <h2>VIP配置面板</h2>
+            <p>修改后会保存为全局配置，下一局会完整应用。</p>
+          </div>
+          <button class="config-icon-btn" @click="showPvzConfigPanel = false" aria-label="关闭">×</button>
+        </div>
+
+        <div v-if="pvzConfigLoading" class="config-loading">配置加载中...</div>
+        <div v-else class="config-editor">
+          <section class="config-section">
+            <h3>初始值与全局参数</h3>
+            <div class="game-config-grid">
+              <label v-for="field in editableGameFields" :key="field.key" class="config-field">
+                <span>{{ field.label }}</span>
+                <input
+                  v-model.number="pvzConfigForm.game[field.key]"
+                  type="number"
+                  :step="field.step"
+                  :min="field.min"
+                />
+              </label>
+            </div>
+          </section>
+
+          <section class="config-section">
+            <h3>植物属性</h3>
+            <div class="config-table">
+              <div v-for="plant in plantConfigRows" :key="plant.id" class="config-row">
+                <div class="config-row-title">
+                  <span class="config-row-icon">{{ plant.icon }}</span>
+                  <span>{{ plant.name }}</span>
+                </div>
+                <label v-for="field in plant.fields" :key="`${plant.id}-${field}`" class="config-field compact">
+                  <span>{{ getConfigFieldLabel(field) }}</span>
+                  <input v-model.number="pvzConfigForm.plants[plant.id][field]" type="number" step="0.1" />
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <section class="config-section">
+            <h3>僵尸属性</h3>
+            <div class="config-table">
+              <div v-for="zombie in zombieConfigRows" :key="zombie.id" class="config-row">
+                <div class="config-row-title">
+                  <span class="config-row-icon">{{ zombie.icon }}</span>
+                  <span>{{ zombie.name }}</span>
+                </div>
+                <label v-for="field in zombie.fields" :key="`${zombie.id}-${field}`" class="config-field compact">
+                  <span>{{ getConfigFieldLabel(field) }}</span>
+                  <input v-model.number="pvzConfigForm.zombies[zombie.id][field]" type="number" step="0.1" />
+                </label>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="config-actions">
+          <button class="secondary-config-btn" @click="buildPvzConfigForm">恢复当前值</button>
+          <button class="primary-config-btn" :disabled="pvzConfigSaving" @click="savePvzConfig">
+            {{ pvzConfigSaving ? '保存中...' : '保存配置' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { GameEngine } from '../pvz/engine.js'
-import { plantConfig, gameConfig } from '../pvz/config.js'
+import { plantConfig, zombieConfig, gameConfig } from '../pvz/config.js'
+import request from '../utils/request.js'
+import { applyPvzConfigOverrides, flattenGameConfig, loadPvzRuntimeConfig } from '../pvz/configOverrides.js'
 
 const router = useRouter()
 const route = useRoute()
 
 const gameCanvas = ref(null)
-const sunEnergy = ref(1800)
+const sunEnergy = ref(gameConfig.initialSunEnergy)
 const score = ref(0)
 const wave = ref(1)
 const maxWaves = ref(gameConfig.waveConfigs.length)
@@ -167,6 +241,15 @@ const isShovelMode = ref(false)
 // 弹窗状态
 const showAchievements = ref(false)
 const showStats = ref(false)
+const isVip = ref(false)
+const showPvzConfigPanel = ref(false)
+const pvzConfigLoading = ref(false)
+const pvzConfigSaving = ref(false)
+const pvzConfigForm = ref({
+  plants: {},
+  zombies: {},
+  game: {}
+})
 
 // 成就和统计
 const achievements = ref({})
@@ -179,26 +262,216 @@ const stats = ref({
 const gameEngine = ref(null)
 const updateInterval = ref(null)
 
+const defaultPlantIds = [
+  'sunflower',
+  'peashooter',
+  'repeater',
+  'snowPea',
+  'nutWall',
+  'cherryBomb',
+  'watermelon',
+  'iceWatermelon',
+  'kiwi',
+  'cannon',
+  'fireStump',
+  'jalapeno',
+  'squash',
+  'potatoMine',
+  'thunderMelon',
+  'dragonKale',
+  'hypnoShroom'
+]
+
+const editableGameFields = [
+  { key: 'initialSunEnergy', label: '单人初始阳光', min: 0, step: 1 },
+  { key: 'multiplayerInitialSunEnergy', label: '双人植物初始阳光', min: 0, step: 1 },
+  { key: 'multiplayerInitialZombieEnergy', label: '双人僵尸初始能量', min: 0, step: 1 },
+  { key: 'sunFallInterval', label: '自然阳光间隔(秒)', min: 0, step: 0.1 },
+  { key: 'zombieSpawnInterval', label: '僵尸生成间隔(秒)', min: 0, step: 0.1 },
+  { key: 'sunLifeTime', label: '阳光存在时间(秒)', min: 0, step: 0.1 },
+  { key: 'sunValue', label: '阳光数值', min: 0, step: 1 },
+  { key: 'gridCols', label: '列数', min: 1, step: 1 },
+  { key: 'gridRows', label: '行数', min: 1, step: 1 },
+  { key: 'cellWidth', label: '格子宽度', min: 1, step: 1 },
+  { key: 'cellHeight', label: '格子高度', min: 1, step: 1 }
+]
+
+const configFieldLabels = {
+  cost: '费用',
+  hp: '生命',
+  damage: '伤害',
+  cooldown: '冷却',
+  attackInterval: '攻击间隔',
+  projectileSpeed: '弹速',
+  speed: '速度',
+  shieldHp: '护盾',
+  attackDamage: '啃咬伤害',
+  produceInterval: '生产间隔',
+  produceAmount: '生产数量',
+  width: '宽度',
+  height: '高度',
+  slowDuration: '减速时间',
+  slowFactor: '减速系数',
+  explodeDelay: '爆炸延迟',
+  explodeRadius: '爆炸半径',
+  gravity: '重力',
+  rotationSpeed: '旋转速度',
+  staffDamage: '法杖伤害',
+  staffLifeTime: '法杖时间',
+  staffAttackInterval: '法杖间隔',
+  staffRadius: '法杖半径',
+  sleepDuration: '准备时间',
+  gridWidth: '占用宽',
+  gridHeight: '占用高',
+  triggerDistance: '触发距离',
+  jumpDuration: '跳跃时间',
+  projectileCount: '弹数量',
+  projectileDelay: '弹间隔',
+  damageIncrement: '伤害递增',
+  lightningRange: '闪电范围',
+  maxJumps: '跳跃次数',
+  bladeDamage: '刀片伤害',
+  bladeCount: '刀片数量',
+  shieldDamageMultiplier: '破盾倍率',
+  dragonDamage: '龙息伤害',
+  dragonRadius: '龙息半径',
+  bladeSpeed: '刀片速度',
+  bladeRotationSpeed: '刀片转速',
+  bladeAngleChange: '角度变化',
+  jumpSpeed: '跳跃速度',
+  poleDistance: '撑杆距离'
+}
+
+const getConfigFieldLabel = (field) => configFieldLabels[field] || field
+
+const getNumericFields = (config) => Object.keys(config).filter((key) => (
+  typeof config[key] === 'number' && Number.isFinite(config[key])
+))
+
+const plantConfigRows = computed(() => Object.entries(plantConfig).map(([id, config]) => ({
+  id,
+  name: config.name || id,
+  icon: config.icon || '',
+  fields: getNumericFields(config)
+})).filter((row) => row.fields.length > 0))
+
+const zombieConfigRows = computed(() => Object.entries(zombieConfig).map(([id, config]) => ({
+  id,
+  name: config.name || id,
+  icon: config.icon || '',
+  fields: getNumericFields(config)
+})).filter((row) => row.fields.length > 0))
+
+const cloneNumericConfig = (source) => {
+  const result = {}
+  Object.entries(source).forEach(([id, config]) => {
+    result[id] = {}
+    getNumericFields(config).forEach((field) => {
+      result[id][field] = config[field]
+    })
+  })
+  return result
+}
+
+const normalizeNumericConfig = (source) => {
+  const result = {}
+  Object.entries(source || {}).forEach(([id, values]) => {
+    const cleanValues = {}
+    Object.entries(values || {}).forEach(([field, value]) => {
+      const numberValue = Number(value)
+      if (Number.isFinite(numberValue)) {
+        cleanValues[field] = numberValue
+      }
+    })
+    if (Object.keys(cleanValues).length > 0) {
+      result[id] = cleanValues
+    }
+  })
+  return result
+}
+
+const normalizeGameConfig = (source) => {
+  const result = {}
+  editableGameFields.forEach(({ key }) => {
+    const numberValue = Number(source?.[key])
+    if (Number.isFinite(numberValue)) {
+      result[key] = numberValue
+    }
+  })
+  return result
+}
+
+const refreshSelectedPlantsFromConfig = (plantIds = defaultPlantIds) => {
+  selectedPlants.value = plantIds
+    .filter((id) => plantConfig[id])
+    .map((id) => ({
+      id,
+      ...plantConfig[id]
+    }))
+}
+
 // 可选择的植物
-const selectedPlants = ref([
-  { id: 'sunflower', ...plantConfig.sunflower },
-  { id: 'peashooter', ...plantConfig.peashooter },
-  { id: 'repeater', ...plantConfig.repeater },
-  { id: 'snowPea', ...plantConfig.snowPea },
-  { id: 'nutWall', ...plantConfig.nutWall },
-  { id: 'cherryBomb', ...plantConfig.cherryBomb },
-  { id: 'watermelon', ...plantConfig.watermelon },
-  { id: 'iceWatermelon', ...plantConfig.iceWatermelon },
-  { id: 'kiwi', ...plantConfig.kiwi },
-  { id: 'cannon', ...plantConfig.cannon },
-  { id: 'fireStump', ...plantConfig.fireStump },
-  { id: 'jalapeno', ...plantConfig.jalapeno },
-  { id: 'squash', ...plantConfig.squash },
-  { id: 'potatoMine', ...plantConfig.potatoMine },
-  { id: 'thunderMelon', ...plantConfig.thunderMelon },
-  { id: 'dragonKale', ...plantConfig.dragonKale },
-  { id: 'hypnoShroom', ...plantConfig.hypnoShroom }
-])
+const selectedPlants = ref([])
+refreshSelectedPlantsFromConfig()
+
+const buildPvzConfigForm = () => {
+  pvzConfigForm.value = {
+    plants: cloneNumericConfig(plantConfig),
+    zombies: cloneNumericConfig(zombieConfig),
+    game: normalizeGameConfig(flattenGameConfig())
+  }
+}
+
+const fetchPvzConfig = async () => {
+  pvzConfigLoading.value = true
+  try {
+    const data = await loadPvzRuntimeConfig()
+    isVip.value = Boolean(data?.is_vip)
+    refreshSelectedPlantsFromConfig()
+    buildPvzConfigForm()
+    if (!gameEngine.value) {
+      sunEnergy.value = gameConfig.initialSunEnergy
+    }
+  } catch (error) {
+    console.error('加载PVZ配置失败:', error)
+    buildPvzConfigForm()
+  } finally {
+    pvzConfigLoading.value = false
+  }
+}
+
+const openPvzConfigPanel = () => {
+  buildPvzConfigForm()
+  showPvzConfigPanel.value = true
+}
+
+const savePvzConfig = async () => {
+  if (!isVip.value) {
+    ElMessage.warning('此功能仅限VIP用户使用')
+    return
+  }
+
+  pvzConfigSaving.value = true
+  try {
+    const response = await request.put('/pvz/config', {
+      plants: normalizeNumericConfig(pvzConfigForm.value.plants),
+      zombies: normalizeNumericConfig(pvzConfigForm.value.zombies),
+      game: normalizeGameConfig(pvzConfigForm.value.game)
+    })
+    applyPvzConfigOverrides(response.data?.data || {})
+    refreshSelectedPlantsFromConfig()
+    buildPvzConfigForm()
+    if (!gameEngine.value) {
+      sunEnergy.value = gameConfig.initialSunEnergy
+    }
+    ElMessage.success(response.data?.message || '配置已保存')
+  } catch (error) {
+    console.error('保存PVZ配置失败:', error)
+    ElMessage.error(error.response?.data?.detail || '配置保存失败')
+  } finally {
+    pvzConfigSaving.value = false
+  }
+}
 
 // 暂停/继续
 const togglePause = () => {
@@ -426,10 +699,7 @@ const initGame = () => {
   // 检查路由参数中是否有植物列表
   if (route.query.plants) {
     const plantIds = route.query.plants.split(',')
-    selectedPlants.value = plantIds.map(id => ({
-      id,
-      ...plantConfig[id]
-    }))
+    refreshSelectedPlantsFromConfig(plantIds)
     
     // 自动开始游戏
     setTimeout(() => {
@@ -450,7 +720,8 @@ const handleDragStart = (e, plantId) => {
 }
 
 // 生命周期
-onMounted(() => {
+onMounted(async () => {
+  await fetchPvzConfig()
   initGame()
   refreshStats()
 })
@@ -858,9 +1129,189 @@ onUnmounted(() => {
   box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);
 }
 
+.pvz-config-modal {
+  max-width: 1120px;
+  width: min(94vw, 1120px);
+  padding: 24px;
+}
+
+.pvz-config-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.pvz-config-header h2 {
+  margin: 0 0 6px 0;
+  text-align: left;
+}
+
+.pvz-config-header p {
+  margin: 0;
+  color: #6b7280;
+  font-size: 0.95rem;
+}
+
+.config-icon-btn {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  border: none;
+  border-radius: 8px;
+  background: #f3f4f6;
+  color: #374151;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.config-loading {
+  padding: 28px;
+  text-align: center;
+  color: #4b5563;
+}
+
+.config-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.config-section h3 {
+  margin: 0 0 12px 0;
+  color: #1f2937;
+  font-size: 1.1rem;
+}
+
+.game-config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.config-table {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.config-row {
+  display: grid;
+  grid-template-columns: 170px repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.config-row-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  color: #111827;
+  font-weight: 700;
+}
+
+.config-row-icon {
+  font-size: 1.5rem;
+}
+
+.config-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.config-field span {
+  color: #4b5563;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.config-field input {
+  width: 100%;
+  height: 36px;
+  padding: 6px 8px;
+  color: #111827;
+  background: white;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  outline: none;
+}
+
+.config-field input:focus {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.16);
+}
+
+.config-field.compact input {
+  height: 34px;
+}
+
+.config-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.primary-config-btn,
+.secondary-config-btn,
+.vip-config-btn {
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+  transition: all 0.3s ease;
+}
+
+.primary-config-btn,
+.secondary-config-btn {
+  padding: 10px 18px;
+  font-size: 1rem;
+}
+
+.primary-config-btn {
+  color: white;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
+.primary-config-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.secondary-config-btn {
+  color: #374151;
+  background: #e5e7eb;
+}
+
+.vip-config-btn {
+  padding: 8px 16px;
+  color: #111827;
+  background: linear-gradient(135deg, #facc15 0%, #f59e0b 100%);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.35);
+}
+
+.vip-config-btn:hover,
+.primary-config-btn:hover,
+.secondary-config-btn:hover,
+.config-icon-btn:hover {
+  transform: translateY(-2px);
+}
+
 /* 控制按钮样式 */
 .header-buttons {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
 }
@@ -975,6 +1426,14 @@ onUnmounted(() => {
 
   .start-btn {
     width: 100%;
+  }
+
+  .config-row {
+    grid-template-columns: 1fr;
+  }
+
+  .config-actions {
+    flex-direction: column;
   }
 
   .game-canvas {

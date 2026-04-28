@@ -20,13 +20,16 @@
             class="plant-slot"
             :class="{
               selected: selectedPlant === plant.id,
-              disabled: sunEnergy < plant.cost
+              disabled: sunEnergy < plant.cost || isPlantCoolingDown(plant.id)
             }"
             @click="selectPlant(plant.id)"
           >
             <span class="plant-icon">{{ plant.icon }}</span>
             <span class="plant-name">{{ plant.name }}</span>
             <span class="plant-cost">{{ plant.cost }}</span>
+            <div v-if="isPlantCoolingDown(plant.id)" class="cooldown-overlay">
+              <span class="cooldown-text">{{ getPlantCooldown(plant.id) }}s</span>
+            </div>
           </div>
         </div>
       </div>
@@ -70,7 +73,7 @@
 
           <div class="info-item">
             <span class="info-label">房间</span>
-            <span class="info-value">{{ roomId }}</span>
+            <span class="info-value room-code" :title="roomId">{{ roomId }}</span>
           </div>
           <div class="info-item">
             <span class="info-label">角色</span>
@@ -126,20 +129,20 @@ const role = ref('')
 const connectionStatus = ref('连接中...')
 const latency = ref(0)
 const gameCanvas = ref(null)
+const initialSunEnergy = gameConfig.multiplayer?.initialSunEnergy ?? 10000
+const initialZombieEnergy = gameConfig.multiplayer?.initialZombieEnergy ?? 10000
 
-const sunEnergy = ref(10000)
+const sunEnergy = ref(initialSunEnergy)
 const selectedPlant = ref(null)
 const selectedPlantsList = ref([])
+const plantCooldowns = ref({})
 
-const zombieEnergy = ref(10000)
+const zombieEnergy = ref(initialZombieEnergy)
 const selectedZombie = ref(null)
 const selectedZombiesList = ref([])
 
-const plants = ref([])
-const zombies = ref([])
-const fallingSuns = ref([])
-const lawnMowers = ref([])
-const animations = ref([])
+// Engine entity arrays are owned by `gameEngine` directly. We don't mirror
+// them into Vue refs — see syncEngineState comment.
 
 const zombieTypeAlias = {
   basic: 'normal'
@@ -193,13 +196,14 @@ const applySelectionsFromQuery = () => {
 const syncEngineState = () => {
   if (!gameEngine) return
 
+  // Only mirror the few fields the template actually reads (resource counters
+  // + selection). Previously this also did `[...gameEngine.zombies]` etc, which
+  // wrapped every entity in a Vue reactive Proxy on the zombie side. After the
+  // wrap, every 60fps prediction tick wrote through Proxy traps — death by a
+  // thousand cuts. The arrays are unused by the template, so just drop them.
   sunEnergy.value = gameEngine.sunEnergy
   zombieEnergy.value = gameEngine.zombieEnergy
-  plants.value = [...gameEngine.plants]
-  zombies.value = [...gameEngine.zombies]
-  fallingSuns.value = [...gameEngine.suns]
-  lawnMowers.value = [...gameEngine.lawnMowers]
-  animations.value = [...gameEngine.animations]
+  plantCooldowns.value = { ...gameEngine.plantCooldowns }
 
   if (!gameEngine.selectedPlant) {
     selectedPlant.value = ''
@@ -207,6 +211,15 @@ const syncEngineState = () => {
   if (!gameEngine.selectedZombie) {
     selectedZombie.value = ''
   }
+}
+
+const getPlantCooldown = (plantId) => {
+  const cooldown = Number(plantCooldowns.value[plantId] || 0)
+  return Math.max(0, cooldown).toFixed(1)
+}
+
+const isPlantCoolingDown = (plantId) => {
+  return Number(plantCooldowns.value[plantId] || 0) > 0
 }
 
 const maybeBroadcastAuthorityState = () => {
@@ -314,8 +327,8 @@ const handleServerMessage = async (message) => {
   switch (message.type) {
     case 'event.connected':
       role.value = message.payload.role
-      sunEnergy.value = 10000
-      zombieEnergy.value = 10000
+      sunEnergy.value = initialSunEnergy
+      zombieEnergy.value = initialZombieEnergy
 
       await ensureCanvasSize()
 
@@ -355,6 +368,9 @@ const handleServerMessage = async (message) => {
         gameEngine.isPlaying = false
       }
       ElMessage.success(`游戏结束，${winnerText}获胜`)
+      if (message.payload.room_closed) {
+        goBack()
+      }
       break
     }
 
@@ -437,6 +453,11 @@ const redirectToSelection = () => {
 }
 
 const selectPlant = (plantType) => {
+  if (isPlantCoolingDown(plantType)) {
+    ElMessage.warning('植物冷却中')
+    return
+  }
+
   if (!gameEngine || !isAuthority.value) {
     selectedPlant.value = plantType
     return
@@ -472,6 +493,15 @@ const handleCanvasClick = (event) => {
 
   if (isAuthority.value && selectedPlant.value) {
     if (col >= 0 && col < gameConfig.gridCols && row >= 0 && row < gameConfig.gridRows) {
+      if (isPlantCoolingDown(selectedPlant.value)) {
+        ElMessage.warning('植物冷却中')
+        selectedPlant.value = ''
+        if (gameEngine) {
+          gameEngine.selectedPlant = null
+        }
+        return
+      }
+
       const planted = gameEngine.plant(col, row, selectedPlant.value)
       if (planted) {
         selectedPlant.value = ''
@@ -511,7 +541,7 @@ const declareGameOver = async () => {
 
   try {
     await ElMessageBox.confirm(
-      '确定要结束游戏吗？',
+      '确定要认输并结束游戏吗？房间会立即解散。',
       '确认',
       {
         confirmButtonText: '确定',
@@ -523,8 +553,7 @@ const declareGameOver = async () => {
     ws.send(JSON.stringify({
       type: 'game_over',
       payload: {
-        winner: role.value === 'plant' ? 'plant' : 'zombie',
-        reason: `${role.value} player declared game over`
+        reason: `${role.value}_surrender`
       }
     }))
   } catch {
@@ -665,6 +694,8 @@ onUnmounted(() => {
 
 .plant-slot,
 .zombie-slot {
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -721,6 +752,25 @@ onUnmounted(() => {
   color: #ef4444;
 }
 
+.cooldown-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.68);
+  color: white;
+  font-weight: 800;
+  pointer-events: none;
+}
+
+.cooldown-text {
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  font-size: 0.95rem;
+}
+
 .game-canvas {
   flex: 1;
   overflow: hidden;
@@ -736,14 +786,18 @@ onUnmounted(() => {
 }
 
 .info-panel {
-  width: 180px;
-  padding: 20px;
+  flex: 0 0 220px;
+  width: 220px;
+  min-width: 0;
+  padding: 18px;
+  overflow: hidden;
 }
 
 .panel-content {
   display: flex;
   flex-direction: column;
   align-items: stretch;
+  gap: 10px;
 }
 
 .panel-content .info-item {
@@ -781,12 +835,15 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 16px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.18);
 }
 
 .info-item:last-child {
-  border-bottom: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .info-label {
@@ -796,10 +853,20 @@ onUnmounted(() => {
 }
 
 .info-value {
-  font-size: 1.2rem;
+  max-width: 100%;
+  font-size: 1rem;
   font-weight: 700;
   color: white;
   text-align: center;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.room-code {
+  font-family: Consolas, Monaco, 'Courier New', monospace;
+  font-size: 0.82rem;
+  letter-spacing: 0;
 }
 
 .info-value.sun {
@@ -890,6 +957,7 @@ onUnmounted(() => {
   }
 
   .info-panel {
+    flex: none;
     display: flex;
     justify-content: space-around;
     flex-wrap: wrap;

@@ -1,4 +1,4 @@
-const APP_ENV = String(import.meta.env.VITE_APP_ENV || '1')
+const APP_ENV = String(import.meta.env.VITE_APP_ENV || '2')
 
 const trimTrailingSlash = (value) => {
   if (!value || typeof value !== 'string') return ''

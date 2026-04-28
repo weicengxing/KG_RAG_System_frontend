@@ -1,10 +1,47 @@
 import { gameConfig, plantConfig, zombieConfig } from './config.js'
 import { LightningRenderer } from './lightningSystem.js'
 
+// Static plant background palette. Module-level constant — no per-frame switch.
+const PLANT_PALETTE = {
+  sunflower:   { bg: '#4ade80', border: '#22c55e' },
+  peashooter:  { bg: '#4ade80', border: '#22c55e' },
+  snowPea:     { bg: '#93c5fd', border: '#3b82f6' },
+  nutWall:     { bg: '#d97706', border: '#92400e' },
+  cherryBomb:  { bg: '#ef4444', border: '#dc2626' },
+  watermelon:  { bg: '#16a34a', border: '#15803d' },
+  iceWatermelon: { bg: '#60a5fa', border: '#2563eb' },
+  kiwi:        { bg: '#a3e635', border: '#84cc16' },
+  cannon:      { bg: '#fbbf24', border: '#f59e0b' },
+  jalapeno:    { bg: '#ff4500', border: '#dc2626' },
+  squash:      { bg: '#f97316', border: '#ea580c' },
+  potatoMine:  { bg: '#eab308', border: '#ca8a04' },
+}
+const PLANT_PALETTE_DEFAULT = { bg: '#4ade80', border: '#22c55e' }
+
 // 渲染器类
 export class Renderer {
   constructor(ctx) {
     this.ctx = ctx
+    // Pre-rendered offscreen sprites keyed by name. The buckethead icon is
+    // ~20 path operations per draw — painting it once into a sprite and then
+    // drawImage-ing each frame is far cheaper.
+    this._spriteCache = new Map()
+  }
+
+  // Lazily build (or fetch) a 64x64 offscreen sprite for an icon. `paint`
+  // receives a centered 2D context that draws in the same coordinate space as
+  // the original Math (origin at sprite center, scale 1).
+  _getIconSprite(name, paint, size = 64) {
+    let sprite = this._spriteCache.get(name)
+    if (sprite) return sprite
+    sprite = document.createElement('canvas')
+    sprite.width = size
+    sprite.height = size
+    const ictx = sprite.getContext('2d')
+    ictx.translate(size / 2, size / 2)
+    paint(ictx)
+    this._spriteCache.set(name, sprite)
+    return sprite
   }
   
   // 绘制网格
@@ -36,70 +73,19 @@ export class Renderer {
   
   // 绘制植物
   drawPlants(plants) {
+    // Hoist text state — set once per frame instead of once per plant.
+    this.ctx.textAlign = 'center'
+    this.ctx.textBaseline = 'middle'
     for (const plant of plants) {
       const config = plantConfig[plant.type]
-      
-      // 根据植物类型选择背景颜色
-      let bgColor
-      let borderColor
-      switch (plant.type) {
-        case 'sunflower':
-          bgColor = '#4ade80'
-          borderColor = '#22c55e'
-          break
-        case 'peashooter':
-          bgColor = '#4ade80'
-          borderColor = '#22c55e'
-          break
-        case 'snowPea':
-          bgColor = '#93c5fd'
-          borderColor = '#3b82f6'
-          break
-        case 'nutWall':
-          bgColor = '#d97706'
-          borderColor = '#92400e'
-          break
-        case 'cherryBomb':
-          bgColor = '#ef4444'
-          borderColor = '#dc2626'
-          break
-        case 'watermelon':
-          bgColor = '#16a34a'
-          borderColor = '#15803d'
-          break
-        case 'iceWatermelon':
-          bgColor = '#60a5fa'
-          borderColor = '#2563eb'
-          break
-        case 'kiwi':
-          bgColor = '#a3e635'
-          borderColor = '#84cc16'
-          break
-        case 'cannon':
-          bgColor = '#fbbf24'
-          borderColor = '#f59e0b'
-          break
-        case 'jalapeno':
-          bgColor = '#ff4500'
-          borderColor = '#dc2626'
-          break
-        case 'squash':
-          bgColor = '#f97316'
-          borderColor = '#ea580c'
-          break
-        case 'potatoMine':
-          bgColor = '#eab308'
-          borderColor = '#ca8a04'
-          break
-        default:
-          bgColor = '#4ade80'
-          borderColor = '#22c55e'
-      }
-      
+      const palette = PLANT_PALETTE[plant.type] || PLANT_PALETTE_DEFAULT
+      const bgColor = palette.bg
+      const borderColor = palette.border
+
       // 绘制背景
       this.ctx.fillStyle = bgColor
       this.ctx.fillRect(plant.x, plant.y, plant.width, plant.height)
-      
+
       // 绘制边框
       this.ctx.strokeStyle = borderColor
       this.ctx.lineWidth = 2
@@ -262,32 +248,44 @@ export class Renderer {
     const centerX = zombie.x + zombie.width / 2
     const centerY = zombie.y + zombie.height / 2
     const time = Date.now() / 1000
-    
+
+    // Static base aura: 3 nested radial gradients. Cached as a 200x200 sprite —
+    // pulse/scale is achieved at draw time, not by re-rasterizing the gradient.
+    const aura = this._getIconSprite('charmedAura', (ictx) => {
+      for (let i = 0; i < 3; i++) {
+        const baseRadius = 50 + i * 15
+        const alpha = 0.3 - i * 0.1
+        const grad = ictx.createRadialGradient(0, 0, baseRadius * 0.5, 0, 0, baseRadius)
+        grad.addColorStop(0, 'rgba(168, 85, 247, 0)')
+        grad.addColorStop(0.5, `rgba(168, 85, 247, ${alpha})`)
+        grad.addColorStop(1, 'rgba(147, 51, 234, 0)')
+        ictx.fillStyle = grad
+        ictx.beginPath()
+        ictx.arc(0, 0, baseRadius, 0, Math.PI * 2)
+        ictx.fill()
+      }
+    }, 200)
+    // Per-frame pulse: animate scale instead of redrawing gradients.
+    const pulseScale = 1 + Math.sin(time * 3) * 0.06
     this.ctx.save()
-    
-    // 绘制多层紫色光环
-    for (let i = 0; i < 3; i++) {
-      const baseRadius = 50 + i * 15
-      const pulse = Math.sin(time * 3 + i) * 10
-      const radius = baseRadius + pulse
-      const alpha = 0.3 - i * 0.1
-      
-      // 创建径向渐变
-      const gradient = this.ctx.createRadialGradient(
-        centerX, centerY, radius * 0.5,
-        centerX, centerY, radius
-      )
-      gradient.addColorStop(0, `rgba(168, 85, 247, 0)`)
-      gradient.addColorStop(0.5, `rgba(168, 85, 247, ${alpha})`)
-      gradient.addColorStop(1, `rgba(147, 51, 234, 0)`)
-      
-      this.ctx.fillStyle = gradient
-      this.ctx.beginPath()
-      this.ctx.arc(centerX, centerY, radius, 0, Math.PI * 2)
-      this.ctx.fill()
-    }
-    
-    // 绘制旋转的紫色粒子
+    this.ctx.translate(centerX, centerY)
+    this.ctx.scale(pulseScale, pulseScale)
+    this.ctx.drawImage(aura, -100, -100)
+    this.ctx.restore()
+
+    // Single small spark sprite, reused for the 8 rotating particles.
+    const spark = this._getIconSprite('charmedSpark', (ictx) => {
+      const grad = ictx.createRadialGradient(0, 0, 0, 0, 0, 8)
+      grad.addColorStop(0, 'rgba(255, 255, 255, 1)')
+      grad.addColorStop(0.5, 'rgba(168, 85, 247, 0.8)')
+      grad.addColorStop(1, 'rgba(147, 51, 234, 0)')
+      ictx.fillStyle = grad
+      ictx.beginPath()
+      ictx.arc(0, 0, 8, 0, Math.PI * 2)
+      ictx.fill()
+    }, 16)
+
+    // 8 rotating particles via cheap drawImage.
     const particleCount = 8
     for (let i = 0; i < particleCount; i++) {
       const angle = (i / particleCount) * Math.PI * 2 + time * 2
@@ -295,45 +293,36 @@ export class Renderer {
       const x = centerX + Math.cos(angle) * distance
       const y = centerY + Math.sin(angle) * distance
       const size = 3 + Math.sin(time * 3 + i) * 2
-      
-      // 粒子渐变
-      const particleGradient = this.ctx.createRadialGradient(x, y, 0, x, y, size)
-      particleGradient.addColorStop(0, 'rgba(255, 255, 255, 1)')
-      particleGradient.addColorStop(0.5, 'rgba(168, 85, 247, 0.8)')
-      particleGradient.addColorStop(1, 'rgba(147, 51, 234, 0)')
-      
-      this.ctx.fillStyle = particleGradient
-      this.ctx.beginPath()
-      this.ctx.arc(x, y, size, 0, Math.PI * 2)
-      this.ctx.fill()
+      this.ctx.drawImage(spark, x - size, y - size, size * 2, size * 2)
     }
-    
-    // 绘制向上的紫色迷雾
+
+    // Mist puffs (3) — keep these as fillStyle since they're cheap.
     for (let j = 0; j < 3; j++) {
       const mistX = centerX + (Math.random() - 0.5) * 40
       const mistY = centerY - 20 - j * 15
       const mistSize = 5 + Math.random() * 10
       const mistAlpha = 0.3 + Math.sin(time * 5 + j) * 0.2
-      
       this.ctx.fillStyle = `rgba(168, 85, 247, ${mistAlpha})`
       this.ctx.beginPath()
       this.ctx.arc(mistX, mistY + time * 10, mistSize, 0, Math.PI * 2)
       this.ctx.fill()
     }
-    
-    this.ctx.restore()
   }
   
   // 绘制僵尸
   drawZombies(zombies) {
+    // Hoist text state — set once per frame.
+    this.ctx.font = '48px Arial'
+    this.ctx.textAlign = 'center'
+    this.ctx.textBaseline = 'middle'
     for (const zombie of zombies) {
       const config = zombieConfig[zombie.type]
-      
+
       // 如果被魅惑，绘制紫色光环动画
       if (zombie.isCharmed) {
         this.drawCharmedAura(zombie)
       }
-      
+
       // 如果有护盾，显示护盾效果
       if (zombie.shieldHp > 0) {
         // 绘制护盾边框
@@ -341,23 +330,21 @@ export class Renderer {
         this.ctx.lineWidth = 4
         this.ctx.strokeRect(zombie.x - 2, zombie.y - 2, zombie.width + 4, zombie.height + 4)
       }
-      
+
       // 绘制背景（被魅惑的僵尸用紫色）
       this.ctx.fillStyle = zombie.isCharmed ? '#a855f7' : '#f87171'
       this.ctx.fillRect(zombie.x, zombie.y, zombie.width, zombie.height)
-      
+
       // 绘制边框（被魅惑的僵尸用紫色边框）
       this.ctx.strokeStyle = zombie.isCharmed ? '#9333ea' : '#ef4444'
       this.ctx.lineWidth = 2
       this.ctx.strokeRect(zombie.x, zombie.y, zombie.width, zombie.height)
-      
+
       if (zombie.type === 'buckethead') {
         this.drawBucketheadZombieIcon(zombie)
       } else {
-        // 绘制emoji
-        this.ctx.font = '48px Arial'
-        this.ctx.textAlign = 'center'
-        this.ctx.textBaseline = 'middle'
+        // emoji — text state is already set above for this whole loop
+        this.ctx.fillStyle = '#000000'
         this.ctx.fillText(config.icon, zombie.x + zombie.width / 2, zombie.y + zombie.height / 2)
       }
       
@@ -401,102 +388,103 @@ export class Renderer {
     const cy = zombie.y + zombie.height / 2
     const scale = Math.min(zombie.width, zombie.height) / 64
 
+    const sprite = this._getIconSprite('buckethead', (ictx) => {
+      ictx.fillStyle = '#a3e635'
+      ictx.strokeStyle = '#0f172a'
+      ictx.lineWidth = 4
+      ictx.beginPath()
+      ictx.arc(0, 13, 17, 0, Math.PI * 2)
+      ictx.fill()
+      ictx.stroke()
+
+      ictx.fillStyle = '#0f172a'
+      ictx.beginPath()
+      ictx.arc(-6, 10, 2.2, 0, Math.PI * 2)
+      ictx.arc(6, 10, 2.2, 0, Math.PI * 2)
+      ictx.fill()
+      ictx.lineWidth = 2
+      ictx.beginPath()
+      ictx.moveTo(-6, 20)
+      ictx.quadraticCurveTo(0, 23, 6, 20)
+      ictx.stroke()
+
+      ictx.strokeStyle = '#0f172a'
+      ictx.lineWidth = 4
+      ictx.lineCap = 'round'
+      ictx.beginPath()
+      ictx.arc(0, -15, 21, Math.PI, Math.PI * 2)
+      ictx.stroke()
+
+      ictx.lineCap = 'butt'
+      ictx.lineJoin = 'round'
+      ictx.fillStyle = '#94a3b8'
+      ictx.beginPath()
+      ictx.moveTo(-19, -25)
+      ictx.lineTo(19, -25)
+      ictx.lineTo(14, 4)
+      ictx.lineTo(-14, 4)
+      ictx.closePath()
+      ictx.fill()
+      ictx.stroke()
+
+      ictx.fillStyle = '#cbd5e1'
+      ictx.fillRect(-23, -30, 46, 10)
+      ictx.strokeRect(-23, -30, 46, 10)
+
+      ictx.strokeStyle = '#e2e8f0'
+      ictx.lineWidth = 4
+      ictx.beginPath()
+      ictx.moveTo(-8, -21)
+      ictx.lineTo(-10, -1)
+      ictx.stroke()
+
+      ictx.strokeStyle = '#64748b'
+      ictx.lineWidth = 3
+      ictx.beginPath()
+      ictx.moveTo(4, -10)
+      ictx.quadraticCurveTo(11, -13, 14, -7)
+      ictx.stroke()
+    })
+
     this.ctx.save()
     this.ctx.translate(cx, cy)
     this.ctx.scale(scale, scale)
-
-    this.ctx.fillStyle = '#a3e635'
-    this.ctx.strokeStyle = '#0f172a'
-    this.ctx.lineWidth = 4
-    this.ctx.beginPath()
-    this.ctx.arc(0, 13, 17, 0, Math.PI * 2)
-    this.ctx.fill()
-    this.ctx.stroke()
-
-    this.ctx.fillStyle = '#0f172a'
-    this.ctx.beginPath()
-    this.ctx.arc(-6, 10, 2.2, 0, Math.PI * 2)
-    this.ctx.arc(6, 10, 2.2, 0, Math.PI * 2)
-    this.ctx.fill()
-    this.ctx.lineWidth = 2
-    this.ctx.beginPath()
-    this.ctx.moveTo(-6, 20)
-    this.ctx.quadraticCurveTo(0, 23, 6, 20)
-    this.ctx.stroke()
-
-    this.ctx.strokeStyle = '#0f172a'
-    this.ctx.lineWidth = 4
-    this.ctx.lineCap = 'round'
-    this.ctx.beginPath()
-    this.ctx.arc(0, -15, 21, Math.PI, Math.PI * 2)
-    this.ctx.stroke()
-
-    this.ctx.lineCap = 'butt'
-    this.ctx.lineJoin = 'round'
-    this.ctx.fillStyle = '#94a3b8'
-    this.ctx.beginPath()
-    this.ctx.moveTo(-19, -25)
-    this.ctx.lineTo(19, -25)
-    this.ctx.lineTo(14, 4)
-    this.ctx.lineTo(-14, 4)
-    this.ctx.closePath()
-    this.ctx.fill()
-    this.ctx.stroke()
-
-    this.ctx.fillStyle = '#cbd5e1'
-    this.ctx.fillRect(-23, -30, 46, 10)
-    this.ctx.strokeRect(-23, -30, 46, 10)
-
-    this.ctx.strokeStyle = '#e2e8f0'
-    this.ctx.lineWidth = 4
-    this.ctx.beginPath()
-    this.ctx.moveTo(-8, -21)
-    this.ctx.lineTo(-10, -1)
-    this.ctx.stroke()
-
-    this.ctx.strokeStyle = '#64748b'
-    this.ctx.lineWidth = 3
-    this.ctx.beginPath()
-    this.ctx.moveTo(4, -10)
-    this.ctx.quadraticCurveTo(11, -13, 14, -7)
-    this.ctx.stroke()
-
+    this.ctx.drawImage(sprite, -32, -32)
     this.ctx.restore()
   }
   
   // 绘制粒子
   drawParticles(particles) {
+    if (!particles.length) return
+    // Cached fire-particle sprite. Pre-rendered radial gradient + glow layer
+    // baked into one 64x64 image — drawImage replaces the per-particle
+    // createRadialGradient + shadowBlur + 2 fills (which is brutal at 60fps
+    // with 50+ particles).
+    const sprite = this._getIconSprite('fireParticle', (ictx) => {
+      // Inner core: yellow → orange → red gradient.
+      const core = ictx.createRadialGradient(0, 0, 0, 0, 0, 32)
+      core.addColorStop(0, 'rgba(255, 255, 0, 1)')
+      core.addColorStop(0.4, 'rgba(255, 165, 0, 0.85)')
+      core.addColorStop(0.7, 'rgba(255, 80, 0, 0.45)')
+      core.addColorStop(1, 'rgba(255, 0, 0, 0)')
+      ictx.fillStyle = core
+      ictx.beginPath()
+      ictx.arc(0, 0, 32, 0, Math.PI * 2)
+      ictx.fill()
+    }, 64)
+    // Use additive blending so overlapping flames brighten naturally.
+    const prevOp = this.ctx.globalCompositeOperation
+    this.ctx.globalCompositeOperation = 'lighter'
     for (const particle of particles) {
-      if (particle.type === 'fire') {
-        // 火焰粒子
-        const lifeRatio = particle.lifeTime / particle.maxLifeTime
-        const alpha = lifeRatio
-        const size = 3 + lifeRatio * 4
-        
-        // 绘制火焰粒子（颜色渐变）
-        const gradient = this.ctx.createRadialGradient(
-          particle.x, particle.y, 0,
-          particle.x, particle.y, size
-        )
-        gradient.addColorStop(0, `rgba(255, 255, 0, ${alpha})`)
-        gradient.addColorStop(0.5, `rgba(255, 165, 0, ${alpha * 0.8})`)
-        gradient.addColorStop(1, `rgba(255, 0, 0, ${alpha * 0.4})`)
-        
-        this.ctx.fillStyle = gradient
-        this.ctx.beginPath()
-        this.ctx.arc(particle.x, particle.y, size, 0, Math.PI * 2)
-        this.ctx.fill()
-        
-        // 添加发光效果
-        this.ctx.shadowColor = '#ff4500'
-        this.ctx.shadowBlur = 5
-        this.ctx.fillStyle = `rgba(255, 69, 0, ${alpha * 0.3})`
-        this.ctx.beginPath()
-        this.ctx.arc(particle.x, particle.y, size * 1.5, 0, Math.PI * 2)
-        this.ctx.fill()
-        this.ctx.shadowBlur = 0
-      }
+      if (particle.type !== 'fire') continue
+      const lifeRatio = particle.lifeTime / particle.maxLifeTime
+      if (lifeRatio <= 0) continue
+      const size = (3 + lifeRatio * 4) * 1.6
+      this.ctx.globalAlpha = lifeRatio
+      this.ctx.drawImage(sprite, particle.x - size, particle.y - size, size * 2, size * 2)
     }
+    this.ctx.globalAlpha = 1
+    this.ctx.globalCompositeOperation = prevOp
   }
   
   // 绘制子弹

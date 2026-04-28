@@ -21,7 +21,7 @@ export const plantConfig = {
     attackInterval: 1.5,  // 攻击间隔（秒）
     damage: 30,           // 伤害值
     projectileSpeed: 10,  // 子弹速度（像素/帧）- 放大到1.3倍
-    cooldown: 2,
+    cooldown: 4,
     width: 104,           // 放大到1.3倍
     height: 130           // 放大到1.3倍
   },
@@ -376,6 +376,7 @@ export const zombieConfig = {
 export const gameConfig = {
   gridCols: 9,
   gridRows: 5,
+  initialSunEnergy: 180000,
   cellWidth: 104,      // 从80放大到104 (1.3倍)
   cellHeight: 140,     // 从100放大到140 (1.3倍)
   sunFallInterval: 10,    // 阳光自然掉落间隔（秒）
@@ -383,6 +384,11 @@ export const gameConfig = {
   sunLifeTime: 8,         // 阳光存在时间（秒）
   sunValue: 25,           // 每次收集阳光数量
   zombieTypes: ['normal', 'conehead', 'buckethead', 'football', 'newspaper', 'dancing', 'balloon', 'pole'],  // 僵尸类型列表
+
+  multiplayer: {
+    initialSunEnergy: 2000,
+    initialZombieEnergy: 2000
+  },
   
   // 小推车配置
   lawnMowers: {

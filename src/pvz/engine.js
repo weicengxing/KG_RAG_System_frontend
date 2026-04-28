@@ -1195,14 +1195,105 @@ export class GameEngine {
     this.projectileManager.throwGoldenStaff(plant)
   }
   
+  getZombieRow(zombie) {
+    return Math.floor((zombie.y + (zombie.height || gameConfig.cellHeight) / 2) / gameConfig.cellHeight)
+  }
+
+  updateZombieSpecialTraits(zombie, config, deltaTime) {
+    if (zombie.hp <= 0) {
+      return
+    }
+
+    if (zombie.type === 'newspaper' && !zombie.isEnraged && (zombie.shieldHp || 0) <= 0) {
+      zombie.isEnraged = true
+      zombie.baseSpeed = config.enragedSpeed || config.speed
+      this.animations.push({
+        type: 'newspaperEnrage',
+        x: zombie.x + zombie.width / 2,
+        y: zombie.y + zombie.height / 2,
+        time: 0,
+        duration: 0.5
+      })
+    }
+
+    if (zombie.type === 'balloon' && zombie.isFlying && (zombie.shieldHp || 0) <= 0) {
+      zombie.isFlying = false
+      zombie.baseSpeed = config.groundSpeed || config.speed
+      this.animations.push({
+        type: 'balloonPop',
+        x: zombie.x + zombie.width / 2,
+        y: zombie.y + zombie.height / 2,
+        time: 0,
+        duration: 0.4
+      })
+    }
+
+    if (zombie.type === 'dancing' && !zombie.isCharmed && config.summonInterval) {
+      zombie.summonTimer = (zombie.summonTimer ?? config.summonInterval) - deltaTime
+      if (zombie.summonTimer <= 0 && (zombie.summonsCreated || 0) < (config.maxSummons || 0)) {
+        this.summonBackupDancers(zombie, config)
+        zombie.summonTimer = config.summonInterval
+      }
+    }
+  }
+
+  summonBackupDancers(zombie, config) {
+    const summonType = config.summonType || 'backupDancer'
+    if (!zombieConfig[summonType]) return
+
+    const row = this.getZombieRow(zombie)
+    const lanes = [row, row - 1, row + 1].filter((lane) => lane >= 0 && lane < gameConfig.gridRows)
+    const maxSummons = config.maxSummons || lanes.length
+    const remaining = maxSummons - (zombie.summonsCreated || 0)
+    const summonCount = Math.min(remaining, lanes.length)
+
+    for (let n = 0; n < summonCount; n++) {
+      const lane = lanes[n]
+      const dancer = this.createZombieObject(lane, summonType)
+      dancer.x = Math.max(0, Math.min(this.width - dancer.width, zombie.x + 35 + n * 18))
+      dancer.summonedBy = zombie.id || 'dancing'
+      this.zombies.push(dancer)
+      zombie.summonsCreated = (zombie.summonsCreated || 0) + 1
+    }
+
+    if (summonCount > 0) {
+      this.animations.push({
+        type: 'dancerSummon',
+        x: zombie.x + zombie.width / 2,
+        y: zombie.y + zombie.height / 2,
+        time: 0,
+        duration: 0.5
+      })
+      this.showMessage('跳舞僵尸召唤了伴舞僵尸！', '#f97316')
+    }
+  }
+
+  poleVaultZombie(zombie, targetPlant, config) {
+    zombie.hasVaulted = true
+    zombie.baseSpeed = config.speedAfterVault || config.speed * 0.65
+    zombie.x = Math.max(0, targetPlant.x - (zombie.width || gameConfig.cellWidth) - 4)
+    zombie.state = 'WALKING'
+    zombie.targetPlant = null
+    zombie.attackTimer = 0
+    this.animations.push({
+      type: 'poleVault',
+      x: targetPlant.x + targetPlant.width / 2,
+      y: targetPlant.y + targetPlant.height / 2,
+      time: 0,
+      duration: 0.5
+    })
+  }
   
   // 更新僵尸
   updateZombies(deltaTime) {
     for (let i = this.zombies.length - 1; i >= 0; i--) {
       const zombie = this.zombies[i]
       const config = zombieConfig[zombie.type]
+      if (!config) continue
       
-      let actualSpeed = config.speed
+      this.updateZombieSpecialTraits(zombie, config, deltaTime)
+
+      let actualSpeed = zombie.baseSpeed ?? config.speed
       if (zombie.slowDuration > 0) {
         zombie.slowDuration -= deltaTime
         actualSpeed *= zombie.slowFactor || 0.5
@@ -1212,7 +1303,7 @@ export class GameEngine {
       }
       
       if (zombie.state === 'WALKING') {
-        const row = Math.floor(zombie.y / gameConfig.cellHeight)
+        const row = this.getZombieRow(zombie)
         
         if (zombie.isCharmed) {
           // 被魅惑的僵尸：向右移动
@@ -1244,9 +1335,14 @@ export class GameEngine {
           const nextX = zombie.x - moveStep
           
           // 找到同一行中在僵尸前进方向上的最近植物
-          const targetPlant = this.findNearestPlantAhead(zombie.x, nextX, row)
+          const targetPlant = this.findNearestPlantAhead(zombie.x, nextX, row, zombie)
           
           if (targetPlant) {
+            if (zombie.type === 'pole' && !zombie.hasVaulted && !zombie.isCharmed) {
+              this.poleVaultZombie(zombie, targetPlant, config)
+              continue
+            }
+
             // 计算僵尸应该停止的位置：僵尸左边界在植物右边界左侧1/4，露出植物左边3/4
             // 添加宽度字段fallback，防止NaN
             const plantW = targetPlant.width || gameConfig.cellWidth
@@ -1609,7 +1705,11 @@ export class GameEngine {
   }
   
   // 查找同一行中在僵尸前进方向上的最近植物（新方法）
-  findNearestPlantAhead(currentX, nextX, row) {
+  findNearestPlantAhead(currentX, nextX, row, zombie = null) {
+    if (zombie?.isFlying) {
+      return null
+    }
+
     let nearestPlant = null
     let minDistance = Infinity
     
@@ -1716,6 +1816,39 @@ export class GameEngine {
     this.playSound('collectSun')
     this.showMessage(`+${sun.value} 阳光`, '#fbbf24')
   }
+
+  createZombieObject(row, zombieType) {
+    const config = zombieConfig[zombieType]
+    const id = this.nextZombieId !== undefined ? `zombie-${this.nextZombieId++}` : undefined
+
+    return {
+      ...(id ? { id } : {}),
+      type: zombieType,
+      x: this.width,
+      y: row * gameConfig.cellHeight,
+      width: config.width,
+      height: config.height,
+      hp: config.hp,
+      maxHp: config.hp,
+      shieldHp: config.shieldHp || 0,
+      baseSpeed: config.speed,
+      state: 'WALKING',
+      attackTimer: 0,
+      targetPlant: null,
+      slowDuration: 0,
+      slowFactor: 1,
+      isCharmed: false,
+      originalHp: config.hp,
+      originalDamage: config.attackDamage,
+      charmedSpeed: config.speed,
+      attackZombieTimer: 0,
+      isFlying: !!config.canFly,
+      isEnraged: false,
+      hasVaulted: false,
+      summonTimer: config.summonInterval || 0,
+      summonsCreated: 0
+    }
+  }
   
   // 生成僵尸
   spawnZombie(zombieType = null) {
@@ -1737,30 +1870,7 @@ export class GameEngine {
     
     const config = zombieConfig[type]
     
-    const zombie = {
-      type: type,
-      x: this.width,
-      y: row * gameConfig.cellHeight,
-      width: config.width,
-      height: config.height,
-      hp: config.hp,
-      maxHp: config.hp,
-      shieldHp: config.shieldHp || 0,
-      baseSpeed: config.speed,
-      state: 'WALKING',
-      attackTimer: 0,
-      targetPlant: null,
-      slowDuration: 0,
-      slowFactor: 1,
-      // 魅惑相关字段
-      isCharmed: false,        // 是否被魅惑
-      originalHp: config.hp,   // 原始血量（用于恢复）
-      originalDamage: config.attackDamage,  // 原始攻击力
-      charmedSpeed: config.speed,  // 魅惑后的速度（向右移动）
-      attackZombieTimer: 0     // 攻击其他僵尸的计时器
-    }
-    
-    this.zombies.push(zombie)
+    this.zombies.push(this.createZombieObject(row, type))
   }
   
   // 创建植物对象（纯工厂方法，无副作用）

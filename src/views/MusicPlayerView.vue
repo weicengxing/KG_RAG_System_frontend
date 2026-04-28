@@ -259,6 +259,7 @@ import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import request from '../utils/request'
 import { useMusicStore } from '../stores/music'
+import { API_CONFIG } from '../config.js'
 import bgImage from '/background/default.jpg'
 // --- 1. 改进后的并发连接池调度器 (支持优先级) ---
 class RequestScheduler {
@@ -527,7 +528,7 @@ const fetchSongsStream = () => {
 
     const token = localStorage.getItem('token')
     const eventSource = new EventSource(
-      `http://localhost:8000/api/music/songs/stream?token=${encodeURIComponent(token)}`
+      `${API_CONFIG.BASE_URL}/api/music/songs/stream?token=${encodeURIComponent(token)}`
     )
 
     // 临时存储歌曲

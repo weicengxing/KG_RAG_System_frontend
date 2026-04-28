@@ -16,7 +16,10 @@
         :class="{ 'selected': isSelected(zombie.id), 'disabled': !isSelected(zombie.id) && selectedZombies.length >= 5 }"
         @click="toggleSelection(zombie.id)"
       >
-        <div class="zombie-card-icon">{{ zombie.icon }}</div>
+        <div class="zombie-card-icon">
+          <PvZBucketIcon v-if="zombie.id === 'buckethead'" />
+          <span v-else>{{ zombie.icon }}</span>
+        </div>
         <div class="zombie-card-name">{{ zombie.name }}</div>
         <div class="zombie-card-cost">
           <span class="cost-icon">⚡</span>
@@ -75,6 +78,9 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { buildWsUrl } from '../config.js'
+import { zombieConfig } from '../pvz/config.js'
+import PvZBucketIcon from '../components/PvZBucketIcon.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -95,7 +101,16 @@ const allZombies = computed(() => {
     balloon: { id: 'balloon', name: '气球僵尸', icon: '🎈', cost: 150, hp: 250, speed: 1.2 },
     pole: { id: 'pole', name: '撑杆僵尸', icon: '🏃', cost: 125, hp: 350, speed: 2.5 }
   }
-  return Object.values(zombieTypes)
+  return Object.values(zombieTypes).map((zombie) => {
+    const configId = zombie.id === 'basic' ? 'normal' : zombie.id
+    const config = zombieConfig[configId] || {}
+    return {
+      ...zombie,
+      cost: config.cost ?? zombie.cost,
+      hp: config.hp ?? zombie.hp,
+      speed: config.speed ?? zombie.speed
+    }
+  })
 })
 
 // 已选择的僵尸ID列表
@@ -157,7 +172,7 @@ const getZombieDescription = (zombieId) => {
 
 // 连接WebSocket
 const connectWebSocket = () => {
-  const wsUrl = `ws://localhost:8000/api/ws/pvz/room/${roomId.value}?user_id=${userId.value}`
+  const wsUrl = buildWsUrl(`/api/ws/pvz/room/${roomId.value}?user_id=${userId.value}`)
   ws = new WebSocket(wsUrl)
 
   ws.onopen = () => {

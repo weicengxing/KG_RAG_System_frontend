@@ -234,19 +234,114 @@ export class FighterModelRenderer {
     for (const projectile of state?.projectiles || []) {
       const group = new THREE.Group()
       group.position.set(toWorldX(projectile.x + projectile.width / 2), toWorldY(projectile.y + projectile.height / 2), 120)
-      addBox(group, projectile.width, projectile.height, 20, hexToNumber(projectile.color, 0x38bdf8), [0, 0, 0], {
-        transparent: true,
-        opacity: 0.86,
-        emissive: hexToNumber(projectile.color, 0x38bdf8),
-        emissiveIntensity: 0.75,
-      })
-      addSphere(group, projectile.height * 0.8, 0xf8fafc, [projectile.width / 2, 0, 0], { transparent: true, opacity: 0.32 })
+      if (projectile.kind === 'blade_arc') {
+        const color = hexToNumber(projectile.color, 0x38bdf8)
+        const ring = new THREE.Mesh(
+          new THREE.TorusGeometry(Math.max(12, projectile.width * 0.42), 4, 8, 40, Math.PI * 1.25),
+          makeMaterial(color, { transparent: true, opacity: 0.78, emissive: color, emissiveIntensity: 0.9 }),
+        )
+        ring.rotation.z = projectile.vx >= 0 ? -0.25 : Math.PI + 0.25
+        group.add(ring)
+      } else {
+        addBox(group, projectile.width, projectile.height, 20, hexToNumber(projectile.color, 0x38bdf8), [0, 0, 0], {
+          transparent: true,
+          opacity: 0.86,
+          emissive: hexToNumber(projectile.color, 0x38bdf8),
+          emissiveIntensity: 0.75,
+        })
+        addSphere(group, projectile.height * 0.8, 0xf8fafc, [projectile.width / 2, 0, 0], { transparent: true, opacity: 0.32 })
+      }
       this.effectGroup.add(group)
+    }
+
+    for (const effect of state?.effects || []) {
+      this.effectGroup.add(this.createEffect(effect))
     }
 
     for (const player of Object.values(state?.players || {})) {
       this.fighterGroup.add(this.createFighter(player, catalog.characters?.[player.characterId]))
     }
+  }
+
+  createEffect(effect) {
+    const group = new THREE.Group()
+    const color = hexToNumber(effect.color, 0xf8fafc)
+    const maxTtl = effect.maxTtl || effect.ttl || 1
+    const progress = 1 - Math.max(0, Math.min(1, effect.ttl / maxTtl))
+    const opacity = Math.max(0.08, 0.64 * (1 - progress))
+    group.position.set(toWorldX(effect.x + effect.width / 2), toWorldY(effect.y + effect.height / 2), 150)
+    group.scale.x = effect.direction || 1
+    const addSparkCloud = (count, radius, sparkColor = color) => {
+      for (let i = 0; i < count; i += 1) {
+        const angle = (Math.PI * 2 * i) / count
+        const distance = radius * (0.35 + (i % 5) * 0.14) * (0.75 + progress)
+        addSphere(
+          group,
+          Math.max(3, radius * 0.05 * (1 - progress * 0.45)),
+          sparkColor,
+          [Math.cos(angle) * distance, Math.sin(angle) * distance * 0.55, 16 + (i % 4) * 8],
+          {
+            transparent: true,
+            opacity: opacity * 0.9,
+            emissive: sparkColor,
+            emissiveIntensity: 0.9,
+            castShadow: false,
+          },
+        )
+      }
+    }
+
+    if (['slash', 'cleave', 'wind_arc', 'wind_gain', 'wind_burst', 'shadow_cut', 'shadow_mark', 'air_slice', 'dash_light'].includes(effect.type)) {
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(Math.max(16, effect.width * (0.34 + progress * 0.1)), effect.type === 'wind_burst' ? 6 : 4, 8, 44, Math.PI * (effect.type === 'wind_burst' ? 1.55 : 1.15)),
+        makeMaterial(color, { transparent: true, opacity, emissive: color, emissiveIntensity: 0.85 }),
+      )
+      ring.scale.y = Math.max(0.18, effect.height / Math.max(1, effect.width))
+      ring.rotation.z = -0.35
+      group.add(ring)
+      addSparkCloud(effect.type === 'wind_burst' ? 20 : 9, Math.max(18, effect.width * 0.22), 0xffffff)
+    } else if (['jab', 'haymaker', 'rush', 'fury_burst', 'projectile_hit', 'block_spark', 'launcher'].includes(effect.type)) {
+      addSphere(group, Math.max(10, effect.width * (0.22 + progress * 0.24)), color, [0, 0, 0], {
+        transparent: true,
+        opacity,
+        emissive: color,
+        emissiveIntensity: 0.8,
+        castShadow: false,
+      })
+      addSparkCloud(effect.type === 'block_spark' ? 10 : 18, Math.max(22, effect.width * 0.38), effect.type === 'block_spark' ? 0xbfdbfe : 0xffffff)
+    } else if (['quake', 'bulwark', 'bulwark_crash', 'guard_ring', 'shield_bash', 'guard_crush', 'air_slam', 'sweep'].includes(effect.type)) {
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(Math.max(18, effect.width * (0.22 + progress * 0.28)), effect.type === 'bulwark_crash' ? 7 : 5, 8, 48),
+        makeMaterial(effect.type === 'guard_ring' ? 0xfef3c7 : color, { transparent: true, opacity, emissive: color, emissiveIntensity: 0.55 }),
+      )
+      ring.scale.y = effect.type === 'sweep' ? 0.18 : 0.32
+      group.add(ring)
+      addSparkCloud(14, Math.max(24, effect.width * 0.28), effect.type === 'sweep' ? 0xcbd5e1 : color)
+    } else if (effect.type === 'shadow_pop') {
+      addBox(group, effect.width * 0.8, effect.height * 0.8, 16, color, [0, 0, 12], {
+        transparent: true,
+        opacity: opacity * 0.58,
+        emissive: color,
+        emissiveIntensity: 0.7,
+      })
+      addSparkCloud(20, Math.max(24, effect.width * 0.32), 0xf8fafc)
+    } else if (['afterimage', 'blink'].includes(effect.type)) {
+      addBox(group, effect.width, effect.height, 12, color, [0, 0, 0], {
+        transparent: true,
+        opacity: opacity * 0.55,
+        emissive: color,
+        emissiveIntensity: 0.45,
+        castShadow: false,
+      })
+    } else {
+      addSphere(group, Math.max(8, effect.width * 0.25), color, [0, 0, 0], {
+        transparent: true,
+        opacity,
+        emissive: color,
+        emissiveIntensity: 0.6,
+      })
+    }
+    return group
   }
 
   createFighter(player, character) {
@@ -258,6 +353,15 @@ export class FighterModelRenderer {
     const y = toWorldY(player.y + character.height / 2)
     group.position.set(x, y, 130)
     group.scale.x = player.facing || 1
+    if (player.attackVariant === 'sweep' || player.attackVariant === 'guard_crush') {
+      group.scale.y = 0.88
+      group.position.y -= character.height * 0.05
+    } else if (player.attackVariant === 'launcher') {
+      group.rotation.z = -0.08
+      group.position.y += 8
+    } else if (player.attackVariant === 'air_light' || player.attackVariant === 'air_heavy') {
+      group.rotation.z = player.attackVariant === 'air_heavy' ? -0.16 : 0.12
+    }
 
     const bodyHeight = character.height * 0.54
     addSphere(group, character.width * 0.28, 0xf8fafc, [0, character.height * 0.38, 12], { roughness: 0.34 })
@@ -271,6 +375,69 @@ export class FighterModelRenderer {
 
     this.addRoleModel(group, player, character, color)
     this.addAttackModel(group, player, character, color)
+    if (player.armorTimer > 0) {
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(character.width * 0.52, 3, 8, 36),
+        makeMaterial(0xfef3c7, { transparent: true, opacity: 0.38, emissive: 0xfbbf24, emissiveIntensity: 0.4 }),
+      )
+      ring.position.set(0, -4, 42)
+      group.add(ring)
+    }
+    if (player.fortifyTimer > 0) {
+      addSphere(group, Math.max(character.width, character.height) * 0.42, 0xfbbf24, [0, 0, 18], {
+        transparent: true,
+        opacity: 0.14,
+        emissive: 0xf59e0b,
+        emissiveIntensity: 0.3,
+        castShadow: false,
+      })
+    }
+    if (player.shadowMark > 0) {
+      addSphere(group, character.width * 0.13, 0xc084fc, [0, character.height * 0.68, 42], {
+        emissive: 0x8b5cf6,
+        emissiveIntensity: 0.6,
+      })
+    }
+    if (player.windStacks > 0) {
+      for (let i = 0; i < player.windStacks; i += 1) {
+        const ring = new THREE.Mesh(
+          new THREE.TorusGeometry(character.width * (0.48 + i * 0.1), 2, 8, 34),
+          makeMaterial(0x7dd3fc, { transparent: true, opacity: 0.22 + i * 0.06, emissive: 0x38bdf8, emissiveIntensity: 0.45 }),
+        )
+        ring.position.set(0, -6 + i * 9, 48 + i * 3)
+        ring.rotation.x = Math.PI / 2
+        group.add(ring)
+      }
+    }
+    if (player.fury > 0) {
+      addSphere(group, Math.max(character.width, character.height) * (0.2 + Math.min(0.22, player.fury / 450)), 0xef4444, [0, -2, 18], {
+        transparent: true,
+        opacity: Math.min(0.26, player.fury / 300),
+        emissive: 0xef4444,
+        emissiveIntensity: 0.55,
+        castShadow: false,
+      })
+    }
+    if (player.shadowStacks > 0) {
+      for (let i = 0; i < player.shadowStacks; i += 1) {
+        addBox(group, character.width * 0.42, character.height * 0.34, 6, 0xa78bfa, [-18 - i * 9, -2 + i * 8, -20], {
+          transparent: true,
+          opacity: 0.16,
+          emissive: 0x8b5cf6,
+          emissiveIntensity: 0.3,
+        })
+      }
+    }
+    if (player.bulwarkStacks > 0) {
+      for (let i = 0; i < Math.floor(player.bulwarkStacks); i += 1) {
+        const ring = new THREE.Mesh(
+          new THREE.TorusGeometry(character.width * (0.55 + i * 0.12), 3, 8, 36),
+          makeMaterial(0xfbbf24, { transparent: true, opacity: 0.22 + i * 0.05, emissive: 0xf59e0b, emissiveIntensity: 0.42 }),
+        )
+        ring.position.set(0, -4, 36 + i * 8)
+        group.add(ring)
+      }
+    }
     if (player.blocking) {
       addBox(group, 12, character.height * 0.55, 18, 0x93c5fd, [character.width * 0.62, 0, 34], {
         transparent: true,
@@ -316,9 +483,12 @@ export class FighterModelRenderer {
 
   addAttackModel(group, player, character, color) {
     if (!player.attack) return
-    const range = character.attacks?.[player.attack]?.range || 80
-    const attackColor = player.attack === 'heavy' ? 0xfef3c7 : color
-    addBox(group, range, player.attack === 'heavy' ? 34 : 20, 20, attackColor, [character.width / 2 + range / 2, 2, 44], {
+    const attack = player.activeAttack || character.attacks?.[player.attack] || {}
+    const range = attack.range || 80
+    const attackColor = player.attack === 'heavy' || player.attackVariant === 'launcher' ? 0xfef3c7 : color
+    const attackHeight = attack.area ? 58 : attack.low ? 18 : attack.launch ? character.height * 0.56 : (player.attack === 'heavy' ? 34 : 20)
+    const attackY = attack.low ? -character.height * 0.35 : attack.launch ? character.height * 0.08 : 2
+    addBox(group, range, attackHeight, 20, attackColor, [character.width / 2 + range / 2, attackY, 44], {
       transparent: true,
       opacity: player.attack === 'special' ? 0.46 : 0.28,
       emissive: attackColor,

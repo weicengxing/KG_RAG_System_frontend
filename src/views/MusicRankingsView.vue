@@ -168,12 +168,13 @@
 <script>
 import { ref, onMounted, onUnmounted, reactive } from 'vue';
 import axios from 'axios';
+import { API_CONFIG } from '../config.js';
 
 export default {
   name: 'MusicRankingsView',
   setup() {
     // --- 原始逻辑部分开始 ---
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    const apiUrl = API_CONFIG.BASE_URL;
     const token = ref(localStorage.getItem('token') || '');
 
     const timeRange = ref('all');

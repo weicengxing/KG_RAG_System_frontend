@@ -253,6 +253,7 @@ export const plantConfig = {
 export const zombieConfig = {
   normal: {
     id: 'normal',
+    cost: 50,
     name: '普通僵尸',
     icon: '🧟',
     hp: 200,
@@ -264,6 +265,7 @@ export const zombieConfig = {
   },
   conehead: {
     id: 'conehead',
+    cost: 75,
     name: '路障僵尸',
     icon: '🔺',
     hp: 560,             // 200 + 360护盾
@@ -276,6 +278,7 @@ export const zombieConfig = {
   },
   buckethead: {
     id: 'buckethead',
+    cost: 125,
     name: '铁桶僵尸',
     icon: '🗑️',
     hp: 860,            // 200 + 660护盾
@@ -285,6 +288,87 @@ export const zombieConfig = {
     attackInterval: 1,
     width: 104,          // 放大到1.3倍
     height: 130          // 放大到1.3倍
+  },
+  football: {
+    id: 'football',
+    name: '橄榄球僵尸',
+    icon: '🏈',
+    cost: 175,
+    hp: 500,
+    speed: 1.3,
+    attackDamage: 1,
+    attackInterval: 1,
+    width: 104,
+    height: 130
+  },
+  newspaper: {
+    id: 'newspaper',
+    name: '报纸僵尸',
+    icon: '📰',
+    cost: 100,
+    hp: 500,
+    shieldHp: 200,
+    speed: 0.75,
+    enragedSpeed: 1.35,
+    attackDamage: 1,
+    attackInterval: 1,
+    width: 104,
+    height: 130
+  },
+  dancing: {
+    id: 'dancing',
+    name: '跳舞僵尸',
+    icon: '🕺',
+    cost: 200,
+    hp: 400,
+    speed: 0.7,
+    summonInterval: 7,
+    maxSummons: 4,
+    summonType: 'backupDancer',
+    attackDamage: 1,
+    attackInterval: 1,
+    width: 104,
+    height: 130
+  },
+  balloon: {
+    id: 'balloon',
+    name: '气球僵尸',
+    icon: '🎈',
+    cost: 150,
+    hp: 250,
+    shieldHp: 60,
+    speed: 0.9,
+    groundSpeed: 0.55,
+    canFly: true,
+    attackDamage: 1,
+    attackInterval: 1,
+    width: 104,
+    height: 130
+  },
+  pole: {
+    id: 'pole',
+    name: '撑杆僵尸',
+    icon: '🏃',
+    cost: 125,
+    hp: 350,
+    speed: 1.15,
+    speedAfterVault: 0.75,
+    attackDamage: 1,
+    attackInterval: 1,
+    width: 104,
+    height: 130
+  },
+  backupDancer: {
+    id: 'backupDancer',
+    name: '伴舞僵尸',
+    icon: '🧟',
+    cost: 0,
+    hp: 180,
+    speed: 0.7,
+    attackDamage: 1,
+    attackInterval: 1,
+    width: 104,
+    height: 130
   }
 }
 
@@ -298,7 +382,7 @@ export const gameConfig = {
   zombieSpawnInterval: 10, // 僵尸生成间隔（秒）
   sunLifeTime: 8,         // 阳光存在时间（秒）
   sunValue: 25,           // 每次收集阳光数量
-  zombieTypes: ['normal', 'conehead', 'buckethead'],  // 僵尸类型列表
+  zombieTypes: ['normal', 'conehead', 'buckethead', 'football', 'newspaper', 'dancing', 'balloon', 'pole'],  // 僵尸类型列表
   
   // 小推车配置
   lawnMowers: {

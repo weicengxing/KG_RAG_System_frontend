@@ -85,9 +85,10 @@
 import { ref, onMounted } from 'vue'
 import { useMusicStore } from '@/stores/music'
 import request from '@/utils/request'
+import { API_CONFIG } from '@/config.js'
 
 // API URL 配置
-const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const apiUrl = API_CONFIG.BASE_URL
 
 const musicStore = useMusicStore()
 

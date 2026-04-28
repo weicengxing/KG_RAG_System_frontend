@@ -88,6 +88,7 @@ const markerTintForEntity = (entity) => {
   if (type === 'old_camp_echo') return 0xffbe68
   if (type === 'cave_return_mark') return 0xfbbf24
   if (type === 'traveler_song') return 0xb59cff
+  if (type === 'myth_divergence') return 0xd8c16b
   if (type === 'mutual_aid_alert') return 0x7fe7ff
   if (type === 'alliance_signal') return 0x9be59d
   if (type === 'nomad_visitor') return 0xe6c77a

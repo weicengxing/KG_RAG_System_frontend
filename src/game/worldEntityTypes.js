@@ -44,6 +44,7 @@ export const WORLD_ENTITY_TYPES = Object.freeze({
   trail_marker: { landmarkDecoration: true, interactable: true, fallback: true, assetKey: 'trailMarker' },
   migration_plan_site: { landmarkDecoration: true, interactable: true, fallback: true, assetKey: 'migrationSite' },
   named_landmark: { landmarkDecoration: true, interactable: true, fallback: true, assetKey: 'namedLandmark' },
+  myth_divergence: { landmarkDecoration: true, interactable: true, fallback: true, assetKey: 'worldRiddleSite' },
   campfire: { fallback: true },
   ruin: { fallback: true },
   crystal: { fallback: true },

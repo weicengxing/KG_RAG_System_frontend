@@ -351,11 +351,15 @@ export class Renderer {
       this.ctx.lineWidth = 2
       this.ctx.strokeRect(zombie.x, zombie.y, zombie.width, zombie.height)
       
-      // 绘制emoji
-      this.ctx.font = '48px Arial'
-      this.ctx.textAlign = 'center'
-      this.ctx.textBaseline = 'middle'
-      this.ctx.fillText(config.icon, zombie.x + zombie.width / 2, zombie.y + zombie.height / 2)
+      if (zombie.type === 'buckethead') {
+        this.drawBucketheadZombieIcon(zombie)
+      } else {
+        // 绘制emoji
+        this.ctx.font = '48px Arial'
+        this.ctx.textAlign = 'center'
+        this.ctx.textBaseline = 'middle'
+        this.ctx.fillText(config.icon, zombie.x + zombie.width / 2, zombie.y + zombie.height / 2)
+      }
       
       // 计算总血量（本体+护盾）
       const totalHp = zombie.hp + (zombie.shieldHp || 0)
@@ -390,6 +394,74 @@ export class Renderer {
         this.ctx.fillRect(zombie.x, zombie.y - 5, zombie.width, 5)
       }
     }
+  }
+
+  drawBucketheadZombieIcon(zombie) {
+    const cx = zombie.x + zombie.width / 2
+    const cy = zombie.y + zombie.height / 2
+    const scale = Math.min(zombie.width, zombie.height) / 64
+
+    this.ctx.save()
+    this.ctx.translate(cx, cy)
+    this.ctx.scale(scale, scale)
+
+    this.ctx.fillStyle = '#a3e635'
+    this.ctx.strokeStyle = '#0f172a'
+    this.ctx.lineWidth = 4
+    this.ctx.beginPath()
+    this.ctx.arc(0, 13, 17, 0, Math.PI * 2)
+    this.ctx.fill()
+    this.ctx.stroke()
+
+    this.ctx.fillStyle = '#0f172a'
+    this.ctx.beginPath()
+    this.ctx.arc(-6, 10, 2.2, 0, Math.PI * 2)
+    this.ctx.arc(6, 10, 2.2, 0, Math.PI * 2)
+    this.ctx.fill()
+    this.ctx.lineWidth = 2
+    this.ctx.beginPath()
+    this.ctx.moveTo(-6, 20)
+    this.ctx.quadraticCurveTo(0, 23, 6, 20)
+    this.ctx.stroke()
+
+    this.ctx.strokeStyle = '#0f172a'
+    this.ctx.lineWidth = 4
+    this.ctx.lineCap = 'round'
+    this.ctx.beginPath()
+    this.ctx.arc(0, -15, 21, Math.PI, Math.PI * 2)
+    this.ctx.stroke()
+
+    this.ctx.lineCap = 'butt'
+    this.ctx.lineJoin = 'round'
+    this.ctx.fillStyle = '#94a3b8'
+    this.ctx.beginPath()
+    this.ctx.moveTo(-19, -25)
+    this.ctx.lineTo(19, -25)
+    this.ctx.lineTo(14, 4)
+    this.ctx.lineTo(-14, 4)
+    this.ctx.closePath()
+    this.ctx.fill()
+    this.ctx.stroke()
+
+    this.ctx.fillStyle = '#cbd5e1'
+    this.ctx.fillRect(-23, -30, 46, 10)
+    this.ctx.strokeRect(-23, -30, 46, 10)
+
+    this.ctx.strokeStyle = '#e2e8f0'
+    this.ctx.lineWidth = 4
+    this.ctx.beginPath()
+    this.ctx.moveTo(-8, -21)
+    this.ctx.lineTo(-10, -1)
+    this.ctx.stroke()
+
+    this.ctx.strokeStyle = '#64748b'
+    this.ctx.lineWidth = 3
+    this.ctx.beginPath()
+    this.ctx.moveTo(4, -10)
+    this.ctx.quadraticCurveTo(11, -13, 14, -7)
+    this.ctx.stroke()
+
+    this.ctx.restore()
   }
   
   // 绘制粒子

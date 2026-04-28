@@ -66,6 +66,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { plantConfig } from '../pvz/config.js'
 import { ElMessage } from 'element-plus'
+import { buildWsUrl } from '../config.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -155,7 +156,7 @@ const getPlantDescription = (plantId) => {
 const connectWebSocket = () => {
   if (!isMultiplayer.value) return
   
-  const wsUrl = `ws://localhost:8000/api/ws/pvz/room/${roomId.value}?user_id=${userId.value}`
+  const wsUrl = buildWsUrl(`/api/ws/pvz/room/${roomId.value}?user_id=${userId.value}`)
   ws = new WebSocket(wsUrl)
 
   ws.onopen = () => {

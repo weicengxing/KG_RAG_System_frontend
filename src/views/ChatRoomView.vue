@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import request from '../utils/request'
+import { buildWsUrl } from '../config.js'
 
 // ==================== 配置常量 ====================
 
@@ -30,7 +31,7 @@ function extractUserInfoFromToken(): { userId: string | null, username: string |
 const userInfo = extractUserInfoFromToken()
 const CURRENT_USER_ID = userInfo.userId || userInfo.username 
 const CURRENT_USERNAME = userInfo.username
-const WS_URL = CURRENT_USER_ID ? `wss://6b96b5c0.r9.cpolar.cn/api/chat/ws/${CURRENT_USER_ID}` : ''
+const WS_URL = CURRENT_USER_ID ? buildWsUrl(`/api/chat/ws/${CURRENT_USER_ID}`) : ''
 
 // ==================== 类型定义 ====================
 interface MessageData {

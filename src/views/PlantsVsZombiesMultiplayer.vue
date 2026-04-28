@@ -44,7 +44,10 @@
             }"
             @click="selectZombie(zombie.rawId)"
           >
-            <span class="zombie-icon">{{ zombie.icon }}</span>
+            <span class="zombie-icon">
+              <PvZBucketIcon v-if="zombie.id === 'buckethead'" />
+              <template v-else>{{ zombie.icon }}</template>
+            </span>
             <span class="zombie-name">{{ zombie.name }}</span>
             <span class="zombie-cost">{{ zombie.cost }}</span>
           </div>
@@ -101,6 +104,8 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { MultiplayerGameEngine } from '../pvz/multiplayerEngine.js'
 import { plantConfig, zombieConfig, gameConfig } from '../pvz/config.js'
+import { buildWsUrl } from '../config.js'
+import PvZBucketIcon from '../components/PvZBucketIcon.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -140,17 +145,6 @@ const zombieTypeAlias = {
   basic: 'normal'
 }
 
-const zombieCostConfig = {
-  basic: 50,
-  conehead: 75,
-  buckethead: 125,
-  football: 175,
-  newspaper: 100,
-  dancing: 200,
-  balloon: 150,
-  pole: 125
-}
-
 const plantIdAlias = {
   wallnut: 'nutWall',
   cherrybomb: 'cherryBomb'
@@ -176,7 +170,7 @@ const zombieOptions = computed(() => {
       return {
         ...base,
         rawId,
-        cost: zombieCostConfig[rawId]
+        cost: base.cost || 50
       }
     })
     .filter((item) => item && item.rawId)
@@ -387,7 +381,7 @@ const handleServerMessage = async (message) => {
 }
 
 const initWebSocket = () => {
-  const wsUrl = `ws://localhost:8000/api/ws/pvz/room/${roomId.value}?user_id=${userId.value}`
+  const wsUrl = buildWsUrl(`/api/ws/pvz/room/${roomId.value}?user_id=${userId.value}`)
   ws = new WebSocket(wsUrl)
 
   ws.onopen = () => {

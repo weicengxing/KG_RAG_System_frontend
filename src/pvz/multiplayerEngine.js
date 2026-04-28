@@ -65,6 +65,7 @@ export class MultiplayerGameEngine extends GameEngine {
     this.selectedZombie = null
     this.lastBroadcastState = ''
     this.lastDeltaBroadcastState = ''
+    this.lastPlantsSignature = ''
     this.nextZombieId = 1
     this.lastSnapshotSyncTimestamp = 0
     this.lastDeltaSyncTimestamp = 0
@@ -296,30 +297,7 @@ export class MultiplayerGameEngine extends GameEngine {
   }
 
   createZombieObject(row, zombieType) {
-    const config = zombieConfig[zombieType]
-
-    return {
-      id: `zombie-${this.nextZombieId++}`,
-      type: zombieType,
-      x: this.width,
-      y: row * gameConfig.cellHeight,
-      width: config.width,
-      height: config.height,
-      hp: config.hp,
-      maxHp: config.hp,
-      shieldHp: config.shieldHp || 0,
-      baseSpeed: config.speed,
-      state: 'WALKING',
-      attackTimer: 0,
-      targetPlant: null,
-      slowDuration: 0,
-      slowFactor: 1,
-      isCharmed: false,
-      originalHp: config.hp,
-      originalDamage: config.attackDamage,
-      charmedSpeed: config.speed,
-      attackZombieTimer: 0
-    }
+    return super.createZombieObject(row, zombieType)
   }
 
   collectSun(sun) {
@@ -389,7 +367,9 @@ export class MultiplayerGameEngine extends GameEngine {
     )
 
     return nextEntities.map((entity, index) => {
-      const nextEntity = clonePlain(entity)
+      // entity is already a fresh object (callers spread before passing in,
+      // and WebSocket payloads are JSON-parsed anew). Don't deep-clone.
+      const nextEntity = entity
       const key = this.getEntitySnapshotKey(nextEntity, prefix, index)
       const currentEntity = currentByKey.get(key)
       const snapshotTimestamp = Number(nextEntity.snapshotTimestamp ?? nextEntity.timestamp ?? Date.now())
@@ -563,7 +543,11 @@ export class MultiplayerGameEngine extends GameEngine {
         state: zombie.state,
         slowDuration: roundToTenth(zombie.slowDuration || 0),
         slowFactor: roundToTenth(zombie.slowFactor || 1),
-        isCharmed: !!zombie.isCharmed
+        isCharmed: !!zombie.isCharmed,
+        isFlying: !!zombie.isFlying,
+        isEnraged: !!zombie.isEnraged,
+        hasVaulted: !!zombie.hasVaulted,
+        summonsCreated: roundToInt(zombie.summonsCreated || 0)
       })),
       lawnMowers: this.lawnMowers.map((lawnMower) => ({
         id: lawnMower.id,
@@ -656,20 +640,44 @@ export class MultiplayerGameEngine extends GameEngine {
     this.zombieEnergy = snapshot.zombieEnergy ?? this.zombieEnergy
     this.autoCollectSun = snapshot.autoCollectSun ?? false
 
-    this.grid = new this.grid.constructor(
-      gameConfig.gridCols,
-      gameConfig.gridRows,
-      gameConfig.cellWidth,
-      gameConfig.cellHeight
-    )
-
-    this.plants = (snapshot.plants || []).map((plant) => {
-      const nextPlant = clonePlain(plant)
-      const gridWidth = nextPlant.gridWidth || 1
-      const gridHeight = nextPlant.gridHeight || 1
-      this.grid.placePlant(nextPlant.col, nextPlant.row, nextPlant, gridWidth, gridHeight)
-      return nextPlant
-    })
+    // Plants change infrequently (placement / removal). Reuse the grid unless
+    // the plant set actually changed, gauged by a cheap id+position signature.
+    const incomingPlants = snapshot.plants || []
+    let plantSig = ''
+    for (let i = 0; i < incomingPlants.length; i += 1) {
+      const p = incomingPlants[i]
+      plantSig += `${p.id || p.type}:${p.col},${p.row}|`
+    }
+    if (plantSig !== this.lastPlantsSignature) {
+      this.lastPlantsSignature = plantSig
+      this.grid = new this.grid.constructor(
+        gameConfig.gridCols,
+        gameConfig.gridRows,
+        gameConfig.cellWidth,
+        gameConfig.cellHeight
+      )
+      this.plants = incomingPlants.map((plant) => {
+        const nextPlant = plant
+        const gridWidth = nextPlant.gridWidth || 1
+        const gridHeight = nextPlant.gridHeight || 1
+        this.grid.placePlant(nextPlant.col, nextPlant.row, nextPlant, gridWidth, gridHeight)
+        return nextPlant
+      })
+    } else {
+      // Same set of plants — refresh per-plant scalar fields (hp, state) in place.
+      const byKey = new Map()
+      for (const p of this.plants) {
+        const key = `${p.id || p.type}:${p.col},${p.row}`
+        byKey.set(key, p)
+      }
+      for (const incoming of incomingPlants) {
+        const key = `${incoming.id || incoming.type}:${incoming.col},${incoming.row}`
+        const cur = byKey.get(key)
+        if (cur) {
+          for (const k in incoming) cur[k] = incoming[k]
+        }
+      }
+    }
 
     this.zombies = this.createSmoothedSnapshotEntities(
       (snapshot.zombies || []).map((zombie) => ({
@@ -679,7 +687,7 @@ export class MultiplayerGameEngine extends GameEngine {
       this.zombies,
       'zombie'
     )
-    this.suns = clonePlain(snapshot.suns || [])
+    this.suns = snapshot.suns || []
     this.lawnMowers = this.createSmoothedSnapshotEntities(
       (snapshot.lawnMowers || []).map((lawnMower) => ({
         ...lawnMower,
@@ -688,8 +696,8 @@ export class MultiplayerGameEngine extends GameEngine {
       this.lawnMowers,
       'lawn-mower'
     )
-    this.animations = clonePlain(snapshot.animations || [])
-    this.messages = clonePlain(snapshot.messages || [])
+    this.animations = snapshot.animations || []
+    this.messages = snapshot.messages || []
 
     this.projectileManager.projectiles = this.createSmoothedSnapshotEntities(
       (snapshot.projectiles || []).map((projectile) => ({
@@ -699,9 +707,78 @@ export class MultiplayerGameEngine extends GameEngine {
       this.projectileManager.projectiles,
       'projectile'
     )
-    this.projectileManager.weaponStaffs = clonePlain(snapshot.weaponStaffs || [])
-    this.projectileManager.getParticleSystem().particles = clonePlain(snapshot.particles || [])
-    this.lightningChain.activeChains = clonePlain(snapshot.lightningChains || [])
+    this.projectileManager.weaponStaffs = snapshot.weaponStaffs || []
+    this.projectileManager.getParticleSystem().particles = snapshot.particles || []
+    this.lightningChain.activeChains = snapshot.lightningChains || []
+  }
+
+  // In-place merge of a delta entity list (sent every 50ms) into the current
+  // array, keyed by id. Mutates existing entities, splices out gone ones, and
+  // sets up smoothing fields only for newcomers. Avoids rebuilding the array
+  // and avoids per-frame Map+map() allocations of the snapshot path.
+  mergeDeltaInPlace(currentList, nextList, snapshotTimestamp, props = ['x', 'y']) {
+    if (!Array.isArray(currentList)) return nextList
+    const seen = new Set()
+    // Build id → entity index for O(1) lookup. Only one allocation per delta.
+    const indexById = new Map()
+    for (let i = 0; i < currentList.length; i += 1) {
+      const ent = currentList[i]
+      if (ent && ent.id != null) indexById.set(ent.id, i)
+    }
+    for (let n = 0; n < nextList.length; n += 1) {
+      const next = nextList[n]
+      if (!next || next.id == null) continue
+      seen.add(next.id)
+      const idx = indexById.get(next.id)
+      if (idx == null) {
+        // New entity: seed smoothing fields and append.
+        for (const prop of props) {
+          const v = Number(next[prop])
+          next[`${prop}Target`] = v
+          next[`${prop}Previous`] = v
+          next[`${prop}Velocity`] = 0
+        }
+        next.previousSnapshotTimestamp = snapshotTimestamp
+        next.snapshotTimestamp = snapshotTimestamp
+        next.lastSnapshotTimestamp = snapshotTimestamp
+        currentList.push(next)
+        continue
+      }
+      // Update existing entity in place. Copy scalar fields, refresh smoothing.
+      const cur = currentList[idx]
+      const previousTimestamp = Number(cur.snapshotTimestamp ?? snapshotTimestamp)
+      const elapsedSeconds = Math.max((snapshotTimestamp - previousTimestamp) / 1000, 0.001)
+      for (const prop of props) {
+        const targetProp = `${prop}Target`
+        const previousProp = `${prop}Previous`
+        const velocityProp = `${prop}Velocity`
+        const nextValue = Number(next[prop])
+        const previousValue = Number(cur[targetProp] ?? cur[prop] ?? nextValue)
+        cur[previousProp] = previousValue
+        cur[targetProp] = nextValue
+        cur[velocityProp] = Number.isFinite(nextValue)
+          ? (nextValue - previousValue) / elapsedSeconds
+          : 0
+      }
+      // Copy other scalar fields the delta provides without disturbing the
+      // smoothed `x/y` (which advanceEntity drives).
+      for (const key in next) {
+        if (key === 'x' || key === 'y') continue
+        if (props.includes(key)) continue
+        cur[key] = next[key]
+      }
+      cur.previousSnapshotTimestamp = previousTimestamp
+      cur.snapshotTimestamp = snapshotTimestamp
+      cur.lastSnapshotTimestamp = snapshotTimestamp
+    }
+    // Remove entities whose ids didn't appear in the delta.
+    for (let i = currentList.length - 1; i >= 0; i -= 1) {
+      const ent = currentList[i]
+      if (!ent || ent.id == null || !seen.has(ent.id)) {
+        currentList.splice(i, 1)
+      }
+    }
+    return currentList
   }
 
   applyStateDelta(delta) {
@@ -716,23 +793,8 @@ export class MultiplayerGameEngine extends GameEngine {
     this.sunEnergy = delta.sunEnergy ?? this.sunEnergy
     this.zombieEnergy = delta.zombieEnergy ?? this.zombieEnergy
 
-    this.zombies = this.createSmoothedSnapshotEntities(
-      (delta.zombies || []).map((zombie) => ({
-        ...zombie,
-        snapshotTimestamp: deltaTimestamp
-      })),
-      this.zombies,
-      'zombie'
-    )
-
-    this.lawnMowers = this.createSmoothedSnapshotEntities(
-      (delta.lawnMowers || []).map((lawnMower) => ({
-        ...lawnMower,
-        snapshotTimestamp: deltaTimestamp
-      })),
-      this.lawnMowers,
-      'lawn-mower'
-    )
+    this.mergeDeltaInPlace(this.zombies, delta.zombies || [], deltaTimestamp)
+    this.mergeDeltaInPlace(this.lawnMowers, delta.lawnMowers || [], deltaTimestamp)
   }
 
   stop() {

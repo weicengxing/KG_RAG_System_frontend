@@ -508,7 +508,7 @@ function initWebSocket() {
   }
 
   const token = localStorage.getItem('token')
-  const wsUrlWithToken = `${WS_URL}?token=${token}`
+  const wsUrlWithToken = `${WS_URL}?token=${encodeURIComponent(token || '')}`
   connectionStatus.value = 'connecting'
   socket.value = new WebSocket(wsUrlWithToken)
 

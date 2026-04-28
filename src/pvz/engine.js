@@ -353,6 +353,9 @@ export class GameEngine {
       if (!this.audioContext) {
         this.initAudio()
       }
+      if (this.audioContext.state === 'suspended') {
+        this.audioContext.resume().catch(() => {})
+      }
       
       const oscillator = this.audioContext.createOscillator()
       const gainNode = this.audioContext.createGain()
@@ -1377,6 +1380,7 @@ export class GameEngine {
               zombie.targetPlant.hp -= zombie.isCharmed ? (config.attackDamage * zombie.originalDamage) : config.attackDamage * 60
               
               if (zombie.targetPlant.hp <= 0) {
+                this.onZombieAtePlant?.(zombie.targetPlant, zombie)
                 this.removePlant(zombie.targetPlant)
                 zombie.state = 'WALKING'
                 zombie.targetPlant = null
@@ -1522,6 +1526,7 @@ export class GameEngine {
     })
     
     // 移除魅惑菇
+    this.onZombieAtePlant?.(plant, zombie)
     this.removePlant(plant)
   }
   

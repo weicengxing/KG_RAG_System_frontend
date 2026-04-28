@@ -5,6 +5,7 @@ const SNAPSHOT_PROJECTILE_KEYS_TO_DROP = new Set([
   'targetPlant',
   'targetZombie',
   'sourcePlant',
+  'originPlant',
   'engine',
   'game',
   'ws'
@@ -23,8 +24,14 @@ const PREDICTION_HARD_SNAP_PX = 80       // >80px diff: hard snap (teleport / sp
 const PREDICTION_RECONCILE_DURATION_MS = 200  // 6..80px: ease back to authoritative over 200ms
 const SNAPSHOT_SEND_INTERVAL_MS = 500
 const STATE_DELTA_SEND_INTERVAL_MS = 50
-const MULTIPLAYER_INITIAL_SUN_ENERGY = gameConfig.multiplayer?.initialSunEnergy ?? 10000
-const MULTIPLAYER_INITIAL_ZOMBIE_ENERGY = gameConfig.multiplayer?.initialZombieEnergy ?? 10000
+const ZOMBIE_DEATH_ENERGY_REWARD = 20
+const ZOMBIE_PASSIVE_ENERGY_REWARD = 100
+const ZOMBIE_PASSIVE_ENERGY_INTERVAL = 5
+const MULTIPLAYER_ZOMBIE_TIME_LIMIT = 6 * 60
+
+const getMultiplayerInitialSunEnergy = () => gameConfig.multiplayer?.initialSunEnergy ?? 10000
+const getMultiplayerInitialZombieEnergy = () => gameConfig.multiplayer?.initialZombieEnergy ?? 10000
+const REMOTE_HIT_SOUND_INTERVAL_MS = 140
 
 const zombieTypeAlias = {
   basic: 'normal'
@@ -70,7 +77,7 @@ export class MultiplayerGameEngine extends GameEngine {
     this.role = role
     this.isAuthoritative = role === 'plant'
 
-    this.zombieEnergy = MULTIPLAYER_INITIAL_ZOMBIE_ENERGY
+    this.zombieEnergy = getMultiplayerInitialZombieEnergy()
     this.selectedZombie = null
     this.lastBroadcastState = ''
     this.lastDeltaBroadcastState = ''
@@ -78,6 +85,15 @@ export class MultiplayerGameEngine extends GameEngine {
     this.nextZombieId = 1
     this.lastSnapshotSyncTimestamp = 0
     this.lastDeltaSyncTimestamp = 0
+    this.seenRemoteAnimationKeys = new Set()
+    this.seenRemoteProjectileKeys = new Set()
+    this.seenRemoteLightningKeys = new Set()
+    this.lastRemoteHitSoundAt = 0
+    this.nextProjectileSyncId = 1
+    this.nextAnimationSyncId = 1
+    this.zombiePassiveEnergyTimer = 0
+    this.multiplayerElapsedTime = 0
+    this.gameOverPayload = null
 
     this.onPlantPlaced = null
     this.onZombieSpawned = null
@@ -90,8 +106,8 @@ export class MultiplayerGameEngine extends GameEngine {
     this.isPaused = false
     this.gameOver = false
 
-    this.sunEnergy = MULTIPLAYER_INITIAL_SUN_ENERGY
-    this.zombieEnergy = MULTIPLAYER_INITIAL_ZOMBIE_ENERGY
+    this.sunEnergy = getMultiplayerInitialSunEnergy()
+    this.zombieEnergy = getMultiplayerInitialZombieEnergy()
     this.score = 0
     this.wave = 1
     this.totalScore = 0
@@ -123,6 +139,15 @@ export class MultiplayerGameEngine extends GameEngine {
     this.nextZombieId = 1
     this.lastSnapshotSyncTimestamp = 0
     this.lastDeltaSyncTimestamp = 0
+    this.seenRemoteAnimationKeys = new Set()
+    this.seenRemoteProjectileKeys = new Set()
+    this.seenRemoteLightningKeys = new Set()
+    this.lastRemoteHitSoundAt = 0
+    this.nextProjectileSyncId = 1
+    this.nextAnimationSyncId = 1
+    this.zombiePassiveEnergyTimer = 0
+    this.multiplayerElapsedTime = 0
+    this.gameOverPayload = null
 
     this.grid = new this.grid.constructor(
       gameConfig.gridCols,
@@ -149,14 +174,85 @@ export class MultiplayerGameEngine extends GameEngine {
     }
 
     const wasGameOver = this.gameOver
+    const previousZombies = this.zombies.map((zombie) => ({
+      id: zombie.id,
+      x: Number(zombie.x || 0),
+      width: Number(zombie.width || 0),
+      isCharmed: !!zombie.isCharmed
+    }))
+
+    this.multiplayerElapsedTime += deltaTime
+    this.updateZombiePassiveEnergy(deltaTime)
+
     super.update(deltaTime)
+    this.rewardDefeatedZombies(previousZombies)
+
+    if (!this.gameOver && this.multiplayerElapsedTime >= MULTIPLAYER_ZOMBIE_TIME_LIMIT) {
+      this.finishMultiplayerGame('plant', 'zombie_timeout', '僵尸方 6 分钟内未获胜，植物方获胜！')
+    }
 
     if (!wasGameOver && this.gameOver && this.onGameOver) {
-      this.onGameOver({
+      this.onGameOver(this.gameOverPayload || {
         winner: 'zombie',
+        loser: 'plant',
         reason: 'zombie_reached_home'
       })
     }
+  }
+
+  updateZombiePassiveEnergy(deltaTime) {
+    this.zombiePassiveEnergyTimer += deltaTime
+    while (this.zombiePassiveEnergyTimer >= ZOMBIE_PASSIVE_ENERGY_INTERVAL) {
+      this.zombiePassiveEnergyTimer -= ZOMBIE_PASSIVE_ENERGY_INTERVAL
+      this.zombieEnergy += ZOMBIE_PASSIVE_ENERGY_REWARD
+    }
+  }
+
+  rewardDefeatedZombies(previousZombies) {
+    if (!previousZombies.length) return
+
+    const currentIds = new Set(this.zombies.map((zombie) => zombie.id))
+    let defeatedCount = 0
+
+    for (const previous of previousZombies) {
+      if (!previous.id || currentIds.has(previous.id)) continue
+
+      const leftByCharm = previous.isCharmed && previous.x >= this.width - previous.width
+      if (!leftByCharm) {
+        defeatedCount += 1
+      }
+    }
+
+    if (defeatedCount > 0) {
+      this.zombieEnergy += defeatedCount * ZOMBIE_DEATH_ENERGY_REWARD
+    }
+  }
+
+  rewardPlantEaten(plant) {
+    const cost = plantConfig[plant?.type]?.cost || 0
+    if (cost > 0) {
+      this.zombieEnergy += cost * 2
+    }
+  }
+
+  onZombieAtePlant(plant) {
+    if (this.isAuthoritative) {
+      this.rewardPlantEaten(plant)
+    }
+  }
+
+  finishMultiplayerGame(winner, reason, message) {
+    this.gameOver = true
+    this.isPlaying = false
+    this.gameOverPayload = {
+      winner,
+      loser: winner === 'plant' ? 'zombie' : 'plant',
+      reason
+    }
+    if (message) {
+      this.showMessage(message, winner === 'plant' ? '#22c55e' : '#f87171')
+    }
+    this.playSound(winner === 'plant' ? 'waveComplete' : 'gameOver')
   }
 
   updateWave() {
@@ -179,6 +275,19 @@ export class MultiplayerGameEngine extends GameEngine {
     this.renderer.drawLightningChains(this.lightningChain.getActiveChains())
     this.renderer.drawAnimations(this.animations)
     this.renderer.drawMessages(this.messages)
+  }
+
+  unlockAudio() {
+    try {
+      if (!this.audioContext) {
+        this.initAudio()
+      }
+      if (this.audioContext?.state === 'suspended') {
+        this.audioContext.resume().catch(() => {})
+      }
+    } catch {
+      // Browser audio policies can still deny this outside a gesture.
+    }
   }
 
   onServerMessage(message) {
@@ -254,10 +363,22 @@ export class MultiplayerGameEngine extends GameEngine {
     return true
   }
 
+  digupPlant(plant) {
+    if (!this.isAuthoritative || this.role !== 'plant' || !plant) {
+      return false
+    }
+
+    const beforeCount = this.plants.length
+    super.digupPlant(plant)
+    return this.plants.length < beforeCount
+  }
+
   spawnZombie(row, zombieType) {
     if (this.role !== 'zombie') {
       return false
     }
+
+    this.unlockAudio()
 
     const normalizedType = normalizeZombieType(zombieType)
     const config = zombieConfig[normalizedType]
@@ -343,6 +464,8 @@ export class MultiplayerGameEngine extends GameEngine {
     if (this.role !== 'zombie') {
       return false
     }
+
+    this.unlockAudio()
 
     const normalizedType = normalizeZombieType(zombieType)
     const config = zombieConfig[normalizedType]
@@ -448,6 +571,8 @@ export class MultiplayerGameEngine extends GameEngine {
       }
     }
     this.projectileManager.getParticleSystem().update(deltaTime)
+    this.updateAnimations(deltaTime)
+    this.updateMessages(deltaTime)
   }
 
   // Walk a zombie locally based on its last server-reported speed/state. If a
@@ -500,8 +625,67 @@ export class MultiplayerGameEngine extends GameEngine {
     entity.y += dy
     entity._reconcileDx = (entity._reconcileDx || 0) - dx
     entity._reconcileDy = (entity._reconcileDy || 0) - dy
-    // Suppress unused-warn on `total`.
+  // Suppress unused-warn on `total`.
     void total
+  }
+
+  serializeLightningChains() {
+    return this.lightningChain.getActiveChains().map((chain) => ({
+      id: chain.id,
+      currentJump: chain.currentJump,
+      damage: chain.damage,
+      jumpDelay: chain.jumpDelay,
+      delayTimer: chain.delayTimer,
+      isComplete: chain.isComplete,
+      jumps: (chain.jumps || []).map((jump) => ({
+        damage: jump.damage,
+        segmentIndex: jump.segmentIndex,
+        segmentProgress: jump.segmentProgress,
+        isComplete: jump.isComplete,
+        time: jump.time,
+        segments: (jump.segments || []).map((segment) => ({
+          startX: roundToTenth(segment.startX),
+          startY: roundToTenth(segment.startY),
+          baseEndX: roundToTenth(segment.baseEndX),
+          baseEndY: roundToTenth(segment.baseEndY),
+          endX: roundToTenth(segment.endX),
+          endY: roundToTenth(segment.endY),
+          segmentIndex: segment.segmentIndex,
+          offsetAmount: roundToTenth(segment.offsetAmount || 0)
+        }))
+      }))
+    }))
+  }
+
+  serializeAnimations() {
+    return this.animations.map((animation) => {
+      if (!animation.syncId) {
+        animation.syncId = `${animation.type}-${Date.now()}-${this.nextAnimationSyncId++}`
+      }
+      return { ...animation }
+    })
+  }
+
+  serializeProjectiles() {
+    return this.projectileManager.getProjectiles().map((projectile) => {
+      const out = {}
+      if (!projectile.syncId) {
+        projectile.syncId = `${projectile.type}-${Date.now()}-${this.nextProjectileSyncId++}`
+      }
+      for (const key in projectile) {
+        if (!SNAPSHOT_PROJECTILE_KEYS_TO_DROP.has(key)) {
+          out[key] = projectile[key]
+        }
+      }
+      return out
+    })
+  }
+
+  getProjectileMergeKey(projectile, index) {
+    if (projectile?.syncId) {
+      return projectile.syncId
+    }
+    return `${projectile?.type}:${Math.round((projectile?.row ?? 0))}:${Math.round((projectile?.x ?? 0) / 4)}:${index}`
   }
 
   serializeGameState() {
@@ -529,22 +713,14 @@ export class MultiplayerGameEngine extends GameEngine {
       }),
       suns: this.suns,
       lawnMowers: this.lawnMowers,
-      animations: this.animations,
+      animations: this.serializeAnimations(),
       messages: this.messages,
-      projectiles: this.projectileManager.getProjectiles().map((projectile) => {
-        const out = {}
-        for (const key in projectile) {
-          if (!SNAPSHOT_PROJECTILE_KEYS_TO_DROP.has(key)) {
-            out[key] = projectile[key]
-          }
-        }
-        return out
-      }),
+      projectiles: this.serializeProjectiles(),
       weaponStaffs: this.projectileManager.getWeaponStaffs(),
       // particles intentionally NOT shipped — they are pure visual fluff that
       // the zombie side reconstructs locally from firePea projectile positions
       // (see spawnLocalParticlesForFireProjectiles).
-      lightningChains: []
+      lightningChains: this.serializeLightningChains()
     }
   }
 
@@ -557,6 +733,10 @@ export class MultiplayerGameEngine extends GameEngine {
       gameOver: this.gameOver,
       sunEnergy: this.sunEnergy,
       zombieEnergy: this.zombieEnergy,
+      animations: this.serializeAnimations(),
+      projectiles: this.serializeProjectiles(),
+      weaponStaffs: this.projectileManager.getWeaponStaffs(),
+      lightningChains: this.serializeLightningChains(),
       zombies: this.zombies.map((zombie) => ({
         id: zombie.id,
         type: zombie.type,
@@ -661,6 +841,11 @@ export class MultiplayerGameEngine extends GameEngine {
     }
 
     const snapshotTimestamp = Number(snapshot.timestamp ?? Date.now())
+    const previousZombies = this.zombies.map((zombie) => ({
+      id: zombie.id,
+      hp: Number(zombie.hp || 0),
+      shieldHp: Number(zombie.shieldHp || 0)
+    }))
 
     this.isPlaying = snapshot.isPlaying ?? true
     this.gameOver = snapshot.gameOver ?? false
@@ -708,22 +893,24 @@ export class MultiplayerGameEngine extends GameEngine {
     }
 
     this.mergeDeltaInPlace(this.zombies, snapshot.zombies || [], snapshotTimestamp)
+    this.playRemoteCombatSounds(previousZombies, this.zombies)
     this.suns = snapshot.suns || []
     this.mergeDeltaInPlace(this.lawnMowers, snapshot.lawnMowers || [], snapshotTimestamp)
-    this.animations = snapshot.animations || []
+    this.applyRemoteAnimations(snapshot.animations || [])
     this.messages = snapshot.messages || []
 
     // Projectiles have no stable id (they're created/destroyed quickly).
     // Wholesale-replace and seed velocity from x/y delta so prediction works.
     const incomingProjectiles = snapshot.projectiles || []
     const oldProjectilesByKey = new Map()
-    for (const p of this.projectileManager.projectiles) {
-      const key = `${p.type}:${Math.round((p.row ?? 0))}:${Math.round((p.x ?? 0) / 4)}`
+    for (let i = 0; i < this.projectileManager.projectiles.length; i += 1) {
+      const p = this.projectileManager.projectiles[i]
+      const key = this.getProjectileMergeKey(p, i)
       if (!oldProjectilesByKey.has(key)) oldProjectilesByKey.set(key, p)
     }
-    this.projectileManager.projectiles = incomingProjectiles.map((p) => {
+    this.projectileManager.projectiles = incomingProjectiles.map((p, index) => {
       const out = p
-      const key = `${out.type}:${Math.round((out.row ?? 0))}:${Math.round((out.x ?? 0) / 4)}`
+      const key = this.getProjectileMergeKey(out, index)
       const prev = oldProjectilesByKey.get(key)
       if (prev) {
         // Reuse local x for smoothness; carry forward velocity if available.
@@ -738,6 +925,7 @@ export class MultiplayerGameEngine extends GameEngine {
       }
       return out
     })
+    this.playRemoteProjectileSounds(this.projectileManager.projectiles)
     this.projectileManager.weaponStaffs = snapshot.weaponStaffs || []
     // Particles are no longer shipped over the wire — preserve whatever the
     // local visual reconstruction has produced. (Older payloads with `particles`
@@ -746,6 +934,7 @@ export class MultiplayerGameEngine extends GameEngine {
       this.projectileManager.getParticleSystem().particles = snapshot.particles
     }
     this.lightningChain.activeChains = snapshot.lightningChains || []
+    this.playRemoteLightningSounds(snapshot.lightningChains || [])
   }
 
   // In-place merge of a delta entity list (sent every 50ms) into the current
@@ -854,14 +1043,175 @@ export class MultiplayerGameEngine extends GameEngine {
     }
 
     const deltaTimestamp = Number(delta.timestamp ?? Date.now())
+    const previousZombies = this.zombies.map((zombie) => ({
+      id: zombie.id,
+      hp: Number(zombie.hp || 0),
+      shieldHp: Number(zombie.shieldHp || 0)
+    }))
 
     this.isPlaying = delta.isPlaying ?? this.isPlaying
     this.gameOver = delta.gameOver ?? this.gameOver
     this.sunEnergy = delta.sunEnergy ?? this.sunEnergy
     this.zombieEnergy = delta.zombieEnergy ?? this.zombieEnergy
+    if (Array.isArray(delta.lightningChains)) {
+      this.lightningChain.activeChains = delta.lightningChains
+      this.playRemoteLightningSounds(delta.lightningChains)
+    }
+    if (Array.isArray(delta.animations)) {
+      this.applyRemoteAnimations(delta.animations)
+    }
+    if (Array.isArray(delta.projectiles)) {
+      this.applyRemoteProjectiles(delta.projectiles)
+    }
+    if (Array.isArray(delta.weaponStaffs)) {
+      this.projectileManager.weaponStaffs = delta.weaponStaffs
+    }
 
     this.mergeDeltaInPlace(this.zombies, delta.zombies || [], deltaTimestamp)
+    this.playRemoteCombatSounds(previousZombies, this.zombies)
     this.mergeDeltaInPlace(this.lawnMowers, delta.lawnMowers || [], deltaTimestamp)
+  }
+
+  getRemoteAnimationKey(animation) {
+    if (animation.syncId) {
+      return animation.syncId
+    }
+    return `${animation.type}:${Math.round(animation.x || 0)}:${Math.round(animation.y || 0)}:${Math.round((animation.duration || 0) * 100)}`
+  }
+
+  getRemoteProjectileKey(projectile, index) {
+    if (projectile.syncId) {
+      return projectile.syncId
+    }
+    return `${projectile.type}:${projectile.row ?? ''}:${Math.round((projectile.x || 0) / 120)}:${index}`
+  }
+
+  playRemoteSound(soundName) {
+    if (this.isAuthoritative) return
+    this.playSound(soundName)
+  }
+
+  applyRemoteAnimations(animations = []) {
+    this.animations = animations.map((animation) => ({ ...animation }))
+    this.playRemoteAnimationSounds(this.animations)
+  }
+
+  applyRemoteProjectiles(incomingProjectiles = []) {
+    const oldProjectilesByKey = new Map()
+    for (let i = 0; i < this.projectileManager.projectiles.length; i += 1) {
+      const projectile = this.projectileManager.projectiles[i]
+      const key = this.getProjectileMergeKey(projectile, i)
+      if (!oldProjectilesByKey.has(key)) oldProjectilesByKey.set(key, projectile)
+    }
+
+    this.projectileManager.projectiles = incomingProjectiles.map((projectile, index) => {
+      const out = { ...projectile }
+      const key = this.getProjectileMergeKey(out, index)
+      const prev = oldProjectilesByKey.get(key)
+      if (prev) {
+        out.x = prev.x
+        out.y = prev.y
+        out.xVelocity = typeof prev.xVelocity === 'number' ? prev.xVelocity : (Number(out.speed) || 300)
+        out.yVelocity = prev.yVelocity || 0
+      } else {
+        out.xVelocity = Number(out.speed) || 300
+        out.yVelocity = 0
+      }
+      return out
+    })
+    this.playRemoteProjectileSounds(this.projectileManager.projectiles)
+  }
+
+  playRemoteAnimationSounds(animations = []) {
+    const nextKeys = new Set()
+    for (const animation of animations) {
+      const key = this.getRemoteAnimationKey(animation)
+      nextKeys.add(key)
+      if (this.seenRemoteAnimationKeys.has(key)) continue
+
+      if (
+        animation.type?.includes('Explode') ||
+        animation.type === 'explode' ||
+        animation.type === 'lightningSurround' ||
+        animation.type === 'potatoMineExplode' ||
+        animation.type === 'jalapenoExplode'
+      ) {
+        this.playRemoteSound('explode')
+      } else if (
+        animation.type === 'zombieDeath' ||
+        animation.type === 'death'
+      ) {
+        this.playRemoteSound('zombieDeath')
+      } else if (
+        animation.type === 'plant'
+      ) {
+        this.playRemoteSound('plant')
+      } else if (
+        animation.type === 'bladeCut' ||
+        animation.type === 'staffHit' ||
+        animation.type === 'shieldBreak'
+      ) {
+        this.playRemoteSound('hit')
+      }
+    }
+    this.seenRemoteAnimationKeys = nextKeys
+  }
+
+  playRemoteProjectileSounds(projectiles = []) {
+    const nextKeys = new Set()
+    for (let i = 0; i < projectiles.length; i += 1) {
+      const projectile = projectiles[i]
+      const key = this.getRemoteProjectileKey(projectile, i)
+      nextKeys.add(key)
+      if (!this.seenRemoteProjectileKeys.has(key)) {
+        this.playRemoteSound(projectile.type === 'cannon' ? 'explode' : 'shoot')
+      }
+    }
+    this.seenRemoteProjectileKeys = nextKeys
+  }
+
+  playRemoteLightningSounds(lightningChains = []) {
+    const nextKeys = new Set()
+    for (const chain of lightningChains) {
+      if (!chain?.id) continue
+      nextKeys.add(chain.id)
+      if (!this.seenRemoteLightningKeys.has(chain.id)) {
+        this.playRemoteSound('explode')
+      }
+    }
+    this.seenRemoteLightningKeys = nextKeys
+  }
+
+  playRemoteCombatSounds(previousZombies, currentZombies) {
+    if (this.isAuthoritative) return
+
+    const currentById = new Map()
+    for (const zombie of currentZombies) {
+      if (zombie?.id != null) {
+        currentById.set(zombie.id, zombie)
+      }
+    }
+
+    let tookDamage = false
+    for (const previous of previousZombies) {
+      const current = currentById.get(previous.id)
+      if (!current) {
+        this.playRemoteSound('zombieDeath')
+        continue
+      }
+
+      const previousTotal = previous.hp + previous.shieldHp
+      const currentTotal = Number(current.hp || 0) + Number(current.shieldHp || 0)
+      if (currentTotal < previousTotal) {
+        tookDamage = true
+      }
+    }
+
+    const now = Date.now()
+    if (tookDamage && now - this.lastRemoteHitSoundAt > REMOTE_HIT_SOUND_INTERVAL_MS) {
+      this.lastRemoteHitSoundAt = now
+      this.playRemoteSound('hit')
+    }
   }
 
   stop() {

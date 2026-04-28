@@ -65,6 +65,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { plantConfig } from '../pvz/config.js'
+import { loadPvzRuntimeConfig } from '../pvz/configOverrides.js'
 import { ElMessage } from 'element-plus'
 import { buildWsUrl } from '../config.js'
 
@@ -75,9 +76,11 @@ const route = useRoute()
 const isMultiplayer = computed(() => route.query.mode === 'multiplayer')
 const roomId = ref(route.query.room_id)
 const userId = ref(route.query.user_id || localStorage.getItem('username'))
+const pvzConfigVersion = ref(0)
 
 // 所有可用的植物
 const allPlants = computed(() => {
+  pvzConfigVersion.value
   return Object.keys(plantConfig).map(key => ({
     id: key,
     ...plantConfig[key]
@@ -268,7 +271,14 @@ const startGame = () => {
 }
 
 // 生命周期
-onMounted(() => {
+onMounted(async () => {
+  try {
+    await loadPvzRuntimeConfig()
+    pvzConfigVersion.value += 1
+  } catch (error) {
+    console.error('加载PVZ运行配置失败:', error)
+  }
+
   if (isMultiplayer.value) {
     connectWebSocket()
   }

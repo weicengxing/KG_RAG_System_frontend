@@ -80,6 +80,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { buildWsUrl } from '../config.js'
 import { zombieConfig } from '../pvz/config.js'
+import { loadPvzRuntimeConfig } from '../pvz/configOverrides.js'
 import PvZBucketIcon from '../components/PvZBucketIcon.vue'
 
 const router = useRouter()
@@ -88,9 +89,11 @@ const route = useRoute()
 // 获取房间和用户信息
 const roomId = ref(route.params.roomId)
 const userId = ref(route.params.userId || localStorage.getItem('username'))
+const pvzConfigVersion = ref(0)
 
 // 所有可用的僵尸类型
 const allZombies = computed(() => {
+  pvzConfigVersion.value
   const zombieTypes = {
     basic: { id: 'basic', name: '普通僵尸', icon: '🧟', cost: 50, hp: 200, speed: 1 },
     conehead: { id: 'conehead', name: '路障僵尸', icon: '🎩', cost: 75, hp: 400, speed: 1 },
@@ -266,7 +269,14 @@ const goBack = () => {
 }
 
 // 生命周期
-onMounted(() => {
+onMounted(async () => {
+  try {
+    await loadPvzRuntimeConfig()
+    pvzConfigVersion.value += 1
+  } catch (error) {
+    console.error('加载PVZ运行配置失败:', error)
+  }
+
   connectWebSocket()
 })
 

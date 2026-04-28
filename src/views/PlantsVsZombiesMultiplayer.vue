@@ -13,6 +13,13 @@
     <div class="game-container">
       <div class="plants-sidebar" v-if="role === 'plant'">
         <h3>🌻 植物选择</h3>
+        <button
+          type="button"
+          :class="['shovel-btn', { 'shovel-active': isShovelMode }]"
+          @click="toggleShovelMode"
+        >
+          {{ isShovelMode ? '铲除模式' : '铲子' }}
+        </button>
         <div class="plant-slots">
           <div
             v-for="plant in plantOptions"
@@ -107,6 +114,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { MultiplayerGameEngine } from '../pvz/multiplayerEngine.js'
 import { plantConfig, zombieConfig, gameConfig } from '../pvz/config.js'
+import { loadPvzRuntimeConfig } from '../pvz/configOverrides.js'
 import { buildWsUrl } from '../config.js'
 import PvZBucketIcon from '../components/PvZBucketIcon.vue'
 
@@ -129,17 +137,20 @@ const role = ref('')
 const connectionStatus = ref('连接中...')
 const latency = ref(0)
 const gameCanvas = ref(null)
-const initialSunEnergy = gameConfig.multiplayer?.initialSunEnergy ?? 10000
-const initialZombieEnergy = gameConfig.multiplayer?.initialZombieEnergy ?? 10000
 
-const sunEnergy = ref(initialSunEnergy)
+const getInitialSunEnergy = () => gameConfig.multiplayer?.initialSunEnergy ?? 10000
+const getInitialZombieEnergy = () => gameConfig.multiplayer?.initialZombieEnergy ?? 10000
+
+const sunEnergy = ref(getInitialSunEnergy())
 const selectedPlant = ref(null)
 const selectedPlantsList = ref([])
 const plantCooldowns = ref({})
+const isShovelMode = ref(false)
 
-const zombieEnergy = ref(initialZombieEnergy)
+const zombieEnergy = ref(getInitialZombieEnergy())
 const selectedZombie = ref(null)
 const selectedZombiesList = ref([])
+const pvzConfigVersion = ref(0)
 
 // Engine entity arrays are owned by `gameEngine` directly. We don't mirror
 // them into Vue refs — see syncEngineState comment.
@@ -156,6 +167,7 @@ const plantIdAlias = {
 const isAuthority = computed(() => role.value === 'plant')
 
 const plantOptions = computed(() => {
+  pvzConfigVersion.value
   return selectedPlantsList.value
     .map((rawId) => {
       const id = plantIdAlias[rawId] || rawId
@@ -165,6 +177,7 @@ const plantOptions = computed(() => {
 })
 
 const zombieOptions = computed(() => {
+  pvzConfigVersion.value
   return selectedZombiesList.value
     .map((rawId) => {
       const id = zombieTypeAlias[rawId] || rawId
@@ -204,6 +217,7 @@ const syncEngineState = () => {
   sunEnergy.value = gameEngine.sunEnergy
   zombieEnergy.value = gameEngine.zombieEnergy
   plantCooldowns.value = { ...gameEngine.plantCooldowns }
+  isShovelMode.value = !!gameEngine.isShovelMode
 
   if (!gameEngine.selectedPlant) {
     selectedPlant.value = ''
@@ -231,8 +245,9 @@ const maybeBroadcastAuthorityState = () => {
     reportedGameOver = true
     ws.send(JSON.stringify({
       type: 'game_over',
-      payload: {
+      payload: gameEngine.gameOverPayload || {
         winner: 'zombie',
+        loser: 'plant',
         reason: 'zombie_reached_home'
       }
     }))
@@ -327,8 +342,8 @@ const handleServerMessage = async (message) => {
   switch (message.type) {
     case 'event.connected':
       role.value = message.payload.role
-      sunEnergy.value = initialSunEnergy
-      zombieEnergy.value = initialZombieEnergy
+      sunEnergy.value = getInitialSunEnergy()
+      zombieEnergy.value = getInitialZombieEnergy()
 
       await ensureCanvasSize()
 
@@ -460,11 +475,26 @@ const selectPlant = (plantType) => {
 
   if (!gameEngine || !isAuthority.value) {
     selectedPlant.value = plantType
+    isShovelMode.value = false
     return
   }
 
   if (gameEngine.selectPlant(plantType)) {
     selectedPlant.value = plantType
+    isShovelMode.value = false
+    gameEngine.isShovelMode = false
+  }
+}
+
+const toggleShovelMode = () => {
+  if (!gameEngine || !isAuthority.value) return
+
+  isShovelMode.value = !isShovelMode.value
+  gameEngine.isShovelMode = isShovelMode.value
+
+  if (isShovelMode.value) {
+    selectedPlant.value = ''
+    gameEngine.selectedPlant = null
   }
 }
 
@@ -491,7 +521,19 @@ const handleCanvasClick = (event) => {
   const col = Math.floor(x / gameConfig.cellWidth)
   const row = Math.floor(y / gameConfig.cellHeight)
 
-  if (isAuthority.value && selectedPlant.value) {
+  if (isAuthority.value && isShovelMode.value) {
+    if (col >= 0 && col < gameConfig.gridCols && row >= 0 && row < gameConfig.gridRows) {
+      const plant = gameEngine.grid.getPlant(col, row)
+      if (plant && gameEngine.digupPlant(plant)) {
+        isShovelMode.value = false
+        gameEngine.isShovelMode = false
+        syncEngineState()
+        maybeBroadcastAuthorityState()
+      } else {
+        ElMessage.warning('请选择要铲除的植物')
+      }
+    }
+  } else if (isAuthority.value && selectedPlant.value) {
     if (col >= 0 && col < gameConfig.gridCols && row >= 0 && row < gameConfig.gridRows) {
       if (isPlantCoolingDown(selectedPlant.value)) {
         ElMessage.warning('植物冷却中')
@@ -583,7 +625,16 @@ const goBack = () => {
   router.push({ name: 'PvZMultiplayerRoom' })
 }
 
-onMounted(() => {
+onMounted(async () => {
+  try {
+    await loadPvzRuntimeConfig()
+    pvzConfigVersion.value += 1
+    sunEnergy.value = getInitialSunEnergy()
+    zombieEnergy.value = getInitialZombieEnergy()
+  } catch (error) {
+    console.error('加载PVZ运行配置失败:', error)
+  }
+
   applySelectionsFromQuery()
   ensureCanvasSize()
   initWebSocket()
@@ -690,6 +741,30 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.shovel-btn {
+  width: 100%;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  background: linear-gradient(135deg, #475569 0%, #334155 100%);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.22);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.shovel-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.3);
+}
+
+.shovel-active {
+  background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
 }
 
 .plant-slot,

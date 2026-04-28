@@ -453,7 +453,7 @@ const savePvzConfig = async () => {
 
   pvzConfigSaving.value = true
   try {
-    const response = await request.put('/pvz/config', {
+    const response = await request.put('/api/pvz/config', {
       plants: normalizeNumericConfig(pvzConfigForm.value.plants),
       zombies: normalizeNumericConfig(pvzConfigForm.value.zombies),
       game: normalizeGameConfig(pvzConfigForm.value.game)

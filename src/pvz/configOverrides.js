@@ -86,7 +86,7 @@ export const applyPvzConfigOverrides = (configData = {}) => {
 }
 
 export const loadPvzRuntimeConfig = async () => {
-  const response = await request.get('/pvz/config')
+  const response = await request.get('/api/pvz/config')
   const configData = response.data?.data || {}
   applyPvzConfigOverrides(configData)
   return response.data

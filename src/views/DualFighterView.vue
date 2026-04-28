@@ -6,6 +6,9 @@
         <h1>双人格斗</h1>
       </div>
       <div class="top-actions">
+        <el-button :icon="audioEnabled ? Bell : Mute" @click="toggleAudio">
+          SFX {{ audioEnabled ? 'ON' : 'OFF' }}
+        </el-button>
         <el-button :icon="Refresh" @click="refreshAll">刷新</el-button>
         <el-button v-if="myRoom" :icon="Close" type="danger" plain @click="leaveRoom">离开房间</el-button>
       </div>
@@ -194,10 +197,11 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Close, Connection, Plus, Refresh, Select, SwitchButton } from '@element-plus/icons-vue'
+import { Bell, Close, Connection, Mute, Plus, Refresh, Select, SwitchButton } from '@element-plus/icons-vue'
 import request from '../utils/request'
 import { API_CONFIG } from '../config.js'
 import { FighterModelRenderer } from '../fighter/fighterModelRenderer.js'
+import { FighterAudioEngine } from '../fighter/fighterAudioEngine.js'
 
 const rooms = ref([])
 const roomCode = ref('')
@@ -216,6 +220,8 @@ const delayedHp = ref({ p1: 100, p2: 100 })
 
 const currentUserId = ref(localStorage.getItem('username') || `guest-${Date.now()}`)
 const inputState = ref({ left: false, right: false, up: false, down: false, block: false })
+const audioEngine = new FighterAudioEngine()
+const audioEnabled = ref(audioEngine.isEnabled)
 let lobbyWs = null
 let roomWs = null
 let inputTimer = null
@@ -567,29 +573,49 @@ const selectMap = (mapId) => {
 }
 
 const toggleReady = () => {
+  unlockAudio()
   sendRoomMessage('ready', { ready: !localReady.value })
 }
 
 const resetMatch = () => {
+  unlockAudio()
   sendRoomMessage('reset')
+}
+
+const unlockAudio = () => {
+  if (!audioEnabled.value) return
+  audioEngine.unlock().catch(() => {})
+}
+
+const toggleAudio = () => {
+  audioEnabled.value = audioEngine.toggle()
 }
 
 const sendInput = () => {
   if (!isPlaying.value) return
+  unlockAudio()
   sendRoomMessage('input', { ...inputState.value })
 }
 
 const sendAction = (action) => {
   if (!isPlaying.value) return
+  unlockAudio()
+  audioEngine.playLocalAction(action, inputState.value)
   sendRoomMessage('input', { ...inputState.value, action })
 }
 
 const hold = (key, value) => {
   inputState.value[key] = value
+  if (value) {
+    unlockAudio()
+    if (key === 'block') audioEngine.playLocalAction('block', inputState.value)
+  }
   sendInput()
 }
 
 const tapJump = () => {
+  unlockAudio()
+  audioEngine.playLocalAction('jump', inputState.value)
   inputState.value.up = true
   sendInput()
   setTimeout(() => {
@@ -616,8 +642,10 @@ const handleKeyDown = (event) => {
   const key = keyMap[event.code]
   const action = actionMap[event.code]
   if (key || action) event.preventDefault()
+  if (key || action) unlockAudio()
   if (key && !inputState.value[key]) {
     inputState.value[key] = true
+    if (key === 'block') audioEngine.playLocalAction('block', inputState.value)
     sendInput()
   }
   if (action && !event.repeat) {
@@ -1210,6 +1238,7 @@ const syncClientFxFromState = (state) => {
   ;(state?.effects || []).forEach((effect) => {
     if (!effect.id || localFx.seenEffects.has(effect.id)) return
     localFx.seenEffects.add(effect.id)
+    audioEngine.playEffect(effect, state)
     spawnClientFxForEffect(effect)
   })
   if (localFx.seenEffects.size > 120) {
@@ -2411,6 +2440,7 @@ const stopAnimationLoop = () => {
 
 watch(gameState, async () => {
   syncDelayedHealthBars()
+  audioEngine.syncMatchState(gameState.value)
   syncClientFxFromState(gameState.value)
   await ensureRenderer()
   renderArena()
@@ -2439,6 +2469,7 @@ onUnmounted(() => {
     modelRenderer.destroy()
     modelRenderer = null
   }
+  audioEngine.destroy()
   canvasCtx = null
 })
 </script>

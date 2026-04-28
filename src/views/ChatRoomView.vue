@@ -542,8 +542,12 @@ function initWebSocket() {
     }
   }
 
-  socket.value.onclose = () => {
-    console.warn('❌ WebSocket Disconnected')
+  socket.value.onclose = (event) => {
+    console.warn('❌ WebSocket Disconnected', {
+      code: event.code,
+      reason: event.reason,
+      wasClean: event.wasClean
+    })
     connectionStatus.value = 'disconnected'
     stopHeartbeat()
     setTimeout(() => initWebSocket(), 3000)

@@ -18,7 +18,16 @@
           :class="['shovel-btn', { 'shovel-active': isShovelMode }]"
           @click="toggleShovelMode"
         >
-          {{ isShovelMode ? '铲除模式' : '铲子' }}
+          <span class="shovel-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" focusable="false">
+              <path class="shovel-handle" d="M31.5 8.5 18.2 25.2" />
+              <path class="shovel-grip" d="M33.7 5.8c2.1-2.1 5.6-2.1 7.7 0s2.1 5.6 0 7.7l-3.2 3.2-7.7-7.7 3.2-3.2Z" />
+              <path class="shovel-neck" d="m16.4 23.2 8.4 8.4" />
+              <path class="shovel-blade" d="M9.7 28.4c3-3 7.9-3 10.9 0l2.5 2.5c-1.1 4.6-4.7 8.7-10.7 12.2-4.1-5.8-5-10.7-2.7-14.7Z" />
+              <path class="shovel-blade-edge" d="M12.4 43.1c3.3-2.5 6.2-5.4 8.5-8.7" />
+            </svg>
+          </span>
+          <span>{{ isShovelMode ? '铲除模式' : '铲子' }}</span>
         </button>
         <div class="plant-slots">
           <div
@@ -753,9 +762,60 @@ onUnmounted(() => {
   font-size: 0.95rem;
   font-weight: 700;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   background: linear-gradient(135deg, #475569 0%, #334155 100%);
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.22);
   transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.shovel-icon {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.shovel-icon svg {
+  width: 24px;
+  height: 24px;
+  display: block;
+}
+
+.shovel-handle,
+.shovel-neck,
+.shovel-blade-edge {
+  fill: none;
+  stroke: #f8fafc;
+  stroke-width: 3.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.shovel-grip {
+  fill: #f59e0b;
+  stroke: #fff7ed;
+  stroke-width: 2.4;
+  stroke-linejoin: round;
+}
+
+.shovel-blade {
+  fill: #dbeafe;
+  stroke: #ffffff;
+  stroke-width: 2.4;
+  stroke-linejoin: round;
+}
+
+.shovel-blade-edge {
+  stroke: #93c5fd;
+  stroke-width: 2.2;
 }
 
 .shovel-btn:hover {
@@ -765,6 +825,10 @@ onUnmounted(() => {
 
 .shovel-active {
   background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+}
+
+.shovel-active .shovel-icon {
+  background: rgba(255, 255, 255, 0.24);
 }
 
 .plant-slot,

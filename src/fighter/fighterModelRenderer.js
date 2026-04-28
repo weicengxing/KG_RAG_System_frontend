@@ -15,6 +15,23 @@ const hexToNumber = (value, fallback = 0xffffff) => {
 const toWorldX = (x) => x - HALF_WIDTH
 const toWorldY = (y) => HALF_HEIGHT - y
 
+const terrainColor = (map, segment) => {
+  if (segment?.id?.includes('water')) return 0x256d85
+  if (segment?.id?.includes('sky')) return 0x64748b
+  if (segment?.id?.includes('mirror')) return 0x6d5f8f
+  if (segment?.id?.includes('reef')) return 0x0f766e
+  return hexToNumber(map?.floor, 0x6b7280)
+}
+
+const hazardColor = (hazard, map) => ({
+  lava: 0xfb923c,
+  flame: 0xf97316,
+  spikes: 0xf8fafc,
+  pit: 0x111827,
+  water: 0x38bdf8,
+  void: 0x020617,
+}[hazard?.kind] || hexToNumber(map?.accent, 0xf97316))
+
 const makeMaterial = (color, options = {}) => new THREE.MeshStandardMaterial({
   color,
   roughness: options.roughness ?? 0.64,
@@ -111,6 +128,7 @@ export class FighterModelRenderer {
     this.scene.add(rim)
 
     this.currentMapId = ''
+    this.currentStageKey = ''
     this.container.innerHTML = ''
     this.container.appendChild(this.renderer.domElement)
   }
@@ -124,8 +142,14 @@ export class FighterModelRenderer {
   render(state, catalog = {}) {
     const map = state?.map || catalog.maps?.stone
     if (!map) return
-    if (map.id !== this.currentMapId) {
+    const movingKey = (map.platforms || [])
+      .filter((platform) => platform.move)
+      .map((platform) => `${platform.id}:${Math.round(platform.x)}:${Math.round(platform.y)}`)
+      .join('|')
+    const stageKey = `${map.id}:${movingKey}`
+    if (stageKey !== this.currentStageKey) {
       this.currentMapId = map.id
+      this.currentStageKey = stageKey
       this.rebuildStage(map)
     }
     this.rebuildDynamic(state, catalog)
@@ -149,20 +173,38 @@ export class FighterModelRenderer {
 
     this.addMapProps(map)
 
-    const floorHeight = VIEW_HEIGHT - map.groundY
-    addBox(
-      this.stageGroup,
-      VIEW_WIDTH,
-      floorHeight,
-      90,
-      hexToNumber(map.floor, 0x6b7280),
-      [0, toWorldY(map.groundY + floorHeight / 2), 0],
-    )
-    addBox(this.stageGroup, map.rightWall - map.leftWall, 7, 28, 0xf8fafc, [toWorldX((map.leftWall + map.rightWall) / 2), toWorldY(map.groundY), 62], {
-      transparent: true,
-      opacity: 0.42,
-      castShadow: false,
-    })
+    if (map.groundSegments?.length) {
+      for (const segment of map.groundSegments) {
+        addBox(
+          this.stageGroup,
+          segment.width,
+          segment.height,
+          90,
+          terrainColor(map, segment),
+          [toWorldX(segment.x + segment.width / 2), toWorldY(segment.y + segment.height / 2), 0],
+        )
+        addBox(this.stageGroup, segment.width, 6, 96, hexToNumber(map.accent, 0xf8fafc), [toWorldX(segment.x + segment.width / 2), toWorldY(segment.y), 58], {
+          transparent: true,
+          opacity: 0.24,
+          castShadow: false,
+        })
+      }
+    } else {
+      const floorHeight = VIEW_HEIGHT - map.groundY
+      addBox(
+        this.stageGroup,
+        VIEW_WIDTH,
+        floorHeight,
+        90,
+        hexToNumber(map.floor, 0x6b7280),
+        [0, toWorldY(map.groundY + floorHeight / 2), 0],
+      )
+      addBox(this.stageGroup, map.rightWall - map.leftWall, 7, 28, 0xf8fafc, [toWorldX((map.leftWall + map.rightWall) / 2), toWorldY(map.groundY), 62], {
+        transparent: true,
+        opacity: 0.42,
+        castShadow: false,
+      })
+    }
     for (const wallX of [map.leftWall - 5, map.rightWall + 5]) {
       addBox(this.stageGroup, 10, 52, 36, 0xf8fafc, [toWorldX(wallX), toWorldY(map.groundY - 26), 34], {
         transparent: true,
@@ -171,7 +213,7 @@ export class FighterModelRenderer {
     }
 
     for (const hazard of map.hazards || []) {
-      const color = map.id === 'lava' ? 0xfb923c : 0x38bdf8
+      const color = hazardColor(hazard, map)
       addBox(
         this.stageGroup,
         hazard.width,
@@ -186,13 +228,15 @@ export class FighterModelRenderer {
     for (const platform of map.platforms || []) {
       const platformGroup = new THREE.Group()
       platformGroup.position.set(toWorldX(platform.x + platform.width / 2), toWorldY(platform.y + platform.height / 2), 55)
-      addBox(platformGroup, platform.width, platform.height, 54, 0xd1d5db, [0, 0, 0], { roughness: 0.48 })
+      addBox(platformGroup, platform.width, platform.height, 54, platform.move ? 0xfde68a : 0xd1d5db, [0, 0, 0], { roughness: 0.48 })
       addBox(platformGroup, platform.width + 8, 7, 60, 0x111827, [0, -platform.height / 2 - 6, -4], { transparent: true, opacity: 0.45 })
       for (const offset of [-platform.width / 2 + 18, platform.width / 2 - 18]) {
         addCylinder(platformGroup, 5, 7, 42, 0x94a3b8, [offset, -30, -8])
       }
       this.stageGroup.add(platformGroup)
     }
+
+    this.addMechanicProps(map)
   }
 
   addMapProps(map) {
@@ -218,12 +262,99 @@ export class FighterModelRenderer {
       }
       return
     }
+    if (map.id === 'sky') {
+      for (let i = 0; i < 8; i += 1) {
+        const x = 76 + i * 116
+        addSphere(this.stageGroup, 42, 0x60a5fa, [toWorldX(x), toWorldY(118 + (i % 3) * 28), -8], {
+          transparent: true,
+          opacity: 0.14,
+          emissive: 0x3b82f6,
+          emissiveIntensity: 0.24,
+          castShadow: false,
+        })
+        addBox(this.stageGroup, 32, 220, 12, 0x1d4ed8, [toWorldX(x), toWorldY(276), -14], {
+          transparent: true,
+          opacity: 0.1,
+          castShadow: false,
+        })
+      }
+      return
+    }
+    if (map.id === 'mirror') {
+      for (let x = 92; x < 920; x += 168) {
+        addBox(this.stageGroup, 50, 246, 28, 0x312e81, [toWorldX(x), toWorldY(226), -6], { transparent: true, opacity: 0.52 })
+        addBox(this.stageGroup, 28, 112, 34, 0xc4b5fd, [toWorldX(x), toWorldY(178), 8], {
+          transparent: true,
+          opacity: 0.2,
+          emissive: 0x8b5cf6,
+          emissiveIntensity: 0.35,
+        })
+      }
+      return
+    }
+    if (map.id === 'reef') {
+      for (let x = 70; x < 930; x += 138) {
+        addCylinder(this.stageGroup, 7, 12, 84, 0x164e63, [toWorldX(x), toWorldY(438), 4], [0, 0, 0], { transparent: true, opacity: 0.62 })
+        addSphere(this.stageGroup, 24, 0xfb7185, [toWorldX(x + 8), toWorldY(386), 14], { transparent: true, opacity: 0.22 })
+        addSphere(this.stageGroup, 18, 0x22c55e, [toWorldX(x + 24), toWorldY(412), 12], { transparent: true, opacity: 0.18 })
+      }
+      return
+    }
     for (let x = 0; x < VIEW_WIDTH; x += 130) {
       const group = new THREE.Group()
       group.position.set(toWorldX(x + 46), toWorldY(214), -8)
       addBox(group, 40, 152, 44, 0x263244, [0, 0, 0], { transparent: true, opacity: 0.68 })
       addBox(group, 58, 18, 52, 0x94a3b8, [0, 84, 8], { transparent: true, opacity: 0.36 })
       this.stageGroup.add(group)
+    }
+  }
+
+  addMechanicProps(map) {
+    for (const zone of map.forceZones || []) {
+      const color = zone.kind === 'pull' ? 0xc4b5fd : zone.kind === 'updraft' ? 0x93c5fd : 0x67e8f9
+      addBox(this.stageGroup, zone.width, zone.height, 10, color, [toWorldX(zone.x + zone.width / 2), toWorldY(zone.y + zone.height / 2), 86], {
+        transparent: true,
+        opacity: 0.1,
+        emissive: color,
+        emissiveIntensity: 0.3,
+        castShadow: false,
+        receiveShadow: false,
+      })
+      for (let i = 0; i < Math.max(2, Math.floor(zone.height / 74)); i += 1) {
+        addCylinder(this.stageGroup, 3, 6, Math.min(76, zone.height * 0.34), color, [toWorldX(zone.x + zone.width / 2), toWorldY(zone.y + 24 + i * 70), 104], [Math.PI / 2, 0, 0], {
+          transparent: true,
+          opacity: 0.34,
+          emissive: color,
+          emissiveIntensity: 0.45,
+          castShadow: false,
+        })
+      }
+    }
+    for (const pad of map.jumpPads || []) {
+      addBox(this.stageGroup, pad.width, pad.height, 54, 0x22c55e, [toWorldX(pad.x + pad.width / 2), toWorldY(pad.y + pad.height / 2), 90], {
+        emissive: 0x16a34a,
+        emissiveIntensity: 0.42,
+      })
+      addBox(this.stageGroup, pad.width - 12, 5, 60, 0xbbf7d0, [toWorldX(pad.x + pad.width / 2), toWorldY(pad.y - 8), 92], {
+        transparent: true,
+        opacity: 0.55,
+        castShadow: false,
+      })
+    }
+    for (const portal of map.portals || []) {
+      addBox(this.stageGroup, portal.width, portal.height, 14, 0x7c3aed, [toWorldX(portal.x + portal.width / 2), toWorldY(portal.y + portal.height / 2), 104], {
+        transparent: true,
+        opacity: 0.28,
+        emissive: 0x8b5cf6,
+        emissiveIntensity: 0.7,
+        castShadow: false,
+      })
+      addCylinder(this.stageGroup, portal.width * 0.6, portal.width * 0.6, 8, 0xc4b5fd, [toWorldX(portal.x + portal.width / 2), toWorldY(portal.y + portal.height / 2), 112], [Math.PI / 2, 0, 0], {
+        transparent: true,
+        opacity: 0.34,
+        emissive: 0xa78bfa,
+        emissiveIntensity: 0.65,
+      })
     }
   }
 
@@ -258,9 +389,43 @@ export class FighterModelRenderer {
       this.effectGroup.add(this.createEffect(effect))
     }
 
+    for (const enemy of state?.enemies || []) {
+      this.fighterGroup.add(this.createEnemy(enemy))
+    }
+
     for (const player of Object.values(state?.players || {})) {
       this.fighterGroup.add(this.createFighter(player, catalog.characters?.[player.characterId]))
     }
+  }
+
+  createEnemy(enemy) {
+    const group = new THREE.Group()
+    const x = toWorldX(enemy.x + enemy.width / 2)
+    const y = toWorldY(enemy.y + enemy.height / 2)
+    group.position.set(x, y, 122)
+    group.scale.x = enemy.facing || 1
+    const color = enemy.kind === 'whale' ? 0x38bdf8 : enemy.kind === 'tiger' ? 0xf97316 : 0x0f172a
+    addSphere(group, Math.max(enemy.height * 0.54, 12), color, [0, 0, 0], {
+      emissive: color,
+      emissiveIntensity: 0.24,
+      transparent: true,
+      opacity: enemy.kind === 'whale' ? 0.64 : 0.86,
+    })
+    addBox(group, enemy.width * 0.72, enemy.height * 0.62, 26, color, [0, 0, 0], {
+      emissive: color,
+      emissiveIntensity: 0.18,
+      transparent: enemy.kind === 'whale',
+      opacity: enemy.kind === 'whale' ? 0.56 : 0.84,
+    })
+    addSphere(group, Math.max(4, enemy.height * 0.16), 0xf8fafc, [enemy.width * 0.32, enemy.height * 0.04, 20], { castShadow: false })
+    if (enemy.kind === 'shark') {
+      addCylinder(group, 0, 14, 32, 0x94a3b8, [-enemy.width * 0.42, 0, 12], [0, 0, Math.PI / 2])
+    } else if (enemy.kind === 'tiger') {
+      for (let i = -1; i <= 1; i += 1) {
+        addBox(group, 6, enemy.height * 0.76, 28, 0x111827, [i * 18, 0, 18], { transparent: true, opacity: 0.48 })
+      }
+    }
+    return group
   }
 
   createEffect(effect) {

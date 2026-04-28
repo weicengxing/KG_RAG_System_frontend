@@ -1,4 +1,4 @@
-要打造一个高性能、流畅且具有极佳用户体验的多人实时互动游戏，前端 Vue3 + 后端 FastAPI + Redis/MongoDB 的组合非常扎实。在这种架构下，实现的关键在于减少网络延迟（Latency）、优化数据吞吐（Throughput）以及前端平滑渲染（Interpolation & Prediction）。
+﻿要打造一个高性能、流畅且具有极佳用户体验的多人实时互动游戏，前端 Vue3 + 后端 FastAPI + Redis/MongoDB 的组合非常扎实。在这种架构下，实现的关键在于减少网络延迟（Latency）、优化数据吞吐（Throughput）以及前端平滑渲染（Interpolation & Prediction）。
 以下是具体的实施方案，分为五个核心维度：
 一、 地图与空间管理（AOI 算法）
 “只加载周围一部分”的核心技术叫 AOI (Area of Interest, 感兴趣区域)。

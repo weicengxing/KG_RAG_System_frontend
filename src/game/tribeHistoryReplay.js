@@ -1,4 +1,4 @@
-export function buildTribeHistoryReplay(event = {}, helpers = {}) {
+﻿export function buildTribeHistoryReplay(event = {}, helpers = {}) {
   const { formatHistoryTime, tradeResourceText } = helpers
 
   event = event || {}

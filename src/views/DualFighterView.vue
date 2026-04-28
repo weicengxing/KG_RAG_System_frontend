@@ -1650,7 +1650,7 @@ const drawArenaMap = (ctx, map) => {
     }
   })
 
-  ;(map.platforms || []).forEach((platform) => {
+  ;(map.platforms || []).filter((platform) => !platform.move).forEach((platform) => {
     const color = platform.move ? '#fde68a' : '#d1d5db'
     drawTerrainBlock(ctx, platform, color, platform.move ? '#fbbf24' : '#f8fafc')
     if (platform.move) {
@@ -1826,6 +1826,10 @@ const renderArena = (now = performance.now()) => {
     drawArenaMap(ctx, map)
   }
   // Dynamic overlays: hazards (animated) + force zones / pads / portals.
+  ;(map?.platforms || []).filter((platform) => platform.move).forEach((platform) => {
+    drawTerrainBlock(ctx, platform, '#fde68a', '#fbbf24')
+    fillRect(ctx, platform.x + 12, platform.y - 7, platform.width - 24, 3, '#f59e0b', 0.48)
+  })
   drawHazards(ctx, map)
   drawMapMechanics(ctx, map)
 

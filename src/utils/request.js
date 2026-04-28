@@ -22,8 +22,10 @@ request.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
-    // 跳过 ngrok 浏览器警告拦截页
-    config.headers['ngrok-skip-browser-warning'] = 'true'
+    // Only ngrok needs this custom header; on Cloudflare it just forces extra preflight requests.
+    if (API_CONFIG.BASE_URL.includes('ngrok')) {
+      config.headers['ngrok-skip-browser-warning'] = 'true'
+    }
     
     // 3. 记录请求日志（仅在开发环境）
     if (process.env.NODE_ENV === 'development') {
@@ -116,7 +118,7 @@ export function createStreamRequest(url, data) {
     headers: {
       'Content-Type': 'application/json',
       ...(token && { 'Authorization': `Bearer ${token}` }),
-      'ngrok-skip-browser-warning': 'true'
+      ...(API_CONFIG.BASE_URL.includes('ngrok') && { 'ngrok-skip-browser-warning': 'true' })
     },
     body: JSON.stringify(data)
   })
